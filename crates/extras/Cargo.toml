@@ -6,18 +6,18 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-# Nur für die Formen einer Sitzung (`Session`, `Event`, `Command`): Jede Art von Terminal spricht dieselbe Sprache.
+# Only for the shapes of a session (`Session`, `Event`, `Command`): every kind of terminal speaks the same language.
 glowport-net = { path = "../net" }
 tokio = { version = "1", features = ["rt", "net", "sync", "time", "macros", "io-util"] }
-# Pseudo-Terminal für Shells dieses Rechners; unter Windows ConPTY.
+# Pseudo terminal for shells on this machine; ConPTY on Windows.
 portable-pty = "0.9"
-# Ohne `libudev`: Das bräuchte unter Linux eine Systembibliothek beim Bauen. Unter Windows ändert es nichts.
+# Without `libudev`: that would need a system library when building on Linux. On Windows it changes nothing.
 serialport = { version = "4.10", default-features = false }
-# Für TCP-Keepalive bei Telnet: Das Protokoll selbst kennt kein Lebenszeichen.
+# For TCP keepalive with Telnet: the protocol itself has no keepalive.
 socket2 = "0.6"
 
 [target.'cfg(windows)'.dependencies]
-# Git für Windows und die WSL-Distributionen stehen in der Registry.
+# Git for Windows and the WSL distributions are listed in the registry.
 winreg = "0.55"
 
 [dev-dependencies]

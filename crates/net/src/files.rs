@@ -1,8 +1,8 @@
-//! Dateien auf einem Server über SFTP: auflisten, anlegen, umbenennen, löschen, Rechte ändern, lesen, schreiben.
+//! Files on a server over SFTP: list, create, rename, delete, change permissions, read, write.
 //!
-//! Ein [`Remote`] hängt entweder an einer eigenen Verbindung ([`Remote::connect`]) oder an einem zusätzlichen
-//! Kanal einer laufenden Sitzung ([`Remote::on`], siehe [`crate::Command::Open`]). Transfers bauen auf
-//! [`Remote::reader`] und [`Remote::writer`] auf; die Warteschlange selbst gehört nicht in dieses Crate.
+//! A [`Remote`] hangs either on a connection of its own ([`Remote::connect`]) or on an additional
+//! channel of a running session ([`Remote::on`], see [`crate::Command::Open`]). Transfers build on
+//! [`Remote::reader`] and [`Remote::writer`]; the queue itself does not belong in this crate.
 
 use std::{collections::HashMap, future::Future, pin::Pin, sync::Mutex};
 
@@ -17,27 +17,27 @@ use tokio::{
 
 use crate::{capture, closed_early, establish, lost, Command, Connect, End, Event, HostKey, Link, Output, Phase, Session, EXECUTE_TIMEOUT, MAX_EXECUTE_OUTPUT};
 
-/// Ein zusätzlicher Kanal auf einer bestehenden Verbindung, für SFTP oder einen einzelnen Befehl.
+/// An additional channel on an existing connection, for SFTP or a single command.
 pub struct Opened(pub(crate) Channel<client::Msg>);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FileError {
     NoSuchFile,
     PermissionDenied,
-    /// Ein Ordner wurde erwartet.
+    /// A folder was expected.
     NotADirectory,
-    /// Unter dem Namen gibt es schon etwas. Der Server selbst meldet das nicht eigens; wer es wissen will, prüft vorher.
+    /// Something already exists under that name. The server does not report this separately; whoever wants to know checks beforehand.
     Exists,
-    /// Der Server kann oder will das nicht (kein SFTP, Vorgang nicht unterstützt).
+    /// The server cannot or will not do this (no SFTP, operation not supported).
     Unsupported,
-    /// Die Verbindung besteht nicht mehr.
+    /// The connection no longer exists.
     Lost(String),
-    /// Alles andere, mit der Meldung des Servers.
+    /// Everything else, with the server's message.
     Failure(String),
 }
 
 impl FileError {
-    /// Fehlercode für die Oberfläche.
+    /// Error code for the interface.
     pub fn code(&self) -> &'static str {
         match self {
             FileError::NoSuchFile => "no_such_file",
@@ -96,29 +96,29 @@ pub struct Entry {
     pub name: String,
     pub kind: Kind,
     pub size: u64,
-    /// Letzte Änderung in Sekunden seit 1970.
+    /// Last change in seconds since 1970.
     pub modified: u64,
-    /// Rechte ohne die Art der Datei (0o755).
+    /// Permissions without the file type (0o755).
     pub mode: u32,
     pub uid: u32,
     pub gid: u32,
-    /// Name des Besitzers, soweit der Server ihn verrät; sonst die Nummer als Text.
+    /// Name of the owner, as far as the server reveals it; otherwise the number as text.
     pub owner: String,
     pub group: String,
-    /// Ziel einer Verknüpfung.
+    /// Target of a link.
     pub target: Option<String>,
 }
 
-/// Was an Rechten und Besitz geändert werden soll. `None` lässt den Wert, wie er ist.
+/// What should change in permissions and ownership. `None` leaves the value as it is.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Change {
     pub mode: Option<u32>,
-    /// Besitzer als Name oder Nummer.
+    /// Owner as name or number.
     pub owner: Option<String>,
     pub group: Option<String>,
 }
 
-/// Namen zu den Nummern von Benutzern und Gruppen, gelesen aus `/etc/passwd` und `/etc/group`.
+/// Names for the numbers of users and groups, read from `/etc/passwd` and `/etc/group`.
 #[derive(Default)]
 struct Names {
     users: HashMap<u32, String>,
@@ -128,11 +128,11 @@ struct Names {
 pub struct Remote {
     sftp: SftpSession,
     names: Mutex<Option<std::sync::Arc<Names>>>,
-    /// Die eigene Verbindung, falls dieses SFTP nicht an einer Sitzung hängt. Sie bleibt offen, solange es lebt.
+    /// The own connection, if this SFTP does not hang on a session. It stays open as long as it lives.
     link: Option<Link>,
 }
 
-/// Größte Datei, deren Namenstabellen gelesen werden.
+/// Largest file whose name tables are read.
 const MAX_NAMES: u64 = 512 * 1024;
 
 fn join(dir: &str, name: &str) -> String {
@@ -148,9 +148,9 @@ fn only(permissions: Option<u32>, uid: Option<u32>, gid: Option<u32>, mtime: Opt
 }
 
 impl Remote {
-    /// Baut eine eigene Verbindung auf und öffnet SFTP darauf, ohne jede Rückfrage: `trusted` entscheidet über
-    /// die Schlüssel der Server auf dem Weg, und reichen die hinterlegten Zugangsdaten nicht, scheitert es
-    /// mit [`End::AuthFailed`].
+    /// Establishes a connection of its own and opens SFTP on it, without any prompt: `trusted` decides about
+    /// the server keys along the way, and if the stored credentials are not enough, it fails
+    /// with [`End::AuthFailed`].
     pub async fn connect(connect: &Connect, trusted: impl Fn(&str, u16, &HostKey) -> bool) -> Result<Remote, End> {
         let (event_tx, mut events) = mpsc::channel(16);
         let answers = async {
@@ -176,11 +176,11 @@ impl Remote {
         }
     }
 
-    /// Öffnet SFTP auf einem zusätzlichen Kanal einer bestehenden Verbindung.
+    /// Opens SFTP on an additional channel of an existing connection.
     pub async fn on(opened: Opened) -> Result<Remote, FileError> {
         let mut channel = opened.0;
         channel.request_subsystem(true, "sftp").await.map_err(|e| FileError::Lost(e.to_string()))?;
-        // Erst die Antwort des Servers abwarten: Ohne SFTP käme sonst nur das Zeitlimit der ersten Anfrage.
+        // Wait for the server's answer first: without SFTP only the first request's timeout would come otherwise.
         loop {
             match channel.wait().await {
                 Some(ChannelMsg::Success) => break,
@@ -193,19 +193,19 @@ impl Remote {
         Ok(Remote { sftp, names: Mutex::new(None), link: None })
     }
 
-    /// Führt einen Befehl auf der eigenen Verbindung aus. Nur für ein [`Remote`] aus [`Remote::connect`].
+    /// Runs a command on the own connection. Only for a [`Remote`] from [`Remote::connect`].
     pub async fn run(&self, command: &str) -> Result<Output, FileError> {
         let link = self.link.as_ref().ok_or(FileError::Unsupported)?;
         let channel = link.handle.channel_open_session().await.map_err(|e| FileError::Lost(e.to_string()))?;
         run(Opened(channel), command).await
     }
 
-    /// Heimatverzeichnis: der Ordner, in dem SFTP beginnt.
+    /// Home directory: the folder SFTP starts in.
     pub async fn home(&self) -> Result<String, FileError> {
         Ok(self.sftp.canonicalize(".").await?)
     }
 
-    /// Der Pfad ohne `.` und `..`, wie der Server ihn sieht.
+    /// The path without `.` and `..`, as the server sees it.
     pub async fn resolve(&self, path: &str) -> Result<String, FileError> {
         Ok(self.sftp.canonicalize(path).await?)
     }
@@ -253,7 +253,7 @@ impl Remote {
         }
     }
 
-    /// Inhalt eines Ordners, unsortiert. Verknüpfungen nennen ihr Ziel.
+    /// Content of a folder, unsorted. Links name their target.
     pub async fn list(&self, path: &str) -> Result<Vec<Entry>, FileError> {
         let names = self.names().await;
         let mut entries = Vec::new();
@@ -267,7 +267,7 @@ impl Remote {
         Ok(entries)
     }
 
-    /// Angaben zu einem Pfad. Mit `follow` zählt das Ziel einer Verknüpfung, sonst die Verknüpfung selbst.
+    /// Details about a path. With `follow` the target of a link counts, otherwise the link itself.
     pub async fn stat(&self, path: &str, follow: bool) -> Result<Entry, FileError> {
         let attrs = if follow { self.sftp.metadata(path).await? } else { self.sftp.symlink_metadata(path).await? };
         let name = path.trim_end_matches('/').rsplit('/').next().unwrap_or_default().to_string();
@@ -283,7 +283,7 @@ impl Remote {
         Ok(self.sftp.rename(from, to).await?)
     }
 
-    /// Löscht eine Datei, eine Verknüpfung oder einen Ordner samt allem darin. Verknüpfungen wird nicht gefolgt.
+    /// Deletes a file, a link or a folder with everything in it. Links are not followed.
     pub fn remove<'a>(&'a self, path: &'a str) -> Pin<Box<dyn Future<Output = Result<(), FileError>> + Send + 'a>> {
         Box::pin(async move {
             if self.sftp.symlink_metadata(path).await?.file_type() != FileType::Dir {

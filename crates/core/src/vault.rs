@@ -1002,18 +1002,18 @@ impl Vault {
 
     // ── Konto ────────────────────────────────────────────────────────────────────────────────────────────
 
-    /// Die eigenen öffentlichen Schlüssel: Signatur (Ed25519) und Empfang geteilter Tresor-Schlüssel (X25519).
+    /// The own public keys: signing (Ed25519) and receiving shared vault keys (X25519).
     pub fn public_keys(&self) -> Result<([u8; 32], [u8; 32])> {
         let keys = self.keys()?;
         Ok((keys.public, PublicKey::from(&keys.exchange).to_bytes()))
     }
 
-    /// Prüft das Master-Passwort und liefert den Schlüssel für die Anmeldung am Sync-Server.
+    /// Checks the master password and returns the key for signing in to the sync server.
     pub fn auth_key(&self, password: &str) -> Result<Key> {
         Ok(self.open_account(password)?.1)
     }
 
-    /// Was der Server aufbewahrt, damit sich ein weiteres Gerät mit dem Master-Passwort anmelden kann.
+    /// What the server keeps so another device can sign in with the master password.
     pub fn account(&self) -> Result<Account> {
         let personal: Id = array(&self.meta("default_vault")?, "Tresor-Kennung")?;
         let (personal_nonce, personal_wrapped) = self
@@ -1038,8 +1038,8 @@ impl Vault {
         })
     }
 
-    /// Legt auf einem neuen Gerät die Tresor-Datei eines bestehenden Kontos an und öffnet sie. Passt das
-    /// Master-Passwort nicht zu dem, was der Server geliefert hat, entsteht keine Datei.
+    /// Creates the vault file of an existing account on a new device and opens it. If the
+    /// master password does not match what the server delivered, no file is created.
     pub fn create_from_account(path: &Path, password: &str, account: &Account) -> Result<Self> {
         if path.exists() {
             return Err(VaultError::AlreadyExists);
@@ -1079,8 +1079,8 @@ impl Vault {
         Ok(tx.commit()?)
     }
 
-    /// Die Anmeldung am Sync-Server (Adresse, Konto, Geräte-Token …), wie sie `glowport-sync` ablegt.
-    /// Verschlüsselt mit dem Kontoschlüssel und an diese Datei gebunden.
+    /// The sign-in to the sync server (address, account, device token …), as `glowport-sync` stores it.
+    /// Encrypted with the account key and bound to this file.
     pub fn link(&self) -> Result<Option<Zeroizing<Vec<u8>>>> {
         let keys = self.keys()?;
         let Some(stored) = self.meta_opt("link")? else { return Ok(None) };
@@ -1098,8 +1098,8 @@ impl Vault {
         }
     }
 
-    /// Verschlüsselt etwas Kleines so, dass es nur die Geräte dieses Kontos lesen, etwa den Namen eines
-    /// Geräts, den der Server aufbewahrt.
+    /// Encrypts something small so that only this account's devices can read it, e.g. the name of a
+    /// device that the server keeps.
     pub fn seal_own(&self, data: &[u8]) -> Result<Vec<u8>> {
         Ok(seal_small(&self.keys()?.account_key, AAD_OWN, &[], data))
     }
@@ -1108,9 +1108,9 @@ impl Vault {
         Ok(open_small(&self.keys()?.account_key, AAD_OWN, &[], sealed))
     }
 
-    /// Übernimmt die Datensätze eines anderen offenen Tresors in den persönlichen Tresor: neu verschlüsselt und
-    /// selbst signiert, unter denselben Kennungen, damit Verweise untereinander halten. Gedacht für ein Gerät,
-    /// das schon Daten hatte und sich mit einem bestehenden Konto verbindet. Liefert die Zahl der übernommenen.
+    /// Takes the records of another open vault into the personal vault: re-encrypted and
+    /// self-signed, under the same IDs so references between them hold. Meant for a device
+    /// that already had data and connects to an existing account. Returns the number taken over.
     pub fn adopt_from(&mut self, other: &Vault) -> Result<usize> {
         let (keys, personal) = (self.keys()?, self.personal()?);
         let vault = &keys.vaults[&personal];
@@ -1127,16 +1127,16 @@ impl Vault {
         })
     }
 
-    // ── Kontakte und Hinweise ────────────────────────────────────────────────────────────────────────────
+    // ── Contacts and notices ─────────────────────────────────────────────────────────────────────────────
 
-    /// Die öffentlichen Schlüssel, unter denen ein anderes Konto zuletzt gesehen wurde.
+    /// The public keys under which another account was last seen.
     pub fn contact(&self, account: &Id) -> Result<Option<Contact>> {
         let keys = self.keys()?;
         let stored = self.conn.query_row("SELECT sealed FROM contacts WHERE account = ?1", [account.as_slice()], |row| blob(row, 0)).optional()?;
         Ok(stored.and_then(|stored| open_small(&keys.account_key, AAD_CONTACT, account, &stored)).and_then(|plain| serde_json::from_slice(&plain).ok()))
     }
 
-    /// Merkt sich die Schlüssel eines Kontos. Ändern sie sich später, kann das Programm warnen.
+    /// Remembers an account's keys. If they change later, the program can warn.
     pub fn remember_contact(&mut self, account: &Id, contact: &Contact) -> Result<()> {
         let keys = self.keys()?;
         let plain = serde_json::to_vec(contact).map_err(|_| VaultError::Corrupt("Kontakt"))?;
@@ -1144,7 +1144,7 @@ impl Vault {
         Ok(())
     }
 
-    /// Hält einen Hinweis aus dem Abgleich fest (Inhalt bestimmt `glowport-sync`). Ältere als die letzten 200 fallen heraus.
+    /// Records a notice from syncing (content decided by `glowport-sync`). Older ones than the last 200 drop out.
     pub fn add_notice(&mut self, data: &[u8]) -> Result<()> {
         let keys = self.keys()?;
         self.conn.execute("INSERT INTO notices (at, sealed) VALUES (?1, ?2)", params![now_ms(), seal_small(&keys.account_key, AAD_NOTICE, &[], data)])?;
@@ -1152,7 +1152,7 @@ impl Vault {
         Ok(())
     }
 
-    /// Alle Hinweise, älteste zuerst.
+    /// All notices, oldest first.
     pub fn notices(&self) -> Result<Vec<StoredNotice>> {
         let keys = self.keys()?;
         let mut statement = self.conn.prepare("SELECT id, at, sealed FROM notices ORDER BY id")?;
@@ -1165,7 +1165,7 @@ impl Vault {
         Ok(out)
     }
 
-    /// Entfernt die Hinweise bis einschließlich dieser Nummer.
+    /// Removes the notices up to and including this number.
     pub fn clear_notices(&mut self, up_to: i64) -> Result<()> {
         self.keys()?;
         self.conn.execute("DELETE FROM notices WHERE id <= ?1", [up_to])?;
@@ -1178,7 +1178,7 @@ impl Vault {
         Ok(self.keys()?.personal)
     }
 
-    /// Alle offenen Tresore, der persönliche zuerst.
+    /// All open vaults, the personal one first.
     pub fn vaults(&self) -> Result<Vec<VaultInfo>> {
         let keys = self.keys()?;
         let mut out = Vec::with_capacity(keys.vaults.len());
@@ -1189,7 +1189,7 @@ impl Vault {
         Ok(out)
     }
 
-    /// In welchem Tresor ein Datensatz liegt (auch ein gelöschter).
+    /// Which vault a record lives in (a deleted one too).
     pub fn vault_of(&self, id: &Id) -> Result<Id> {
         Ok(self.state(id)?.ok_or(VaultError::NotFound)?.vault)
     }
@@ -1209,8 +1209,8 @@ impl Vault {
         self.unlocked.as_mut().expect("nur bei offenem Tresor aufgerufen").vaults.insert(id, vault);
     }
 
-    /// Legt einen geteilten Tresor an; man selbst ist Besitzer und zunächst einziges Mitglied.
-    /// `account` und `name` sind die des eigenen Kontos auf dem Server.
+    /// Creates a shared vault; oneself is owner and at first the only member.
+    /// `account` and `name` are those of the own account on the server.
     pub fn create_shared(&mut self, account: &Id, name: &str) -> Result<Id> {
         let keys = self.keys()?;
         let id: Id = crypto::random();
@@ -1223,8 +1223,8 @@ impl Vault {
         Ok(id)
     }
 
-    /// Nimmt einen geteilten Tresor auf, zu dem man eingeladen wurde: Mitgliederliste und der für einen
-    /// selbst verpackte Schlüssel, beides vom Server.
+    /// Takes in a shared vault one was invited to: member list and the key wrapped
+    /// for oneself, both from the server.
     pub fn join_shared(&mut self, id: &Id, sealed_key: &[u8], roster: &[u8]) -> Result<()> {
         let keys = self.keys()?;
         if keys.vaults.contains_key(id) {
@@ -1241,14 +1241,14 @@ impl Vault {
         Ok(())
     }
 
-    /// Die signierte Mitgliederliste, wie sie zum Server geht.
+    /// The signed member list as it goes to the server.
     pub fn roster_blob(&self, vault: &Id) -> Result<Vec<u8>> {
         let (keys, _) = self.vault_keys(vault)?;
         let stored = self.conn.query_row("SELECT roster FROM vaults WHERE id = ?1", [vault.as_slice()], |row| blob(row, 0))?;
         Ok(open_small(&keys.account_key, AAD_ROSTER, vault, &stored).ok_or(VaultError::Corrupt("Mitgliederliste"))?.to_vec())
     }
 
-    /// Signiert als Besitzer eine neue Mitgliederliste, ohne sie schon zu übernehmen.
+    /// As owner, signs a new member list without taking it over yet.
     pub fn sign_roster(&self, vault: &Id, roster: &Roster) -> Result<Vec<u8>> {
         let (keys, current) = self.vault_keys(vault)?;
         let previous = current.roster.as_ref().ok_or(VaultError::NotOwner)?;
@@ -1258,8 +1258,8 @@ impl Vault {
         Ok(roster::sign(roster, Some(previous), &keys.signing)?)
     }
 
-    /// Erzeugt als Besitzer die Liste, mit der der Besitz an ein Mitglied (dessen Signaturschlüssel) übergeht.
-    /// Man selbst behält das Schreibrecht. Übernommen wird sie wie jede andere mit [`Vault::set_roster`].
+    /// As owner, creates the list with which ownership passes to a member (their signing key).
+    /// Oneself keeps write permission. It is taken over like any other with [`Vault::set_roster`].
     pub fn transfer_roster(&self, vault: &Id, to: &[u8; 32]) -> Result<Vec<u8>> {
         let (keys, current) = self.vault_keys(vault)?;
         let previous = current.roster.as_ref().ok_or(VaultError::NotOwner)?;
@@ -1272,8 +1272,8 @@ impl Vault {
         Ok(roster::sign(&roster, Some(previous), &keys.signing)?)
     }
 
-    /// Übernimmt eine neue Mitgliederliste beim selben Schlüsselstand: neue Mitglieder, mehr Rechte, Übergabe
-    /// des Besitzes. Wer dabei Rechte verlöre, bräuchte einen Schlüsseltausch ([`Vault::apply_rotation`]).
+    /// Takes over a new member list at the same key generation: new members, more permissions, transfer
+    /// of ownership. Whoever would lose permissions on the way would need a key rotation ([`Vault::apply_rotation`]).
     pub fn set_roster(&mut self, vault: &Id, blob: &[u8]) -> Result<()> {
         let (keys, current) = self.vault_keys(vault)?;
         let previous = current.roster.as_ref().ok_or(VaultError::NotFound)?;
@@ -1291,13 +1291,13 @@ impl Vault {
         Ok(())
     }
 
-    /// Verpackt den Schlüssel eines Tresors für ein Mitglied (dessen öffentlicher X25519-Schlüssel).
+    /// Wraps a vault's key for a member (their public X25519 key).
     pub fn seal_key_for(&self, vault: &Id, recipient: &[u8; 32]) -> Result<Vec<u8>> {
         let (_, current) = self.vault_keys(vault)?;
         share::seal(&current.key, vault, current.epoch, recipient).map_err(|_| VaultError::Corrupt("öffentlicher Schlüssel"))
     }
 
-    /// Entfernt einen geteilten Tresor samt allen Datensätzen von diesem Gerät.
+    /// Removes a shared vault with all its records from this device.
     pub fn remove_vault(&mut self, vault: &Id) -> Result<()> {
         let keys = self.keys()?;
         if *vault == keys.personal {
@@ -1316,7 +1316,7 @@ impl Vault {
 
     // ── Abgleich ─────────────────────────────────────────────────────────────────────────────────────────
 
-    /// Bis zu welcher Nummer des Servers alles geholt ist.
+    /// Up to which server number everything has been fetched.
     pub fn cursor(&self, vault: &Id) -> Result<u64> {
         let cursor = self.conn.query_row("SELECT cursor FROM vaults WHERE id = ?1", [vault.as_slice()], |row| integer(row, 0)).optional()?;
         Ok(cursor.ok_or(VaultError::NotFound)?.max(0) as u64)
@@ -1338,15 +1338,15 @@ impl Vault {
         Ok(out)
     }
 
-    /// Die Datensätze eines Tresors, deren Änderung der Server noch nicht hat, so wie sie hinausgehen.
+    /// The records of a vault whose change the server does not have yet, as they go out.
     pub fn pending(&self, vault: &Id) -> Result<Vec<Envelope>> {
         self.vault_keys(vault)?;
         Ok(self.rows(vault, true)?.into_iter().map(|(envelope, _)| envelope).collect())
     }
 
-    /// Wie [`Vault::pending`], dazu je Datensatz die Revision, auf der die Änderung aufsetzt: der Stand, den
-    /// der Server zuletzt bestätigt oder geliefert hat (0 = kennt er nicht). Der Server nimmt nur an, was auf
-    /// seinem Stand aufsetzt.
+    /// Like [`Vault::pending`], plus per record the revision the change builds on: the state
+    /// the server last confirmed or delivered (0 = it does not know it). The server only accepts what builds on
+    /// its state.
     pub fn outgoing(&self, vault: &Id) -> Result<Vec<(Envelope, u64)>> {
         let mut out = Vec::new();
         for envelope in self.pending(vault)? {
@@ -1356,8 +1356,8 @@ impl Vault {
         Ok(out)
     }
 
-    /// Was dieses Gerät für den Stand des Servers hält: je Datensatz, den der Server kennt, Kennung, Revision
-    /// und Löschmarke. Wo eine eigene Änderung wartet, zählt der Stand davor.
+    /// What this device believes the server's state to be: per record the server knows, ID, revision
+    /// and deletion mark. Where an own change is waiting, the state before it counts.
     fn believed(&self, vault: &Id) -> Result<Vec<(Id, u64, bool)>> {
         self.vault_keys(vault)?;
         let mut statement = self.conn.prepare(
@@ -1374,13 +1374,13 @@ impl Vault {
         Ok(out)
     }
 
-    /// Die Prüfsumme über das, was dieses Gerät für den Stand des Servers hält (siehe [`state_digest`]).
+    /// The checksum over what this device believes the server's state to be (see [`state_digest`]).
     pub fn believed_digest(&self, vault: &Id) -> Result<[u8; 32]> {
         Ok(state_digest(self.believed(vault)?.into_iter().filter(|(_, _, deleted)| !deleted).map(|(id, revision, _)| (id, revision))))
     }
 
-    /// Wie viele Datensätze dieses Gerät als abgeglichen kennt, die im vollständigen Stand des Servers
-    /// (`rows`) fehlen oder dort älter sind. Mehr als null heißt: Der Server hat etwas verloren.
+    /// How many records this device knows as synced that are missing from the server's full state
+    /// (`rows`) or older there. More than zero means: the server has lost something.
     pub fn ahead_of(&self, vault: &Id, rows: &[Envelope]) -> Result<usize> {
         let server: BTreeMap<Id, u64> = rows.iter().map(|row| (row.id, row.revision)).collect();
         Ok(self
@@ -1388,15 +1388,15 @@ impl Vault {
             .into_iter()
             .filter(|(id, revision, deleted)| match server.get(id) {
                 Some(theirs) => revision > theirs,
-                // Ein Grabstein, den der Server nicht mehr führt, ist dort nur abgelaufen.
+                // A tombstone the server no longer keeps has merely expired there.
                 None => !deleted,
             })
             .count())
     }
 
-    /// Öffnet, was zu einer Einladung gehört, ohne den Tresor aufzunehmen: prüft die Mitgliederliste, entpackt
-    /// den für einen selbst verpackten Schlüssel und entschlüsselt die gelieferten Datensätze. So lässt sich
-    /// der Name des Tresors zeigen, bevor jemand annimmt.
+    /// Opens what belongs to an invitation without taking in the vault: checks the member list, unwraps
+    /// the key wrapped for oneself and decrypts the delivered records. That way
+    /// the vault's name can be shown before anyone accepts.
     pub fn peek_invitation(&self, vault: &Id, sealed_key: &[u8], roster: &[u8], rows: &[Envelope]) -> Result<(Roster, Vec<Zeroizing<Vec<u8>>>)> {
         let keys = self.keys()?;
         let parsed = roster::verify(roster, vault, None)?;
@@ -1409,10 +1409,10 @@ impl Vault {
         Ok((parsed, plain))
     }
 
-    /// Der Server hat einen älteren Stand als dieses Gerät, etwa nach dem Zurückholen aus einer Sicherung
-    /// (`rows`: alles, was er zu diesem Tresor hat). Was hier neuer ist, setzt auf seinem Stand auf und geht
-    /// eine Revision höher wieder hinaus, damit es auch jedes andere Gerät als neu annimmt; was er gar nicht
-    /// kennt, gilt als neu; was bei ihm neuer ist, wird wie gewohnt übernommen. Wer nur lesen darf, übernimmt nur.
+    /// The server has an older state than this device, e.g. after restoring from a backup
+    /// (`rows`: everything it has for this vault). Whatever is newer here builds on its state and goes
+    /// out again one revision higher, so every other device also accepts it as new; whatever it does not
+    /// know at all counts as new; whatever is newer there is taken over as usual. Whoever may only read only takes over.
     pub fn rebase_onto(&mut self, vault: &Id, rows: &[Envelope]) -> Result<Applied> {
         let (keys, vault_keys) = self.vault_keys(vault)?;
         let may_write = vault_keys.role(&keys.public).is_some_and(Role::may_write);
@@ -1445,8 +1445,8 @@ impl Vault {
         Ok(applied)
     }
 
-    /// Der Server hat `sent` angenommen. Was seitdem nicht weiter geändert wurde, gilt als abgeglichen; was
-    /// doch, wartet weiter, jetzt auf dem angenommenen Stand als Ausgang.
+    /// The server accepted `sent`. Whatever was not changed further since counts as synced; whatever
+    /// was, keeps waiting, now with the accepted state as its base.
     pub fn acknowledge(&mut self, vault: &Id, sent: &[Envelope]) -> Result<()> {
         let (keys, vault_keys) = self.vault_keys(vault)?;
         self.atomic(|| {
@@ -1464,8 +1464,8 @@ impl Vault {
         })
     }
 
-    /// Verwirft wartende Änderungen eines Tresors, etwa wenn man dort nicht mehr schreiben darf: Es gilt
-    /// wieder der zuletzt abgeglichene Stand; nie Abgeglichenes verschwindet. Liefert die Zahl.
+    /// Discards a vault's waiting changes, e.g. when one may no longer write there: the
+    /// last synced state applies again; never synced entries disappear. Returns the number.
     pub fn discard_pending(&mut self, vault: &Id) -> Result<usize> {
         let pending = self.pending(vault)?;
         self.touch();
@@ -1484,9 +1484,9 @@ impl Vault {
         Ok(pending.len())
     }
 
-    /// Der Server hat statt der Änderungen den ganzen Stand eines Tresors geliefert (`keep`: die Kennungen
-    /// darin), weil dieses Gerät länger weg war, als er Grabsteine aufhebt. Was hier als abgeglichen galt und
-    /// dort fehlt, ist inzwischen gelöscht; wartende Änderungen daran gelten als neu. Liefert die Zahl der entfernten.
+    /// Instead of the changes, the server delivered a vault's whole state (`keep`: the IDs
+    /// in it), because this device was away longer than it keeps tombstones. Whatever counted as synced here and
+    /// is missing there has been deleted meanwhile; waiting changes to it count as new. Returns the number removed.
     pub fn retain_synced(&mut self, vault: &Id, keep: &BTreeSet<Id>) -> Result<usize> {
         self.vault_keys(vault)?;
         let rows = self.rows(vault, false)?;
@@ -1506,9 +1506,9 @@ impl Vault {
         })
     }
 
-    /// Übernimmt einen Datensatz vom Server. `old` sind die Schlüssel, unter denen die Fassungen dieses Geräts
-    /// liegen, `new` die, unter denen der gelieferte liegt und künftig alles liegt; außer beim Schlüsseltausch
-    /// (`rotation`) sind beide dieselben.
+    /// Takes over a record from the server. `old` are the keys under which this device's versions
+    /// are stored, `new` those under which the delivered one is stored and everything will be stored; except for a key rotation
+    /// (`rotation`) both are the same.
     #[allow(clippy::too_many_arguments)]
     fn integrate(&self, keys: &Unlocked, vault: &Id, old: &VaultKeys, new: &VaultKeys, remote: &Envelope, rotation: bool, applied: &mut Applied) -> Result<()> {
         let id = remote.id;
@@ -1530,18 +1530,18 @@ impl Vault {
         let Some(current) = self.envelope(&id)? else { return take(applied) };
 
         if !state.dirty {
-            // Hier wartet nichts: Es gilt, was neuer ist. Beim Schlüsseltausch kommt dieselbe Revision neu verschlüsselt.
+            // Nothing is waiting here: whatever is newer applies. During a key rotation the same revision comes newly encrypted.
             if remote.revision > state.revision || (rotation && remote.revision == state.revision) {
                 return take(applied);
             }
-            // Dieselbe Revision noch einmal ist in Ordnung, eine ältere oder eine andere gleiche nicht.
+            // The same revision again is fine, an older one or a different equal one is not.
             if remote.revision < state.revision || current.nonce != remote.nonce {
                 applied.rejected.push(id);
             }
             return Ok(());
         }
 
-        // Eine eigene Änderung wartet.
+        // An own change is waiting.
         let base = self.base(&id)?;
         if base.as_ref().is_some_and(|b| remote.revision < b.revision) {
             applied.rejected.push(id);
@@ -1553,7 +1553,7 @@ impl Vault {
             self.store(vault, &seal(keys, vault, &new.key, id, revision, deleted, plaintext), true, remote.revision)
         };
         if base.as_ref().is_some_and(|b| remote.revision == b.revision) {
-            // Der Server hat nichts Neues. Beim Schlüsseltausch ziehen Ausgangsstand und eigene Fassung auf den neuen Schlüssel um.
+            // The server has nothing new. During a key rotation, base and own version move to the new key.
             if rotation {
                 reseal(remote.revision + 1, current.deleted, &mine)?;
             }
@@ -1579,8 +1579,8 @@ impl Vault {
         Ok(())
     }
 
-    /// Übernimmt Datensätze vom Server in einen Tresor. Jeder wird geprüft (Signatur, Schreibrecht des Autors,
-    /// Schlüssel); wo eine eigene Änderung wartet, wird zusammengeführt (`docs/sync.md`).
+    /// Takes records from the server into a vault. Each one is checked (signature, author's write permission,
+    /// key); where an own change is waiting, they are merged (`docs/sync.md`).
     pub fn apply_remote(&mut self, vault: &Id, rows: &[Envelope]) -> Result<Applied> {
         let (keys, vault_keys) = self.vault_keys(vault)?;
         let mut applied = Applied::default();
@@ -1593,8 +1593,8 @@ impl Vault {
         Ok(applied)
     }
 
-    /// Bereitet als Besitzer den Schlüsseltausch vor: neuer Schlüssel, alle Datensätze damit verschlüsselt und
-    /// selbst signiert (Revisionen unverändert), die neue Mitgliederliste, der Schlüssel für jedes Mitglied.
+    /// As owner, prepares the key rotation: new key, all records encrypted with it and
+    /// self-signed (revisions unchanged), the new member list, the key for every member.
     pub fn prepare_rotation(&self, vault: &Id, roster: &Roster) -> Result<Rotation> {
         let (keys, current) = self.vault_keys(vault)?;
         let previous = current.roster.as_ref().ok_or(VaultError::NotOwner)?;
@@ -1604,7 +1604,7 @@ impl Vault {
         if roster.epoch != current.epoch + 1 {
             return Err(RosterError::Stale.into());
         }
-        // Die neu verschlüsselten Datensätze tragen die eigene Signatur; sie gelten nur, wenn man weiter schreiben darf.
+        // The re-encrypted records carry the own signature; they only count if one may still write.
         if !roster.may_write(&keys.public) {
             return Err(VaultError::ReadOnly);
         }
@@ -1620,7 +1620,7 @@ impl Vault {
         }
         let mut records = Vec::new();
         for (envelope, _) in self.rows(vault, false)? {
-            // Was sich schon vorher nicht öffnen ließ, lässt sich nicht hinüberretten.
+            // Whatever could not be opened before cannot be rescued over.
             let Some(plain) = unseal(vault, current, &keys.public, &envelope) else { continue };
             let mut fresh = seal(keys, vault, &key, envelope.id, envelope.revision, envelope.deleted, &plain);
             fresh.modified_at = envelope.modified_at;
@@ -1629,15 +1629,15 @@ impl Vault {
         Ok(Rotation { vault: *vault, epoch: roster.epoch, roster: blob, keys: sealed_keys, records, key, parsed: roster.clone() })
     }
 
-    /// Der Server hat den vorbereiteten Schlüsseltausch angenommen: jetzt auch hier umstellen.
+    /// The server accepted the prepared key rotation: switch over here too now.
     pub fn commit_rotation(&mut self, rotation: Rotation) -> Result<Applied> {
         let entry = VaultKeys { key: rotation.key, kind: Kind::Shared, epoch: rotation.epoch, roster: Some(rotation.parsed) };
         self.switch_keys(&rotation.vault, entry, &rotation.roster, &rotation.records)
     }
 
-    /// Übernimmt den Schlüsseltausch eines Besitzers: die neue Mitgliederliste, den für einen selbst verpackten
-    /// Schlüssel und alle Datensätze des Tresors. Ist man nicht mehr Mitglied, scheitert es mit `NotMember`;
-    /// dann bleibt nur [`Vault::remove_vault`].
+    /// Takes over an owner's key rotation: the new member list, the key wrapped for oneself
+    /// and all records of the vault. If one is no longer a member, it fails with `NotMember`;
+    /// then only [`Vault::remove_vault`] remains.
     pub fn apply_rotation(&mut self, vault: &Id, sealed_key: &[u8], roster: &[u8], rows: &[Envelope]) -> Result<Applied> {
         let (keys, current) = self.vault_keys(vault)?;
         let parsed = roster::verify(roster, vault, Some(current.roster.as_ref().ok_or(VaultError::NotFound)?))?;
@@ -1659,8 +1659,8 @@ impl Vault {
             for remote in rows {
                 self.integrate(keys, vault, old, &entry, remote, true, &mut applied)?;
             }
-            // Was jetzt noch unter dem alten Schlüssel liegt, kam nicht (gültig) mit: Eigene wartende Änderungen
-            // ziehen um und gelten als neu, alles andere gibt es beim Server nicht mehr.
+            // Whatever still lies under the old key now did not come along (validly): own waiting changes
+            // move over and count as new, everything else no longer exists on the server.
             for (envelope, dirty) in self.rows(vault, false)? {
                 if unseal(vault, &entry, &keys.public, &envelope).is_some() {
                     continue;
@@ -1685,7 +1685,7 @@ mod tests {
 
     const FAST: KdfParams = KdfParams { memory_kib: 64, passes: 1, lanes: 1 };
 
-    /// Eigene Datei je Test; beim Verlassen wird aufgeräumt.
+    /// A file of its own per test; cleaned up when leaving.
     struct Temp(PathBuf);
     impl Temp {
         fn new(name: &str) -> Self {
@@ -1706,7 +1706,7 @@ mod tests {
         out
     }
 
-    /// Verändert die Datei von außen, so wie es ein Angreifer mit Schreibzugriff könnte.
+    /// Alters the file from outside, as an attacker with write access could.
     fn tamper(path: &Path, sql: &str) {
         let conn = Connection::open(path).unwrap();
         assert!(conn.execute(sql, []).unwrap() > 0, "Manipulation hat nichts getroffen: {sql}");
@@ -1794,7 +1794,7 @@ mod tests {
             let temp = Temp::new(&format!("tamper-{}", what.replace(' ', "-")));
             let mut vault = Vault::create(&temp.0, "richtig", FAST).unwrap();
             vault.put(None, b"genau ein Datensatz mit etwas Inhalt").unwrap();
-            // Die Tresor-Kennung zeigt per Fremdschlüssel auf `vaults`; für diesen Fall braucht es dort einen zweiten Eintrag.
+            // The vault ID points to `vaults` via a foreign key; this case needs a second entry there.
             if what == "Tresor-Kennung" {
                 tamper(&temp.0, "INSERT INTO vaults (id, nonce, wrapped_key) SELECT id, nonce, ciphertext FROM records");
             }
@@ -1813,7 +1813,7 @@ mod tests {
         let b = vault.put(None, b"Host B").unwrap();
         let conn = Connection::open(&temp.0).unwrap();
 
-        // Inhalt von A an die Stelle von B setzen (samt Nonce und Signatur).
+        // Put A's content in the place of B (nonce and signature included).
         conn.execute(
             "UPDATE records SET (nonce, ciphertext, signature) = (SELECT nonce, ciphertext, signature FROM records WHERE id = ?1) WHERE id = ?2",
             params![a.as_slice(), b.as_slice()],
@@ -1823,7 +1823,7 @@ mod tests {
         assert_eq!(listing.records.len(), 1);
         assert_eq!(listing.damaged, [b.to_vec()]);
 
-        // Einen Grabstein wieder „lebendig“ machen.
+        // Make a tombstone “alive” again.
         vault.delete(&a).unwrap();
         conn.execute("UPDATE records SET deleted = 0 WHERE id = ?1", [a.as_slice()]).unwrap();
         let listing = vault.list().unwrap();
@@ -1843,7 +1843,7 @@ mod tests {
             tamper(&temp.0, sql);
             assert!(matches!(Vault::open(&temp.0).unwrap().unlock("richtig"), Err(VaultError::WrongPassword)), "{sql}");
         }
-        // Ein ausgetauschter öffentlicher Schlüssel fällt beim Entpacken des privaten auf.
+        // A swapped public key shows up when unwrapping the private one.
         let temp = Temp::new("header-key");
         drop(Vault::create(&temp.0, "richtig", FAST).unwrap());
         tamper(&temp.0, "UPDATE meta SET value = x'0000000000000000000000000000000000000000000000000000000000000000' WHERE key = 'ed25519_public'");
@@ -1941,14 +1941,14 @@ mod tests {
         assert_eq!(texts(&vault), ["da"]);
         assert_eq!(vault.device_id().unwrap().len(), 16);
 
-        // Ein anderer Tresor nimmt den Schlüssel nicht an.
+        // Another vault does not accept the key.
         let other = Temp::new("devicekey-other");
         let mut other_vault = Vault::create(&other.0, "x", FAST).unwrap();
         other_vault.lock();
         assert!(matches!(other_vault.unlock_with_key(&key), Err(VaultError::StaleDeviceKey)));
     }
 
-    /// Misst das Entsperren mit den Vorgabewerten. Aufruf: `cargo test -p glowport-core --release -- --ignored --nocapture`.
+    /// Measures unlocking with the default values. Run: `cargo test -p glowport-core --release -- --ignored --nocapture`.
     #[test]
     #[ignore = "Messung, kein Test"]
     fn measure_default_unlock() {
@@ -1964,8 +1964,8 @@ mod tests {
 
     use serde_json::{json, Value};
 
-    /// Eine Datei, die die Version 0.8.0 (Fassung 1) wirklich geschrieben hat: Gruppe „Kunden“, Host „web-01“
-    /// in Revision 2 und ein gelöschtes Snippet. Master-Passwort „fixture-passwort“.
+    /// A file really written by version 0.8.0 (format version 1): group “Kunden”, host “web-01”
+    /// in revision 2 and a deleted snippet. Master password “fixture-passwort”.
     #[test]
     fn a_file_of_format_1_is_migrated_and_keeps_everything() {
         let temp = Temp::new("format1");
@@ -1986,7 +1986,7 @@ mod tests {
         assert_eq!(tombstones, 1, "der Grabstein ist noch da");
         assert_eq!(vault.pending(&vault.personal().unwrap()).unwrap().len(), 3, "alles wartet auf einen ersten Abgleich");
 
-        // Weiterarbeiten und neu öffnen: Die Datei ist jetzt Fassung 2 und wird nicht noch einmal umgestellt.
+        // Keep working and reopen: the file is now version 2 and is not converted again.
         vault.put(None, b"neu").unwrap();
         drop(vault);
         std::fs::remove_file(&copy.0).unwrap();
@@ -2016,7 +2016,7 @@ mod tests {
         Member { account: crypto::hex(&account(seed)), name: format!("konto{seed}"), ed25519: crypto::hex(&ed25519), x25519: crypto::hex(&x25519), role }
     }
 
-    /// Spielt den Server: Was bei `from` wartet, kommt bei `to` an und gilt bei `from` als angenommen.
+    /// Plays the server: whatever waits at `from` arrives at `to` and counts as accepted at `from`.
     fn deliver(from: &mut Vault, to: &mut Vault, vault: &Id) -> Applied {
         let sent = from.pending(vault).unwrap();
         let applied = to.apply_remote(vault, &sent).unwrap();
@@ -2034,7 +2034,7 @@ mod tests {
         vault.put(id, &serde_json::to_vec(&value).unwrap()).unwrap()
     }
 
-    /// Zwei Geräte desselben Kontos: Das zweite entsteht aus dem, was der Server aufbewahrt.
+    /// Two devices of the same account: the second one is created from what the server keeps.
     fn two_devices(name: &str) -> (Temp, Temp, Vault, Vault, Id) {
         let (ta, tb) = (Temp::new(&format!("{name}-a")), Temp::new(&format!("{name}-b")));
         let a = Vault::create(&ta.0, "richtig", FAST).unwrap();
@@ -2059,7 +2059,7 @@ mod tests {
         assert!(!other.0.exists(), "kein Rest einer gescheiterten Anmeldung");
         assert!(matches!(Vault::create_from_account(&tb.0, "richtig", &a.account().unwrap()), Err(VaultError::AlreadyExists)));
 
-        // Der Anmeldeschlüssel folgt aus dem Passwort und öffnet nichts.
+        // The sign-in key follows from the password and opens nothing.
         let auth = a.auth_key("richtig").unwrap();
         let blob = a.account().unwrap();
         assert_eq!(auth.as_ref(), auth_key("richtig", &blob.salt, blob.kdf).unwrap().as_ref());
@@ -2082,7 +2082,7 @@ mod tests {
         assert_eq!((pending.len(), pending[0].revision), (1, 3), "genau eins über dem Server");
         assert_eq!(a.base(&id).unwrap().unwrap().revision, 2, "der abgeglichene Stand ist aufgehoben");
 
-        // Während das Paket unterwegs ist, wird weiter geändert: Die Bestätigung gilt nur dem Geschickten.
+        // While the package is on its way, changes continue: the confirmation only applies to what was sent.
         let sent = a.pending(&personal).unwrap();
         put_json(&mut a, Some(id), json!({"name": "fünf"}));
         b.apply_remote(&personal, &sent).unwrap();
@@ -2094,7 +2094,7 @@ mod tests {
         assert_eq!(values(&b, &personal), [json!({"name": "fünf"})]);
         assert!(a.base(&id).unwrap().is_none() && a.pending(&personal).unwrap().is_empty());
 
-        // Löschen geht denselben Weg.
+        // Deleting takes the same path.
         a.delete(&id).unwrap();
         deliver(&mut a, &mut b, &personal);
         assert!(values(&b, &personal).is_empty());
@@ -2106,7 +2106,7 @@ mod tests {
         let id = put_json(&mut a, None, json!({"name": "web", "own": {"port": 22}}));
         deliver(&mut a, &mut b, &personal);
 
-        // A ändert den Port und ist zuerst beim Server; B ändert inzwischen den Namen.
+        // A changes the port and reaches the server first; B meanwhile changes the name.
         put_json(&mut a, Some(id), json!({"name": "web", "own": {"port": 2222}}));
         put_json(&mut b, Some(id), json!({"name": "web-01", "own": {"port": 22}}));
         let from_a = a.pending(&personal).unwrap();
@@ -2121,7 +2121,7 @@ mod tests {
         assert_eq!(deliver(&mut b, &mut a, &personal).taken, [id]);
         assert_eq!(values(&a, &personal), [merged]);
 
-        // Das alte Paket noch einmal: abgelehnt, und es ändert nichts.
+        // The old package once more: rejected, and it changes nothing.
         let applied = b.apply_remote(&personal, &from_a).unwrap();
         assert_eq!((applied.taken.len(), applied.merged.len(), applied.rejected.len()), (0, 0, 1), "älter als der eigene Stand");
     }
@@ -2140,7 +2140,7 @@ mod tests {
         deliver(&mut b, &mut a, &personal);
         assert_eq!(values(&a, &personal), [json!({"name": "web-01"})], "der Eintrag ist zurück");
 
-        // Umgekehrt: Der Server hat die Änderung schon, hier wurde gelöscht.
+        // The other way round: the server already has the change, here it was deleted.
         put_json(&mut a, Some(id), json!({"name": "web-02"}));
         b.delete(&id).unwrap();
         assert!(deliver(&mut a, &mut b, &personal).merged[0].1.restored);
@@ -2177,7 +2177,7 @@ mod tests {
         changed.id = [3; 16];
         refused(&mut b, changed, "unter anderer Kennung");
 
-        // Ein fremdes Konto hat im persönlichen Tresor nichts zu schreiben, auch nicht mit dem richtigen Schlüssel.
+        // A foreign account has nothing to write in the personal vault, not even with the right key.
         let other = Temp::new("faelschen-fremd");
         let stranger = Vault::create(&other.0, "x", FAST).unwrap();
         let (keys, vault_keys) = b.vault_keys(&personal).unwrap();
@@ -2186,7 +2186,7 @@ mod tests {
         refused(&mut b, forged, "fremder Autor");
     }
 
-    /// A besitzt einen geteilten Tresor, B darf schreiben, C nur lesen.
+    /// A owns a shared vault, B may write, C may only read.
     struct Team {
         _temps: [Temp; 3],
         a: Vault,
@@ -2230,14 +2230,14 @@ mod tests {
         assert_eq!(values(&c, &shared), [json!({"name": "team-host"})]);
         assert_eq!(b.vault_of(&host).unwrap(), shared);
 
-        // B darf schreiben, und alle nehmen es an.
+        // B may write, and everyone accepts it.
         b.put(Some(host), br#"{"name":"team-host","own":{"port":2222}}"#).unwrap();
         let sent = b.pending(&shared).unwrap();
         assert_eq!(a.apply_remote(&shared, &sent).unwrap().taken.len(), 1);
         assert_eq!(c.apply_remote(&shared, &sent).unwrap().taken.len(), 1);
         b.acknowledge(&shared, &sent).unwrap();
 
-        // C darf nicht: Das eigene Programm lehnt ab, und was C trotzdem signiert, nimmt niemand an.
+        // C may not: its own program refuses, and whatever C signs anyway nobody accepts.
         assert!(matches!(c.put(Some(host), b"{}"), Err(VaultError::ReadOnly)));
         assert!(matches!(c.put_in(&shared, b"{}"), Err(VaultError::ReadOnly)));
         assert!(matches!(c.delete(&host), Err(VaultError::ReadOnly)));
@@ -2248,13 +2248,13 @@ mod tests {
             assert_eq!(values(vault, &shared)[0]["own"]["port"], 2222);
         }
 
-        // Nach dem Sperren und Entsperren ist alles wieder da.
+        // After locking and unlocking everything is back.
         b.lock();
         b.unlock("b").unwrap();
         assert_eq!(b.vaults().unwrap().len(), 2);
         assert_eq!(values(&b, &shared).len(), 1);
 
-        // Der Server kann niemanden hineinsetzen, und Rechte entzieht nur ein Schlüsseltausch.
+        // The server cannot put anyone in, and only a key rotation takes permissions away.
         let mut forged = b.vaults().unwrap()[1].roster.clone().unwrap();
         forged.version = 3;
         forged.members[2].role = Role::Write;
@@ -2282,7 +2282,7 @@ mod tests {
         b.apply_remote(&shared, &sent).unwrap();
         a.acknowledge(&shared, &sent).unwrap();
 
-        // B hält offline eine Änderung und einen neuen Eintrag, während A das Mitglied C entfernt.
+        // B holds a change and a new entry offline while A removes the member C.
         b.put(Some(edited), br#"{"name":"neu","own":{"port":22}}"#).unwrap();
         b.put_in(&shared, br#"{"name":"von B"}"#).unwrap();
 
@@ -2308,13 +2308,13 @@ mod tests {
         assert_eq!(values(&a, &shared), [json!({"name": "alt", "own": {"port": 22}}), json!({"name": "bleibt!"})]);
         assert!(a.pending(&shared).unwrap().is_empty());
 
-        // C ist draußen: Die neue Liste nennt C nicht, der neue Schlüssel ist nicht für C, die neuen Datensätze bleiben zu.
+        // C is out: the new list does not name C, the new key is not for C, the new records stay closed.
         assert!(matches!(c.apply_rotation(&shared, &for_b, &blob, &records), Err(VaultError::NotMember)));
         assert_eq!(c.apply_remote(&shared, &records).unwrap().rejected.len(), 3);
         c.remove_vault(&shared).unwrap();
         assert!(c.vaults().unwrap().len() == 1 && c.list().unwrap().records.is_empty());
 
-        // B zieht um und behält, was bei ihm wartete.
+        // B moves over and keeps what was waiting there.
         let applied = b.apply_rotation(&shared, &for_b, &blob, &records).unwrap();
         assert!(applied.rejected.is_empty());
         assert_eq!(values(&b, &shared), [json!({"name": "bleibt!"}), json!({"name": "neu", "own": {"port": 22}}), json!({"name": "von B"})]);
@@ -2324,7 +2324,7 @@ mod tests {
         b.acknowledge(&shared, &pending).unwrap();
         assert_eq!(values(&a, &shared), values(&b, &shared));
 
-        // Alles übersteht das Sperren, und der alte Stand lässt sich nicht noch einmal unterschieben.
+        // Everything survives locking, and the old state cannot be slipped in again.
         b.lock();
         b.unlock("b").unwrap();
         assert_eq!(values(&b, &shared).len(), 3);
@@ -2368,7 +2368,7 @@ mod tests {
         let bytes = std::fs::read(&temp.0).unwrap();
         assert!(!bytes.windows(12).any(|w| w == b"sync.example"), "die Adresse steht nicht im Klartext in der Datei");
 
-        // Die Sicherung kennt den Server nicht und gleicht von vorn ab.
+        // The backup does not know the server and syncs from scratch.
         let mut restored = Vault::open(&copy.0).unwrap();
         restored.unlock("richtig").unwrap();
         assert!(restored.link().unwrap().is_none());
@@ -2387,21 +2387,21 @@ mod tests {
         assert_eq!(new_auth.as_ref(), a.auth_key("neu").unwrap().as_ref());
         assert_ne!(old_auth.as_ref(), new_auth.as_ref());
 
-        // Das zweite Gerät bekommt die neue Verpackung vom Server und merkt sie vor: Das alte Passwort öffnet weiter.
+        // The second device gets the new wrapping from the server and stores it as pending: the old password keeps opening.
         b.stage_wrapping(&wrapping).unwrap();
         b.lock();
         b.unlock("richtig").unwrap();
         assert_ne!(b.current_wrapping().unwrap(), wrapping);
         b.lock();
         assert!(matches!(b.unlock("falsch"), Err(VaultError::WrongPassword)));
-        // Mit dem neuen Passwort wird sie zur geltenden, und das alte öffnet nicht mehr.
+        // With the new password it becomes the current one, and the old one no longer opens.
         b.unlock("neu").unwrap();
         assert_eq!(b.current_wrapping().unwrap(), wrapping);
         b.lock();
         assert!(matches!(b.unlock("richtig"), Err(VaultError::WrongPassword)));
         b.unlock("neu").unwrap();
 
-        // Unsinn vom Server sperrt niemanden aus, auch nicht die echte Verpackung eines fremden Kontos.
+        // Nonsense from the server locks nobody out, not even the real wrapping of a foreign account.
         let mut garbage = wrapping.clone();
         garbage.account_wrapped[0] ^= 1;
         b.stage_wrapping(&garbage).unwrap();
@@ -2482,7 +2482,7 @@ mod tests {
         assert_eq!(b.retain_synced(&personal, &BTreeSet::from([kept])).unwrap(), 1);
         assert_eq!(values(&b, &personal), [json!({"name": "bleibt"}), json!({"name": "hier geändert"}), json!({"name": "hier neu"})]);
         assert!(b.state(&gone).unwrap().is_none());
-        // Die eigene Änderung gilt jetzt als neu und geht mit ihrer Revision hinaus.
+        // The own change now counts as new and goes out with its revision.
         let pending = b.pending(&personal).unwrap();
         assert_eq!(pending.iter().map(|e| e.id).collect::<BTreeSet<_>>(), BTreeSet::from([edited, fresh]));
         assert!(b.base(&edited).unwrap().is_none());
@@ -2502,7 +2502,7 @@ mod tests {
         assert_eq!(a.adopt_from(&old).unwrap(), 2);
         assert_eq!(a.adopt_from(&old).unwrap(), 0, "ein zweites Mal bringt nichts doppelt");
         assert_eq!(values(&a, &personal).len(), 3);
-        // Dieselben Kennungen: Der Verweis des Hosts auf seine Gruppe hält.
+        // The same IDs: the host's reference to its group holds.
         assert_eq!(a.vault_of(&host).unwrap(), personal);
         assert_eq!(a.vault_of(&group).unwrap(), personal);
         assert!(a.state(&deleted).unwrap().is_none());
@@ -2515,10 +2515,10 @@ mod tests {
         let (_ta, _tb, mut a, mut b, personal) = two_devices("zurueck");
         let old = put_json(&mut a, None, json!({"name": "alt"}));
         let stays = put_json(&mut a, None, json!({"name": "unverändert"}));
-        // Der Stand, den die Sicherung des Servers festhält.
+        // The state the server's backup records.
         let backup = a.pending(&personal).unwrap();
         deliver(&mut a, &mut b, &personal);
-        // Danach ging es weiter: eine Änderung, ein neuer Eintrag, ein gelöschter. Beide Geräte haben alles.
+        // Then work continued: a change, a new entry, a deleted one. Both devices have everything.
         put_json(&mut a, Some(old), json!({"name": "neu"}));
         let fresh = put_json(&mut a, None, json!({"name": "nach der Sicherung"}));
         a.delete(&stays).unwrap();
@@ -2526,9 +2526,9 @@ mod tests {
         assert!(a.pending(&personal).unwrap().is_empty());
         let writes = a.writes();
 
-        // Der Server ist aus der Sicherung zurück. Sein Stand allein ändert hier nichts ...
+        // The server is back from the backup. Its state alone changes nothing here ...
         assert_eq!(a.apply_remote(&personal, &backup).unwrap().rejected.len(), 2);
-        // ... erst das ausdrückliche Hochladen des eigenen Stands.
+        // ... only explicitly uploading the own state does.
         let applied = a.rebase_onto(&personal, &backup).unwrap();
         assert!(applied.rejected.is_empty() && applied.taken.is_empty());
         assert!(a.writes() > writes);
@@ -2539,12 +2539,12 @@ mod tests {
         assert_eq!(of(&stays), (3, 1, true), "auch das Löschen geht wieder hinaus");
         assert_eq!(of(&fresh), (1, 0, false), "was der Server nicht kennt, gilt als neu");
 
-        // Das andere Gerät nimmt alles als neu an und hat danach denselben Stand.
+        // The other device accepts everything as new and then has the same state.
         let applied = deliver(&mut a, &mut b, &personal);
         assert_eq!((applied.taken.len(), applied.rejected.len()), (2, 0), "den neuen Eintrag hat es schon genau so");
         assert_eq!(values(&b, &personal), values(&a, &personal));
 
-        // Was beim Server inzwischen neuer ist (ein drittes Gerät war schneller), wird dabei übernommen.
+        // Whatever is newer on the server by now (a third device was faster) is taken over on the way.
         put_json(&mut b, Some(old), json!({"name": "noch neuer"}));
         let newer = b.pending(&personal).unwrap();
         let applied = a.rebase_onto(&personal, &newer).unwrap();
@@ -2588,14 +2588,14 @@ mod tests {
         let role = |vault: &Vault| vault.vaults().unwrap()[1].role;
         assert_eq!((role(&a), role(&b), role(&c)), (Role::Write, Role::Owner, Role::Read));
 
-        // Die Liste der Übergabe trägt die Signatur der früheren Besitzerin und gilt trotzdem nach dem Sperren.
+        // The transfer list carries the former owner's signature and still counts after locking.
         for (vault, password) in [(&mut a, "a"), (&mut b, "b")] {
             vault.lock();
             vault.unlock(password).unwrap();
             assert_eq!(vault.vaults().unwrap().len(), 2);
         }
 
-        // Der neue Besitzer führt weiter: einladen, Schlüssel tauschen. Die frühere Besitzerin kann das nicht mehr.
+        // The new owner carries on: invite, rotate keys. The former owner can no longer do that.
         let mut roster = b.vaults().unwrap()[1].roster.clone().unwrap();
         roster.version += 1;
         assert!(matches!(a.sign_roster(&shared, &roster), Err(VaultError::NotOwner)));
@@ -2608,7 +2608,7 @@ mod tests {
         a.apply_rotation(&shared, &for_a, &blob, &records).unwrap();
         assert_eq!(a.vaults().unwrap()[1].epoch, 2);
 
-        // Ein Gerät, das neu dazukommt, kann die Liste prüfen, obwohl es die Übergabe nie gesehen hat.
+        // A device that joins later can verify the list although it never saw the transfer.
         let other = Temp::new("besitz-neu");
         let mut late = Vault::create(&other.0, "x", FAST).unwrap();
         let mut next = b.vaults().unwrap()[1].roster.clone().unwrap();

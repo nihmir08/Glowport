@@ -1,27 +1,27 @@
-//! WinSCP: Sitzungen aus der Registry oder aus `WinSCP.ini`. Der Name einer Sitzung trägt ihre Ordner (`Kunden/web`)
-//! und ist wie eine Adresse umschrieben (`%20`). Gespeicherte Passwörter sind nur verschleiert und lassen sich lesen,
-//! solange in WinSCP kein Master-Passwort gesetzt ist.
+//! WinSCP: sessions from the registry or from `WinSCP.ini`. A session's name carries its folders (`Customers/web`)
+//! and is escaped like an address (`%20`). Saved passwords are only obfuscated and can be read
+//! as long as no master password is set in WinSCP.
 
 use glowport_core::model::{FtpSecurity, Secret};
 
 use crate::text::{ini_sections, percent_decode};
 use crate::{ftp_host, host_name, usable_address, Draft, DraftHost, Entries, Jump, Note, Section, Values};
 
-/// Unterhalb dieses Schlüssels (in `HKEY_CURRENT_USER`) liegen die Sitzungen.
+/// The sessions live below this key (in `HKEY_CURRENT_USER`).
 pub const KEY: &str = "Software\\Martin Prikryl\\WinSCP 2\\Sessions";
-/// Hier steht, ob ein Master-Passwort die gespeicherten Passwörter schützt (`UseMasterPassword`).
+/// This says whether a master password protects the saved passwords (`UseMasterPassword`).
 pub const SECURITY: &str = "Software\\Martin Prikryl\\WinSCP 2\\Configuration\\Security";
 
 const MAGIC: u8 = 0xA3;
 const FLAG: u8 = 0xFF;
 
-/// Macht ein verschleiertes Passwort wieder lesbar. `key` ist Benutzer und Adresse hintereinander; damit prüft
-/// WinSCP, dass das Passwort zu dieser Sitzung gehört.
+/// Makes an obfuscated password readable again. `key` is user and address one after the other; WinSCP uses it
+/// to check that the password belongs to this session.
 fn reveal(hex: &str, key: &str) -> Option<String> {
     let digits: Vec<u8> = hex.trim().chars().map(|c| c.to_digit(16).map(|d| d as u8)).collect::<Option<_>>()?;
     let mut bytes = digits.as_chunks::<2>().0.iter().map(|pair| !(((pair[0] << 4) | pair[1]) ^ MAGIC));
     let flag = bytes.next()?;
-    // Nach dem Kennzeichen nennt WinSCP die Fassung: 0 = Länge in einem Byte, 2 = in zweien (neuere Versionen).
+    // After the marker WinSCP names the version: 0 = length in one byte, 2 = in two (newer versions).
     let length = match (flag == FLAG).then(|| bytes.next()).flatten() {
         Some(2) => (bytes.next()? as usize) << 8 | bytes.next()? as usize,
         Some(_) => bytes.next()? as usize,
@@ -48,7 +48,7 @@ fn number(entries: &Entries, name: &str) -> Option<u32> {
     entries.get(name)?.trim().parse().ok()
 }
 
-/// Aus `WinSCP.ini`: Abschnitte `[Sessions\name]`, dazu `[Configuration\Security]`.
+/// From `WinSCP.ini`: sections `[Sessions\name]`, plus `[Configuration\Security]`.
 pub fn from_ini(text: &str) -> Draft {
     let all = ini_sections(text);
     let protected = all.iter().any(|(name, entries)| name == "Configuration\\Security" && number(entries, "UseMasterPassword") == Some(1));
@@ -56,8 +56,8 @@ pub fn from_ini(text: &str) -> Draft {
     from_sections(&sessions, protected)
 }
 
-/// Macht aus den Sitzungen einen Entwurf. `protected`: In WinSCP ist ein Master-Passwort gesetzt; dann sind die
-/// Passwörter echt verschlüsselt und bleiben zurück.
+/// Turns the sessions into a draft. `protected`: a master password is set in WinSCP; then the
+/// passwords are really encrypted and stay behind.
 pub fn from_sections(sections: &[Section], protected: bool) -> Draft {
     let mut draft = Draft::default();
     for (raw_name, entries) in sections {
@@ -70,7 +70,7 @@ pub fn from_sections(sections: &[Section], protected: bool) -> Draft {
             }
             continue;
         };
-        // 0 = SCP, 1 und 2 = SFTP (die Vorgabe), 5 = FTP, 6 = WebDAV, 7 = S3.
+        // 0 = SCP, 1 and 2 = SFTP (the default), 5 = FTP, 6 = WebDAV, 7 = S3.
         let kind = number(entries, "FSProtocol").unwrap_or(2);
         let reason = match kind {
             0..=2 | 5 => None,
@@ -87,7 +87,7 @@ pub fn from_sections(sections: &[Section], protected: bool) -> Draft {
         let group = draft.group_at(&path);
         let user = text(entries, "UserName").map(percent_decode);
         if kind == 5 {
-            // 0 = unverschlüsselt, 1 = TLS von Anfang an, 2 und 3 = ausdrücklich (SSL bzw. TLS).
+            // 0 = unencrypted, 1 = implicit TLS, 2 and 3 = explicit (SSL or TLS).
             let security = match number(entries, "Ftps").unwrap_or(0) {
                 0 => FtpSecurity::None,
                 1 => FtpSecurity::Implicit,
@@ -119,7 +119,7 @@ pub fn from_sections(sections: &[Section], protected: bool) -> Draft {
             host.own.agent_forward = Some(true);
             host.notes.push(Note::new("agent_forward"));
         }
-        // Tunnel: WinSCP verbindet über einen zweiten SSH-Server. In Glowport ist das ein Sprung-Server.
+        // Tunnel: WinSCP connects through a second SSH server. In Glowport that is a jump host.
         if let (Some(1), Some(tunnel)) = (number(entries, "Tunnel"), text(entries, "TunnelHostName").map(percent_decode).filter(|t| usable_address(t))) {
             let tunnel_user = text(entries, "TunnelUserName").map(percent_decode);
             let tunnel_port = number(entries, "TunnelPortNumber").and_then(|p| u16::try_from(p).ok()).filter(|p| *p != 0 && *p != 22);
@@ -164,7 +164,7 @@ mod tests {
     use glowport_core::model::Ftp;
     use crate::KeySource;
 
-    /// Verschleiert so, wie WinSCP es tut, damit der Test nicht von einem abgeschriebenen Beispiel abhängt.
+    /// Obfuscates the way WinSCP does, so the test does not depend on a copied example.
     fn hide(password: &str, key: &str, padding: u8) -> String {
         let clear = format!("{key}{password}");
         let mut bytes = vec![FLAG, 0, clear.len() as u8, padding];
@@ -181,7 +181,7 @@ mod tests {
         assert_eq!(reveal(&hidden, "andererssh.kunde-a.example"), None, "gehört zu einer anderen Sitzung");
         assert_eq!(reveal("kein hex", "x"), None);
         assert_eq!(reveal("A3", "x"), None);
-        // Alte Form ohne Kennzeichen: Die erste Zahl ist gleich die Länge.
+        // Old form without marker: the first number is the length right away.
         let old: String = [3u8, 0, b'a', b'b', b'c'].iter().map(|b| format!("{:02X}", !(b ^ MAGIC))).collect();
         assert_eq!(reveal(&old, "egal").as_deref(), Some("abc"));
     }
@@ -204,13 +204,13 @@ mod tests {
         let inner = &draft.hosts[2];
         assert_eq!((inner.own.port, inner.own.jump, inner.own.proxy.as_deref()), (Some(2222), Jump::Host(1), Some("socks5://proxy.example:1080")));
         assert_eq!(draft.hosts[1].password.as_ref().map(|p| p.expose()), Some("tunnel-pw"));
-        // Eine FTP-Sitzung ohne weitere Angaben: unverschlüsselt und ohne Benutzer, also anonym.
+        // An FTP session without further details: unencrypted and without a user, i.e. anonymous.
         let old = &draft.hosts[3];
         assert_eq!((old.protocol, old.address.as_str(), old.own.port, old.own.user.as_deref()), (crate::Protocol::Ftp, "ftp.example.org", None, None));
         assert_eq!(old.ftp, Some(Ftp { security: FtpSecurity::None, anonymous: true, dir: None, plain_ok: false }));
         assert!(draft.skipped.is_empty());
 
-        // Mit Master-Passwort sind die Passwörter verschlüsselt: Sie bleiben zurück, und der Host sagt es.
+        // With a master password the passwords are encrypted: they stay behind, and the host says so.
         let locked = from_ini(&ini.replace("UseMasterPassword=0", "UseMasterPassword=1"));
         assert!(locked.hosts[0].password.is_none() && locked.hosts[0].password_lost);
     }
@@ -227,7 +227,7 @@ mod tests {
             found,
             [
                 ("Webspace", crate::Protocol::Ftp, Some((FtpSecurity::Explicit, false)), Some(2121), Some("web1")),
-                // Der übliche Port von FTPS von Anfang an wird nicht eigens gespeichert; „anonymous“ ist kein Benutzer.
+                // The usual port of implicit FTPS is not stored separately; “anonymous” is not a user.
                 ("alt", crate::Protocol::Ftp, Some((FtpSecurity::Implicit, true)), None, None),
                 ("offen", crate::Protocol::Ftp, Some((FtpSecurity::None, false)), None, Some("scan")),
             ]

@@ -6,19 +6,19 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-# `ring` statt `aws-lc-rs`, weil das unter Windows ohne NASM und CMake baut (Erfahrung aus NexusSSH).
-# `des` nur für die Einstellung „alte Verfahren erlauben“ (3des-cbc auf alten Netzwerkgeräten).
+# `ring` instead of `aws-lc-rs`, because it builds on Windows without NASM and CMake (experience from NexusSSH).
+# `des` only for the setting “allow old algorithms” (3des-cbc on old network devices).
 russh = { version = "0.63", default-features = false, features = ["ring", "flate2", "rsa", "des"] }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "time", "macros", "io-util"] }
-# Dieselbe Fassung, die russh zum Erzeugen von Schlüsseln erwartet.
+# The same version russh expects for generating keys.
 rand = "0.10"
 zeroize = "1"
 russh-sftp = "3.0.1"
-# Mosh (Meilenstein 12): unabhängige Umsetzung unter MIT oder Apache-2.0; die übrigen Rust-Umsetzungen sind GPL.
-# Nur als Git-Abhängigkeit zu haben. Sie nagelt `aes` auf 0.9.1; russh nimmt dieselbe Fassung (siehe Cargo.lock).
+# Mosh: an independent implementation under MIT or Apache-2.0; the other Rust implementations are GPL.
+# Only available as a Git dependency. It pins `aes` to 0.9.1; russh uses the same version (see Cargo.lock).
 mosh-client = { git = "https://github.com/wandcs/mosh-client-rs", tag = "v0.1.4", version = "=0.1.4" }
 
 [dev-dependencies]
 glowport-testserver = { path = "../testserver" }
-# Für den Test-Agenten auf einer eigenen Pipe; russh bringt das Crate ohnehin mit.
+# For the test agent on a pipe of its own; russh brings the crate along anyway.
 futures = "0.3"

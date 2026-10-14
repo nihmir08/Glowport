@@ -1,9 +1,9 @@
-//! Import aus anderen Programmen. Jeder Leser ist eine reine Funktion: Text oder Werte hinein, [`Draft`] heraus.
-//! Wer die Dateien findet und liest, wer Schlüsseldateien öffnet und wer den Entwurf in den Tresor schreibt,
-//! steht in der Brücke (`src-tauri/src/import.rs`).
+//! Import from other programs. Every reader is a pure function: text or values in, [`Draft`] out.
+//! Who finds and reads the files, who opens key files and who writes the draft into the vault
+//! is in the bridge (`src-tauri/src/import.rs`).
 //!
-//! Regel für alle Leser: Was sie nicht verstehen, lassen sie aus und sagen es (`skipped`, `notes`); ein einzelner
-//! unlesbarer Eintrag bringt nie den ganzen Import zu Fall.
+//! Rule for all readers: what they do not understand they leave out and say so (`skipped`, `notes`); a single
+//! unreadable entry never brings down the whole import.
 
 use std::collections::BTreeMap;
 
@@ -22,7 +22,7 @@ pub mod wterminal;
 pub mod xml;
 pub mod xshell;
 
-/// Programme und Dateiformate, aus denen importiert wird. Die Namen sind die Kennungen der Oberfläche.
+/// Programs and file formats that can be imported from. The names are the interface's IDs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Source {
     SshConfig,
@@ -80,14 +80,14 @@ impl Source {
     }
 }
 
-/// Warum sich etwas nicht lesen ließ. Die Texte dazu hat die Oberfläche (`err.import_…`).
+/// Why something could not be read. The interface has the texts for it (`err.import_…`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ImportError {
-    /// Der Inhalt ist nicht das, was er sein soll.
+    /// The content is not what it should be.
     Unreadable(String),
-    /// Kein bekanntes Format.
+    /// No known format.
     Unknown,
-    /// Mit einem Passwort geschützt.
+    /// Protected with a password.
     Protected,
 }
 
@@ -97,7 +97,7 @@ pub(crate) fn unreadable<T>(why: impl Into<String>) -> Result<T> {
     Err(ImportError::Unreadable(why.into()))
 }
 
-/// Hinweis zu einem Host. `code` ist ein Schlüssel der Oberfläche (`imp.note.…`).
+/// Note about a host. `code` is a key of the interface (`imp.note.…`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Note {
     pub code: &'static str,
@@ -113,7 +113,7 @@ impl Note {
     }
 }
 
-/// Verweis auf einen Sprung-Server: geerbt, ausdrücklich keiner, oder ein Host desselben Entwurfs.
+/// Reference to a jump host: inherited, explicitly none, or a host of the same draft.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Jump {
     #[default]
@@ -122,17 +122,17 @@ pub enum Jump {
     Host(usize),
 }
 
-/// Vererbbare Werte, wie sie eine Quelle hergibt. Was fehlt, bleibt im Tresor ungesetzt.
+/// Inheritable values as a source provides them. Whatever is missing stays unset in the vault.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Values {
     pub user: Option<String>,
     pub port: Option<u16>,
     pub jump: Jump,
-    /// Schlüssel desselben Entwurfs.
+    /// Key of the same draft.
     pub key: Option<usize>,
     pub agent: Option<bool>,
     pub agent_forward: Option<bool>,
-    /// In der Schreibweise des Tresors: `http://…` oder `socks5://…`.
+    /// In the vault's notation: `http://…` or `socks5://…`.
     pub proxy: Option<String>,
     pub startcmd: Option<String>,
     pub env: Option<String>,
@@ -143,7 +143,7 @@ pub struct Values {
     pub scheme: Option<String>,
     pub charset: Option<String>,
     pub reconnect: Option<String>,
-    /// Das Terminal über Mosh führen.
+    /// Run the terminal over Mosh.
     pub mosh: Option<bool>,
     pub mosh_predict: Option<String>,
     pub mosh_port: Option<String>,
@@ -158,7 +158,7 @@ pub struct DraftGroup {
     pub defs: Values,
 }
 
-/// Wie ein Host der Quelle angesprochen wird.
+/// How a host of the source is reached.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Protocol {
     #[default]
@@ -169,7 +169,7 @@ pub enum Protocol {
 }
 
 impl Protocol {
-    /// Die Kennung, unter der das Protokoll am Host im Tresor steht.
+    /// The ID under which the protocol is stored on the host in the vault.
     pub fn id(self) -> &'static str {
         match self {
             Self::Ssh => "ssh",
@@ -183,25 +183,25 @@ impl Protocol {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct DraftHost {
     pub name: String,
-    /// Adresse des Servers; bei einer seriellen Leitung der Name des Ports.
+    /// Address of the server; for a serial line the name of the port.
     pub address: String,
     pub protocol: Protocol,
-    /// Die Leitung, bei [`Protocol::Serial`].
+    /// The line, for [`Protocol::Serial`].
     pub serial: Option<Serial>,
-    /// Verschlüsselung und Anmeldung, bei [`Protocol::Ftp`].
+    /// Encryption and sign-in, for [`Protocol::Ftp`].
     pub ftp: Option<Ftp>,
     pub group: Option<usize>,
     pub color: Option<String>,
     pub os: Option<String>,
     pub own: Values,
     pub password: Option<Secret>,
-    /// In der Quelle steht ein Passwort, das sich nicht lesen lässt (verschlüsselt, an anderer Stelle abgelegt).
+    /// The source contains a password that cannot be read (encrypted, stored elsewhere).
     pub password_lost: bool,
     pub proxy_password: Option<Secret>,
     pub notes: Vec<Note>,
 }
 
-/// Woher ein Schlüssel kommt: aus einer Datei auf diesem Rechner oder aus der Quelle selbst.
+/// Where a key comes from: a file on this machine or the source itself.
 #[derive(Debug, Clone, PartialEq)]
 pub enum KeySource {
     File(String),
@@ -237,22 +237,22 @@ pub struct DraftSnippet {
 pub struct DraftKnownHost {
     pub host: String,
     pub port: u16,
-    /// Name des Verfahrens, wie ihn der Server nennt (`ssh-ed25519`).
+    /// Name of the algorithm as the server names it (`ssh-ed25519`).
     pub algorithm: String,
-    /// `SHA256:…` wie bei OpenSSH.
+    /// `SHA256:…` as in OpenSSH.
     pub fingerprint: String,
-    /// Öffentlicher Schlüssel im OpenSSH-Format ohne Kommentar.
+    /// Public key in OpenSSH format without comment.
     pub key: String,
 }
 
-/// Ein Eintrag, den Glowport nicht übernimmt. `reason` ist ein Schlüssel der Oberfläche (`imp.skip.…`).
+/// An entry Glowport does not take over. `reason` is a key of the interface (`imp.skip.…`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Skipped {
     pub name: String,
     pub reason: &'static str,
 }
 
-/// Was eine Quelle hergibt. Verweise sind Stellen in den Listen desselben Entwurfs.
+/// What a source provides. References are positions in the lists of the same draft.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Draft {
     pub groups: Vec<DraftGroup>,
@@ -273,7 +273,7 @@ impl Draft {
         self.skipped.push(Skipped { name: name.into(), reason });
     }
 
-    /// Die Gruppe für einen Weg wie `["Kunden", "Meier"]`; fehlende Stufen entstehen dabei. Leere Namen fallen weg.
+    /// The group for a path like `["Customers", "Smith"]`; missing levels are created on the way. Empty names are dropped.
     pub(crate) fn group_at<S: AsRef<str>>(&mut self, path: &[S]) -> Option<usize> {
         let mut parent = None;
         for name in path.iter().map(|s| s.as_ref().trim()).filter(|s| !s.is_empty()) {
@@ -287,7 +287,7 @@ impl Draft {
         parent
     }
 
-    /// Der Schlüssel zu einer Datei; dieselbe Datei wird nur einmal aufgenommen.
+    /// The key for a file; the same file is only taken in once.
     pub(crate) fn key_file(&mut self, path: &str) -> Option<usize> {
         let path = path.trim();
         if path.is_empty() {
@@ -301,7 +301,7 @@ impl Draft {
         }))
     }
 
-    /// Ein Schlüssel, dessen Text in der Quelle selbst steht; derselbe Text wird nur einmal aufgenommen.
+    /// A key whose text is in the source itself; the same text is only taken in once.
     pub(crate) fn key_text(&mut self, name: &str, text: &str, passphrase: Option<&str>) -> Option<usize> {
         if !text.contains("PRIVATE KEY") && !text.starts_with("PuTTY-User-Key-File") {
             return None;
@@ -318,14 +318,14 @@ impl Draft {
     }
 }
 
-/// Werte eines Registry-Schlüssels oder eines INI-Abschnitts: Name → Text. Zahlen stehen als Dezimaltext.
+/// Values of a registry key or an INI section: name → text. Numbers are decimal text.
 pub type Entries = BTreeMap<String, String>;
 
-/// Ein Abschnitt mit seinem Namen, etwa eine PuTTY-Sitzung.
+/// A section with its name, e.g. a PuTTY session.
 pub type Section = (String, Entries);
 
-/// Liest eine gewählte Datei, deren Art feststeht. Für Quellen aus mehreren Dateien (Xshell, SecureCRT als Ordner)
-/// ruft die Brücke deren Leser selbst auf.
+/// Reads a chosen file whose kind is known. For sources made of several files (Xshell, SecureCRT as a folder)
+/// the bridge calls their readers itself.
 pub fn read(source: Source, bytes: &[u8], home: &str) -> Result<Draft> {
     let text = text::decode(bytes);
     match source {
@@ -346,7 +346,7 @@ pub fn read(source: Source, bytes: &[u8], home: &str) -> Result<Draft> {
     }
 }
 
-/// Erkennt am Inhalt, aus welchem Programm eine Datei stammt.
+/// Recognises from the content which program a file comes from.
 pub fn detect(file_name: &str, bytes: &[u8]) -> Option<Source> {
     let text = text::decode(bytes);
     let head = text.trim_start_matches('\u{feff}').trim_start();
@@ -388,8 +388,8 @@ pub fn detect(file_name: &str, bytes: &[u8]) -> Option<Source> {
     csv::looks_like(&text).then_some(Source::Csv)
 }
 
-/// Port aus einem Text; nur 1 bis 65535.
-/// Ein Host über Telnet. Von den Werten zählen nur Benutzer und Port; der übliche Port 23 bleibt weg.
+/// Port from a text; only 1 to 65535.
+/// A host over Telnet. Of the values only user and port count; the usual port 23 is left out.
 pub(crate) fn telnet_host(name: &str, address: &str, port: Option<u16>, user: Option<String>, group: Option<usize>) -> DraftHost {
     let mut host = DraftHost { name: host_name(name, address), address: address.to_string(), group, protocol: Protocol::Telnet, ..DraftHost::default() };
     host.own.port = port.filter(|p| *p != 0 && *p != 23);
@@ -397,8 +397,8 @@ pub(crate) fn telnet_host(name: &str, address: &str, port: Option<u16>, user: Op
     host
 }
 
-/// Ein FTP-Host. Ohne Benutzer oder mit `anonymous` meldet er sich anonym an. `sure` sagt, ob die Quelle die
-/// Verschlüsselung wirklich nennt; sonst bekommt der Host einen Hinweis, sie zu prüfen.
+/// An FTP host. Without a user or with `anonymous` it signs in anonymously. `sure` says whether the source really
+/// names the encryption; otherwise the host gets a note to check it.
 pub(crate) fn ftp_host(name: &str, address: &str, port: Option<u16>, user: Option<String>, security: FtpSecurity, sure: bool, group: Option<usize>) -> DraftHost {
     let user = user.map(|u| u.trim().to_string()).filter(|u| !u.is_empty());
     let anonymous = user.as_deref().is_none_or(|u| u.eq_ignore_ascii_case("anonymous"));
@@ -413,19 +413,19 @@ pub(crate) fn ftp_host(name: &str, address: &str, port: Option<u16>, user: Optio
     host
 }
 
-/// Eine serielle Leitung als Host: Die Adresse ist der Name des Ports.
+/// A serial line as a host: the address is the name of the port.
 pub(crate) fn serial_host(name: &str, port: &str, line: Serial, group: Option<usize>) -> DraftHost {
     let port = port.trim().to_uppercase();
     DraftHost { name: host_name(name, &port), address: port, group, protocol: Protocol::Serial, serial: Some(line), ..DraftHost::default() }
 }
 
-/// Sieht der Text nach einem seriellen Port von Windows aus (`COM3`)?
+/// Does the text look like a Windows serial port (`COM3`)?
 pub(crate) fn usable_serial_port(text: &str) -> bool {
     let text = text.trim();
     text.len() > 3 && text.len() <= 6 && text.is_char_boundary(3) && text[..3].eq_ignore_ascii_case("com") && text[3..].chars().all(|c| c.is_ascii_digit())
 }
 
-/// Eine Leitung aus dem, was die Quelle nennt. Was fehlt oder was es nicht geben kann, wird zum Üblichen: 9600 8N1.
+/// A line from what the source names. Whatever is missing or cannot exist becomes the usual: 9600 8N1.
 pub(crate) fn serial_line(baud: Option<u32>, data_bits: Option<u32>, parity: Parity, two_stop_bits: bool, flow: Flow) -> Serial {
     let line = Serial {
         baud: baud.unwrap_or(9600),
@@ -441,12 +441,12 @@ pub(crate) fn port(text: &str) -> Option<u16> {
     text.trim().parse::<u16>().ok().filter(|p| *p != 0)
 }
 
-/// Ist das eine Adresse, die der Tresor annimmt? Keine Leerzeichen, kein Anfang mit Bindestrich.
+/// Is this an address the vault accepts? No spaces, no leading hyphen.
 pub(crate) fn usable_address(text: &str) -> bool {
     !text.is_empty() && text.len() <= 255 && !text.starts_with('-') && !text.chars().any(|c| c.is_whitespace() || c.is_control())
 }
 
-/// Name für einen Host: höchstens 80 Zeichen, nie leer.
+/// Name for a host: at most 80 characters, never empty.
 pub(crate) fn host_name(name: &str, address: &str) -> String {
     let name = name.trim();
     (if name.is_empty() { address } else { name }).chars().take(80).collect()

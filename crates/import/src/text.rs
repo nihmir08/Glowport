@@ -1,14 +1,14 @@
-//! Gemeinsames Handwerk der Leser: Zeichensätze, Registry-Exporte, INI-Dateien, JSON mit Kommentaren, Kommandozeilen.
+//! Shared craft of the readers: character sets, registry exports, INI files, JSON with comments, command lines.
 
 use crate::{Entries, Section};
 
-/// Macht aus Bytes Text. Dateien anderer Programme kommen als UTF-8, als UTF-16 (Registry-Export, Xshell) oder in
-/// der Codepage von Windows (alte INI-Dateien); im Zweifel gilt Windows-1252, das jedes Byte abbildet.
+/// Turns bytes into text. Other programs' files come as UTF-8, as UTF-16 (registry export, Xshell) or in
+/// the Windows code page (old INI files); when in doubt Windows-1252 applies, which maps every byte.
 pub fn decode(bytes: &[u8]) -> String {
     if let Some((encoding, _)) = encoding_rs::Encoding::for_bom(bytes) {
         return encoding.decode_with_bom_removal(bytes).0.into_owned();
     }
-    // UTF-16 ohne Kennung: Bei lateinischem Text ist jedes zweite Byte null.
+    // UTF-16 without a BOM: with Latin text every second byte is zero.
     if bytes.len() >= 4 && bytes.len().is_multiple_of(2) && bytes.iter().skip(1).step_by(2).take(64).all(|b| *b == 0) {
         return encoding_rs::UTF_16LE.decode_without_bom_handling(bytes).0.into_owned();
     }
@@ -18,7 +18,7 @@ pub fn decode(bytes: &[u8]) -> String {
     }
 }
 
-/// Löst `%20` und Ähnliches auf; kaputte Folgen bleiben stehen. Die Bytes gelten als UTF-8.
+/// Resolves `%20` and similar; broken sequences stay. The bytes count as UTF-8.
 pub fn percent_decode(text: &str) -> String {
     let raw = text.as_bytes();
     let mut out = Vec::with_capacity(raw.len());
@@ -39,8 +39,8 @@ pub fn percent_decode(text: &str) -> String {
     String::from_utf8(out).unwrap_or_else(|e| encoding_rs::WINDOWS_1252.decode_without_bom_handling(e.as_bytes()).0.into_owned())
 }
 
-/// Die Abschnitte eines Registry-Exports (`.reg`) unterhalb von `key`, jeder mit dem Rest seines Pfads als Namen.
-/// Zahlen (`dword:`) werden zu Dezimaltext; binäre Werte fallen weg.
+/// The sections of a registry export (`.reg`) below `key`, each named by the rest of its path.
+/// Numbers (`dword:`) become decimal text; binary values are dropped.
 pub fn reg_sections(text: &str, key: &str) -> Vec<Section> {
     let mark = format!("{}\\", key.to_ascii_lowercase());
     let mut sections: Vec<Section> = Vec::new();
@@ -58,7 +58,7 @@ pub fn reg_sections(text: &str, key: &str) -> Vec<Section> {
             continue;
         }
         let Some(rest) = line.trim_start().strip_prefix('"') else { continue };
-        // Der Name endet am ersten Anführungszeichen ohne Rückstrich davor.
+        // The name ends at the first quote without a backslash before it.
         let Some(end) = closing_quote(rest) else { continue };
         let name = unescape_reg(&rest[..end]);
         let Some(value) = rest[end + 1..].trim_start().strip_prefix('=') else { continue };
@@ -101,8 +101,8 @@ fn unescape_reg(text: &str) -> String {
     out
 }
 
-/// Die Abschnitte einer INI-Datei. Zeilen vor dem ersten Abschnitt gehören zu einem Abschnitt ohne Namen.
-/// Kommentare gibt es nur am Zeilenanfang (`;`): MobaXterm benutzt `#` und `;` mitten in seinen Werten.
+/// The sections of an INI file. Lines before the first section belong to a section without a name.
+/// Comments only exist at the start of a line (`;`): MobaXterm uses `#` and `;` in the middle of its values.
 pub fn ini_sections(text: &str) -> Vec<Section> {
     let mut sections: Vec<Section> = Vec::new();
     for line in text.trim_start_matches('\u{feff}').lines().map(|l| l.trim_end_matches('\r')) {
@@ -124,7 +124,7 @@ pub fn ini_sections(text: &str) -> Vec<Section> {
     sections
 }
 
-/// Liest JSON, das Kommentare und Kommas vor schließenden Klammern enthalten darf (Windows Terminal, NexusSSH).
+/// Reads JSON that may contain comments and commas before closing brackets (Windows Terminal, NexusSSH).
 pub fn jsonc(text: &str) -> Option<serde_json::Value> {
     let text = text.trim_start_matches('\u{feff}');
     if let Ok(value) = serde_json::from_str(text) {
@@ -167,7 +167,7 @@ pub fn jsonc(text: &str) -> Option<serde_json::Value> {
                 }
             }
             ('}' | ']', _) => {
-                // Ein Komma vor der schließenden Klammer nimmt serde_json nicht hin.
+                // serde_json does not accept a comma before the closing bracket.
                 let kept = clean.trim_end().len();
                 if clean[..kept].ends_with(',') {
                     clean.truncate(kept - 1);
@@ -180,8 +180,8 @@ pub fn jsonc(text: &str) -> Option<serde_json::Value> {
     serde_json::from_str(&clean).ok()
 }
 
-/// Zerlegt eine Zeile in Wörter wie eine Shell: Leerzeichen trennen, Anführungszeichen halten zusammen.
-/// Rückstriche bleiben Zeichen, weil sie unter Windows in jedem Pfad stehen.
+/// Splits a line into words like a shell: spaces separate, quotes keep together.
+/// Backslashes stay characters, because on Windows they are in every path.
 pub fn words(line: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut current = String::new();
@@ -210,7 +210,7 @@ pub fn words(line: &str) -> Vec<String> {
     out
 }
 
-/// Setzt den Benutzerordner für `~` am Anfang eines Pfads ein und richtet die Schrägstriche nach Windows aus.
+/// Fills in the user folder for `~` at the start of a path and turns the slashes the Windows way.
 pub fn expand_home(path: &str, home: &str) -> String {
     let path = path.trim();
     let rest = path.strip_prefix("~/").or_else(|| path.strip_prefix("~\\")).or_else(|| path.strip_prefix("%d/")).or_else(|| path.strip_prefix("%USERPROFILE%\\")).or_else(|| path.strip_prefix("%USERPROFILE%/"));
@@ -220,8 +220,8 @@ pub fn expand_home(path: &str, home: &str) -> String {
     }
 }
 
-/// `[benutzer@]adresse[:port]`, wie es in `ProxyJump`, in Kommandozeilen und in manchen Feldern steht.
-/// IPv6-Adressen stehen dabei in eckigen Klammern, wenn ein Port folgt.
+/// `[user@]address[:port]`, as it appears in `ProxyJump`, in command lines and in some fields.
+/// IPv6 addresses are in square brackets when a port follows.
 pub fn user_host_port(text: &str) -> (Option<String>, String, Option<u16>) {
     let text = text.trim();
     let text = text.strip_prefix("ssh://").unwrap_or(text);
@@ -235,7 +235,7 @@ pub fn user_host_port(text: &str) -> (Option<String>, String, Option<u16>) {
         }
     }
     match rest.rsplit_once(':') {
-        // Mehr als ein Doppelpunkt ohne Klammern ist eine nackte IPv6-Adresse.
+        // More than one colon without brackets is a bare IPv6 address.
         Some((host, port)) if !host.contains(':') && crate::port(port).is_some() => (user, host.to_string(), crate::port(port)),
         _ => (user, rest.to_string(), None),
     }

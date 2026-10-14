@@ -1,7 +1,7 @@
-//! Serielle Leitung: ein Terminal an einem COM-Port, für die Konsole von Routern, Switches und Bastelrechnern.
+//! Serial line: a terminal on a COM port, for the console of routers, switches and hobby boards.
 //!
-//! Eine serielle Leitung kennt keine Verbindung: Der Port wird geöffnet, und was ankommt, wird angezeigt. Wird der
-//! Adapter abgezogen, endet die Sitzung als abgerissen; ob ein Gerät dranhängt und zuhört, weiß niemand.
+//! A serial line has no connection: the port is opened and whatever arrives is shown. If the
+//! adapter is unplugged, the session ends as dropped; nobody knows whether a device is attached and listening.
 
 use std::{
     io::{ErrorKind, Read, Write},
@@ -19,14 +19,14 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::{channels, pump, Wires};
 
-/// So lange wartet ein Lesen oder Schreiben höchstens; danach wird nachgesehen, ob die Sitzung noch gewünscht ist.
-/// Die Frist gehört unter Windows dem Port und gilt deshalb für beide Richtungen zugleich.
+/// A read or write waits at most this long; after that it checks whether the session is still wanted.
+/// On Windows the timeout belongs to the port and therefore applies to both directions at once.
 const POLL: Duration = Duration::from_millis(100);
-/// So lange darf das Schreiben stocken (etwa weil das Gerät mit Flusskontrolle bremst), bevor der Rest verworfen wird.
+/// Writing may stall this long (e.g. because the device slows down with flow control) before the rest is discarded.
 const WRITE_PATIENCE: Duration = Duration::from_secs(3);
 
-/// So viele Bytes gehen auf einmal an den Port: was die Leitung in der halben Frist schafft. Ein größeres Stück
-/// liefe bei langsamer Leitung in die Frist, obwohl nichts stockt (300 Baud sind 30 Zeichen in der Sekunde).
+/// This many bytes go to the port at once: what the line manages in half the timeout. A larger piece
+/// would run into the timeout on a slow line although nothing stalls (300 baud is 30 characters per second).
 fn chunk_size(baud: u32) -> usize {
     usize::try_from(baud / 200).unwrap_or(usize::MAX).clamp(1, 4096)
 }
@@ -47,14 +47,14 @@ pub enum Flow {
     Hardware,
 }
 
-/// Einstellungen der Leitung. Beide Seiten müssen dieselben haben, sonst kommt Zeichensalat an.
+/// Settings of the line. Both sides must have the same ones, otherwise garbage arrives.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Line {
     pub baud: u32,
-    /// 5 bis 8.
+    /// 5 to 8.
     pub data_bits: u8,
     pub parity: Parity,
-    /// 1 oder 2.
+    /// 1 or 2.
     pub stop_bits: u8,
     pub flow: Flow,
 }
@@ -65,23 +65,23 @@ impl Default for Line {
     }
 }
 
-/// Ein serieller Port dieses Rechners.
+/// A serial port on this machine.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Port {
     /// `COM3`, `/dev/ttyUSB0`
     pub name: String,
-    /// Was daran hängt, soweit das System es nennt: „USB-SERIAL CH340“. Sonst leer.
+    /// What is attached, as far as the system names it: “USB-SERIAL CH340”. Otherwise empty.
     pub label: String,
 }
 
-/// Sortiert `COM10` hinter `COM9`: nach dem Namen ohne Ziffern, dann nach der Zahl am Ende.
+/// Sorts `COM10` after `COM9`: by the name without digits, then by the number at the end.
 fn natural(name: &str) -> (String, u64) {
     let digits = name.chars().rev().take_while(char::is_ascii_digit).count();
     let (stem, number) = name.split_at(name.len() - digits);
     (stem.to_lowercase(), number.parse().unwrap_or(0))
 }
 
-/// Die Ports, die es gerade gibt. Ein USB-Adapter erscheint erst, wenn er steckt.
+/// The ports that exist right now. A USB adapter only appears once it is plugged in.
 pub fn ports() -> Vec<Port> {
     let mut found: Vec<Port> = serialport::available_ports()
         .unwrap_or_default()
@@ -92,7 +92,7 @@ pub fn ports() -> Vec<Port> {
                 SerialPortType::BluetoothPort => "Bluetooth".into(),
                 SerialPortType::PciPort | SerialPortType::Unknown => String::new(),
             };
-            // Windows hängt den Namen des Ports in Klammern an die Bezeichnung; er steht schon davor.
+            // Windows appends the port name in brackets to the description; it is already in front.
             let label = label.strip_suffix(&format!("({})", info.port_name)).map_or(label.as_str(), str::trim_end).trim().to_string();
             Port { name: info.port_name, label }
         })
@@ -102,12 +102,12 @@ pub fn ports() -> Vec<Port> {
     found
 }
 
-/// Öffnet einen Port als Sitzung. Muss in einem tokio-Runtime aufgerufen werden.
+/// Opens a port as a session. Must be called inside a tokio runtime.
 pub fn open(port: String, line: Line) -> Session {
     let (session, events, mut commands) = channels();
     tokio::spawn(async move {
         let _ = events.send(Event::Phase(Phase::Connecting)).await;
-        // Das Öffnen eines Ports kann dauern (Bluetooth); nicht auf einem Thread des Runtimes.
+        // Opening a port can take a while (Bluetooth); not on a runtime thread.
         let end = match tokio::task::spawn_blocking(move || start(&port, line)).await.unwrap_or_else(|e| Err(e.to_string())) {
             Ok(wires) => {
                 let _ = events.send(Event::Phase(Phase::Connected)).await;
@@ -144,8 +144,8 @@ fn start(name: &str, line: Line) -> Result<Wires, String> {
         Flow::Hardware => FlowControl::Hardware,
     };
     let mut port = serialport::new(name, line.baud).data_bits(data_bits).stop_bits(stop_bits).parity(parity).flow_control(flow).timeout(POLL).open().map_err(|e| e.to_string())?;
-    // Wie andere Terminal-Programme: Die Leitungen „bereit“ sind gesetzt, sonst antworten manche Geräte nicht.
-    // RTS gehört bei Hardware-Flusskontrolle dem Treiber.
+    // Like other terminal programs: the “ready” lines are set, otherwise some devices do not answer.
+    // With hardware flow control RTS belongs to the driver.
     let _ = port.write_data_terminal_ready(true);
     if line.flow != Flow::Hardware {
         let _ = port.write_request_to_send(true);
@@ -163,7 +163,7 @@ fn start(name: &str, line: Line) -> Result<Wires, String> {
                 break End::User;
             }
             match port.read(&mut buffer) {
-                // Nichts gekommen: Das ist bei einer seriellen Leitung der Normalfall.
+                // Nothing arrived: on a serial line that is the normal case.
                 Ok(0) => {}
                 Ok(n) => {
                     if data_tx.blocking_send(buffer[..n].to_vec()).is_err() {
@@ -171,11 +171,11 @@ fn start(name: &str, line: Line) -> Result<Wires, String> {
                     }
                 }
                 Err(e) if matches!(e.kind(), ErrorKind::TimedOut | ErrorKind::WouldBlock | ErrorKind::Interrupted) => {}
-                // Der Port ist weg: Adapter abgezogen, Gerät vom System entfernt.
+                // The port is gone: adapter unplugged, device removed from the system.
                 Err(e) => break End::ConnectionLost(e.to_string()),
             }
         };
-        // Erst der Grund, dann schließt sich mit `data_tx` der Kanal der Daten.
+        // First the reason, then the data channel closes with `data_tx`.
         let _ = end_tx.send(end);
     });
 
@@ -192,10 +192,10 @@ fn start(name: &str, line: Line) -> Result<Wires, String> {
                         rest = &rest[sent..];
                         stalled = Instant::now();
                     }
-                    // Das Gerät nimmt gerade nichts an. Dauert das zu lange, verfällt der Rest; die Sitzung bleibt.
+                    // The device accepts nothing right now. If that takes too long, the rest is dropped; the session stays.
                     Ok(_) => {}
                     Err(e) if matches!(e.kind(), ErrorKind::TimedOut | ErrorKind::WouldBlock | ErrorKind::Interrupted) => {}
-                    // Ist der Port weg, merkt es auch das Lesen und meldet das Ende.
+                    // If the port is gone, reading notices too and reports the end.
                     Err(_) => break 'input,
                 }
                 if stalled.elapsed() > WRITE_PATIENCE {
@@ -209,7 +209,7 @@ fn start(name: &str, line: Line) -> Result<Wires, String> {
         data,
         end,
         write: Box::new(move |bytes| drop(input_tx.send(bytes))),
-        // Eine serielle Leitung kennt keine Fenstergröße.
+        // A serial line has no window size.
         resize: Box::new(|_, _| {}),
         close: Box::new(move || stop.store(true, Ordering::Relaxed)),
     })
@@ -221,7 +221,7 @@ mod tests {
 
     #[test]
     fn slow_lines_get_small_pieces() {
-        // Ein Stück braucht höchstens die halbe Frist: bei 10 Bit je Zeichen sind das Baud / 200 Bytes.
+        // A piece needs at most half the timeout: at 10 bits per character that is baud / 200 bytes.
         assert_eq!((chunk_size(300), chunk_size(9600), chunk_size(115_200), chunk_size(4_000_000)), (1, 48, 576, 4096));
         assert_eq!(chunk_size(50), 1, "nie weniger als ein Byte");
     }

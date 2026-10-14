@@ -1,11 +1,11 @@
-//! Telnet: ein Terminal über eine unverschlüsselte TCP-Verbindung, für Geräte, die kein SSH können.
+//! Telnet: a terminal over an unencrypted TCP connection, for devices that cannot do SSH.
 //!
-//! Das Protokoll (RFC 854 und folgende) mischt Steuerbefehle in den Datenstrom: Ein Byte 255 (`IAC`) leitet
-//! einen Befehl ein. Beide Seiten handeln damit Optionen aus. [`Codec`] kennt die, die ein Terminal braucht:
-//! Echo durch den Server, Zeichen statt Zeilen, Terminal-Typ, Fenstergröße, Benutzername, 8 Bit.
+//! The protocol (RFC 854 and following) mixes control commands into the data stream: a byte 255 (`IAC`) starts
+//! a command. Both sides negotiate options with them. [`Codec`] knows those a terminal needs:
+//! echo by the server, characters instead of lines, terminal type, window size, user name, 8 bit.
 //!
-//! Meldet der Server kein eigenes Echo an (ein einfacher Dienst hinter einem Port, kein Telnet-Server), gilt die
-//! klassische Betriebsart: Die Zeile entsteht hier, wird hier angezeigt und geht mit der Eingabetaste ab.
+//! If the server does not announce its own echo (a simple service behind a port, not a Telnet server), the
+//! classic mode applies: the line is composed here, shown here and sent with Enter.
 
 use std::time::Duration;
 
@@ -27,7 +27,7 @@ const WONT: u8 = 252;
 const WILL: u8 = 251;
 const SB: u8 = 250;
 const SE: u8 = 240;
-/// „Interrupt Process“: was Strg+C bedeutet, solange die Zeile hier entsteht.
+/// “Interrupt Process”: what Ctrl+C means while the line is composed here.
 const IP: u8 = 244;
 
 const BINARY: u8 = 0;
@@ -37,21 +37,21 @@ const TERMINAL_TYPE: u8 = 24;
 const WINDOW_SIZE: u8 = 31;
 const NEW_ENVIRON: u8 = 39;
 
-/// In einer Unterverhandlung: „IS“ leitet die Antwort ein, „SEND“ die Frage.
+/// In a subnegotiation: “IS” starts the answer, “SEND” the question.
 const IS: u8 = 0;
 const SEND: u8 = 1;
-/// In NEW-ENVIRON: Name einer Variablen und ihr Wert.
+/// In NEW-ENVIRON: name of a variable and its value.
 const VAR: u8 = 0;
 const VALUE: u8 = 1;
 
-/// Mehr sammelt eine Unterverhandlung nicht; was ein Server darüber hinaus schickt, wird verworfen.
+/// A subnegotiation collects no more than this; whatever a server sends beyond it is discarded.
 const MAX_SUBNEGOTIATION: usize = 512;
-/// Längste Zeile, die im Zeilenbetrieb hier entsteht.
+/// Longest line composed here in line mode.
 const MAX_LINE: usize = 4096;
 
 pub const DEFAULT_PORT: u16 = 23;
 
-/// Stand einer Option auf einer Seite. `Asked`: von hier vorgeschlagen, die Antwort steht aus.
+/// State of an option on one side. `Asked`: proposed from here, the answer is pending.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Opt {
     Off,
@@ -62,37 +62,37 @@ enum Opt {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum State {
     Data,
-    /// Nach einem CR: Ein NUL dahinter gehört zum Protokoll und nicht zum Text.
+    /// After a CR: a NUL after it belongs to the protocol and not to the text.
     AfterCr,
     Iac,
-    /// Nach WILL, WONT, DO oder DONT: Es folgt die Option.
+    /// After WILL, WONT, DO or DONT: the option follows.
     Verb(u8),
     Sub,
     SubIac,
 }
 
-/// Was aus einer Eingabe des Nutzers wird.
+/// What becomes of the user's input.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Typed {
-    /// Geht an den Server.
+    /// Goes to the server.
     pub wire: Vec<u8>,
-    /// Erscheint sofort im Terminal, weil der Server kein Echo liefert.
+    /// Appears in the terminal at once, because the server provides no echo.
     pub echo: Vec<u8>,
 }
 
-/// Übersetzt zwischen dem Datenstrom der Leitung und dem, was das Terminal sieht und der Nutzer tippt.
-/// Kennt keine Verbindung und lässt sich deshalb für sich prüfen.
+/// Translates between the line's data stream and what the terminal sees and the user types.
+/// Knows no connection and can therefore be tested on its own.
 pub struct Codec {
     state: State,
     sub: Vec<u8>,
-    /// Optionen, die diese Seite betreibt (WILL), nach Nummer.
+    /// Options this side operates (WILL), by number.
     ours: [Opt; 256],
-    /// Optionen, die der Server betreibt (DO von hier).
+    /// Options the server operates (DO from here).
     theirs: [Opt; 256],
     term: String,
     user: Option<String>,
     size: (u16, u16),
-    /// Die Zeile, die im Zeilenbetrieb gerade entsteht.
+    /// The line currently being composed in line mode.
     line: Vec<u8>,
 }
 
@@ -102,7 +102,7 @@ fn fit(n: u32) -> u16 {
 
 impl Codec {
     pub fn new(term: &str, user: Option<&str>, (columns, rows): (u32, u32)) -> Self {
-        // Nur was sich gefahrlos in eine Unterverhandlung schreiben lässt.
+        // Only what can safely be written into a subnegotiation.
         let clean = |text: &str| text.bytes().filter(|b| b.is_ascii_graphic()).take(64).map(char::from).collect::<String>();
         Self {
             state: State::Data,
@@ -116,23 +116,23 @@ impl Codec {
         }
     }
 
-    /// Optionen, die diese Seite auf Wunsch des Servers betreibt.
+    /// Options this side operates at the server's request.
     fn offers(&self, option: u8) -> bool {
         matches!(option, BINARY | SUPPRESS_GO_AHEAD | TERMINAL_TYPE | WINDOW_SIZE) || (option == NEW_ENVIRON && self.user.is_some())
     }
 
-    /// Optionen, die der Server betreiben darf.
+    /// Options the server may operate.
     fn accepts(option: u8) -> bool {
         matches!(option, BINARY | ECHO | SUPPRESS_GO_AHEAD)
     }
 
-    /// Der Server liefert das Echo: Zeichen gehen einzeln ab, angezeigt wird, was zurückkommt.
+    /// The server provides the echo: characters go out one by one, what comes back is shown.
     pub fn remote_echo(&self) -> bool {
         self.theirs[usize::from(ECHO)] == Opt::On
     }
 
-    /// Was diese Seite von sich aus vorschlägt. Nur für den Telnet-Port gedacht: Ein anderer Dienst (SMTP, HTTP)
-    /// hielte die Bytes für Eingabe.
+    /// What this side proposes on its own. Only meant for the Telnet port: another service (SMTP, HTTP)
+    /// would take the bytes for input.
     pub fn greeting(&mut self) -> Vec<u8> {
         let mut out = Vec::new();
         for option in [WINDOW_SIZE, TERMINAL_TYPE, NEW_ENVIRON, SUPPRESS_GO_AHEAD] {
@@ -151,14 +151,14 @@ impl Codec {
     fn window(&self) -> Vec<u8> {
         let mut out = vec![IAC, SB, WINDOW_SIZE];
         for byte in [self.size.0.to_be_bytes(), self.size.1.to_be_bytes()].concat() {
-            // Auch in einer Unterverhandlung steht 255 doppelt.
+            // In a subnegotiation, too, 255 is doubled.
             out.extend(std::iter::repeat_n(byte, if byte == IAC { 2 } else { 1 }));
         }
         out.extend([IAC, SE]);
         out
     }
 
-    /// Neue Größe des Terminals; leer, solange die Fenstergröße nicht ausgehandelt ist.
+    /// New size of the terminal; empty as long as the window size is not negotiated.
     pub fn resize(&mut self, columns: u32, rows: u32) -> Vec<u8> {
         self.size = (fit(columns), fit(rows));
         if self.ours[usize::from(WINDOW_SIZE)] == Opt::On { self.window() } else { Vec::new() }
@@ -167,7 +167,7 @@ impl Codec {
     fn negotiate(&mut self, verb: u8, option: u8, reply: &mut Vec<u8>) {
         let index = usize::from(option);
         match verb {
-            // Der Server bittet diese Seite, eine Option zu betreiben.
+            // The server asks this side to operate an option.
             DO => match self.ours[index] {
                 Opt::On => {}
                 state if self.offers(option) => {
@@ -187,7 +187,7 @@ impl Codec {
                     reply.extend([IAC, WONT, option]);
                 }
             }
-            // Der Server kündigt an, eine Option zu betreiben.
+            // The server announces that it operates an option.
             WILL => match self.theirs[index] {
                 Opt::On => {}
                 state if Self::accepts(option) => {
@@ -195,7 +195,7 @@ impl Codec {
                     if state == Opt::Off {
                         reply.extend([IAC, DO, option]);
                     }
-                    // Ab jetzt liefert der Server das Echo: Was hier schon getippt wurde, geht sofort ab.
+                    // From now on the server provides the echo: whatever was already typed here goes out at once.
                     if option == ECHO && !self.line.is_empty() {
                         reply.extend(Self::escaped(&std::mem::take(&mut self.line)));
                     }
@@ -233,7 +233,7 @@ impl Codec {
         }
     }
 
-    /// Verarbeitet Bytes vom Server: `out` bekommt den Text für das Terminal, `reply` die Antworten des Protokolls.
+    /// Processes bytes from the server: `out` gets the text for the terminal, `reply` the protocol's answers.
     pub fn receive(&mut self, bytes: &[u8], out: &mut Vec<u8>, reply: &mut Vec<u8>) {
         let binary = self.theirs[usize::from(BINARY)] == Opt::On;
         for &byte in bytes {
@@ -253,7 +253,7 @@ impl Codec {
                     self.sub.clear();
                     State::Sub
                 }
-                // NOP, „Go Ahead“, „Are You There“ und die übrigen Befehle ohne Angabe: nichts zu tun.
+                // NOP, “Go Ahead”, “Are You There” and the other commands without arguments: nothing to do.
                 (State::Iac, _) => State::Data,
                 (State::Verb(verb), option) => {
                     self.negotiate(verb, option, reply);
@@ -277,13 +277,13 @@ impl Codec {
                     self.sub.clear();
                     State::Data
                 }
-                // Ein anderer Befehl mitten in der Unterverhandlung: Sie gilt als abgebrochen.
+                // Another command in the middle of a subnegotiation: it counts as aborted.
                 (State::SubIac, _) => State::Data,
             };
         }
     }
 
-    /// Text für die Leitung: 255 steht doppelt.
+    /// Text for the line: 255 is doubled.
     fn escaped(bytes: &[u8]) -> Vec<u8> {
         let mut out = Vec::with_capacity(bytes.len());
         for &byte in bytes {
@@ -292,11 +292,11 @@ impl Codec {
         out
     }
 
-    /// Verarbeitet, was der Nutzer tippt.
+    /// Processes what the user types.
     ///
-    /// Liefert der Server das Echo, geht jedes Zeichen sofort ab; die Eingabetaste wird zum Zeilenende des
-    /// Protokolls (CR LF). Sonst entsteht die Zeile hier: Zeichen erscheinen im Terminal, die Rücktaste löscht,
-    /// Strg+U verwirft, und erst die Eingabetaste schickt die Zeile ab.
+    /// If the server provides the echo, every character goes out at once; Enter becomes the protocol's
+    /// line ending (CR LF). Otherwise the line is composed here: characters appear in the terminal, Backspace deletes,
+    /// Ctrl+U discards, and only Enter sends the line.
     pub fn typed(&mut self, bytes: &[u8]) -> Typed {
         let mut typed = Typed::default();
         let raw = self.ours[usize::from(BINARY)] == Opt::On;
@@ -319,33 +319,33 @@ impl Codec {
                     typed.wire.extend(b"\r\n");
                     typed.echo.extend(b"\r\n");
                 }
-                // Rücktaste: ein ganzes Zeichen weg, auch wenn es in UTF-8 aus mehreren Bytes besteht.
+                // Backspace: a whole character goes, even if it consists of several bytes in UTF-8.
                 0x7f | 0x08 => {
                     if !self.line.is_empty() {
                         while self.line.pop().is_some_and(|b| b & 0xC0 == 0x80) {}
                         typed.echo.extend(b"\x08 \x08");
                     }
                 }
-                // Strg+U verwirft die Zeile.
+                // Ctrl+U discards the line.
                 0x15 => {
                     let shown = String::from_utf8_lossy(&self.line).chars().count();
                     self.line.clear();
                     typed.echo.extend(b"\x08 \x08".repeat(shown));
                 }
-                // Strg+C: Die Zeile ist hinfällig, der Server erfährt vom Abbruch.
+                // Ctrl+C: the line is void, the server learns about the interruption.
                 0x03 => {
                     self.line.clear();
                     typed.wire.extend([IAC, IP]);
                     typed.echo.extend(b"^C\r\n");
                 }
-                // Pfeiltasten und andere Tastenfolgen bearbeiten hier nichts; sie gehen samt der Zeile davor ab.
+                // Arrow keys and other key sequences edit nothing here; they go out together with the line before them.
                 0x1b => {
                     typed.wire.extend(Self::escaped(&std::mem::take(&mut self.line)));
                     typed.wire.push(byte);
                     typed.wire.extend(Self::escaped(rest));
                     break;
                 }
-                // Andere Steuerzeichen (Tab, Strg+D) gehen sofort ab, mit dem, was schon getippt ist.
+                // Other control characters (Tab, Ctrl+D) go out at once, together with what is already typed.
                 0..0x20 => {
                     typed.wire.extend(Self::escaped(&std::mem::take(&mut self.line)));
                     typed.wire.push(byte);
@@ -365,13 +365,13 @@ impl Codec {
 pub struct Telnet {
     pub host: String,
     pub port: u16,
-    /// Wird dem Server genannt, wenn er danach fragt. Viele melden damit ohne Nachfrage nach dem Namen an.
+    /// Given to the server when it asks. Many use it to sign in without asking for the name.
     pub user: Option<String>,
-    /// Terminal-Typ, den der Server als `TERM` sieht.
+    /// Terminal type the server sees as `TERM`.
     pub term: String,
-    /// Wie lange auf das Zustandekommen der Verbindung gewartet wird.
+    /// How long to wait for the connection to be established.
     pub timeout: Duration,
-    /// Spalten und Zeilen des Terminals beim Verbinden.
+    /// Columns and rows of the terminal when connecting.
     pub size: (u32, u32),
 }
 
@@ -381,7 +381,7 @@ impl Default for Telnet {
     }
 }
 
-/// Öffnet eine Telnet-Sitzung. Muss in einem tokio-Runtime aufgerufen werden.
+/// Opens a Telnet session. Must be called inside a tokio runtime.
 pub fn open(telnet: Telnet) -> Session {
     let (session, events, mut commands) = channels();
     tokio::spawn(async move {
@@ -402,7 +402,7 @@ fn lost(error: std::io::Error) -> End {
 async fn run(telnet: Telnet, events: &mpsc::Sender<Event>, commands: &mut mpsc::UnboundedReceiver<Command>) -> Result<End, End> {
     emit(events, Event::Phase(Phase::Connecting)).await?;
     let mut size = telnet.size;
-    // Bis die Verbindung steht, zählt von den Befehlen nur „Schließen“; die letzte gemeldete Größe wird gemerkt.
+    // Until the connection is up, only “close” counts among the commands; the last reported size is remembered.
     let connecting = timeout(telnet.timeout, TcpStream::connect((telnet.host.as_str(), telnet.port)));
     tokio::pin!(connecting);
     let stream = loop {
@@ -418,7 +418,7 @@ async fn run(telnet: Telnet, events: &mpsc::Sender<Event>, commands: &mut mpsc::
         }
     };
     let _ = stream.set_nodelay(true);
-    // Telnet kennt kein Lebenszeichen. Das des Betriebssystems bemerkt eine tote Leitung, ohne dem Gerät etwas zu schicken.
+    // Telnet has no keepalive. The operating system's notices a dead line without sending the device anything.
     let _ = SockRef::from(&stream).set_tcp_keepalive(&TcpKeepalive::new().with_time(Duration::from_secs(60)).with_interval(Duration::from_secs(15)));
     let (mut reader, mut writer) = stream.into_split();
 
@@ -486,16 +486,16 @@ mod tests {
     #[test]
     fn options_are_negotiated_once_and_refused_when_unknown() {
         let mut codec = Codec::new("xterm-256color", Some("admin"), (120, 40));
-        // Der Server will Echo und Zeichenbetrieb liefern und fragt nach Terminal-Typ und Fenstergröße.
+        // The server wants to provide echo and character mode and asks for terminal type and window size.
         let (out, reply) = receive(&mut codec, &[IAC, WILL, ECHO, IAC, WILL, SUPPRESS_GO_AHEAD, IAC, DO, TERMINAL_TYPE, IAC, DO, WINDOW_SIZE]);
         assert!(out.is_empty());
         assert_eq!(reply, [&[IAC, DO, ECHO, IAC, DO, SUPPRESS_GO_AHEAD, IAC, WILL, TERMINAL_TYPE, IAC, WILL, WINDOW_SIZE][..], &[IAC, SB, WINDOW_SIZE, 0, 120, 0, 40, IAC, SE]].concat());
         assert!(codec.remote_echo());
-        // Dieselbe Ankündigung noch einmal: keine Antwort, sonst entstünde eine Schleife.
+        // The same announcement again: no answer, otherwise a loop would result.
         assert!(receive(&mut codec, &[IAC, WILL, ECHO, IAC, DO, TERMINAL_TYPE]).1.is_empty());
-        // Was diese Seite nicht kennt, lehnt sie ab: 32 ist die Geschwindigkeit des Terminals, 34 der Zeilenbetrieb des Protokolls.
+        // What this side does not know it refuses: 32 is the terminal speed, 34 the protocol's line mode.
         assert_eq!(receive(&mut codec, &[IAC, DO, 32, IAC, WILL, 34]).1, [IAC, WONT, 32, IAC, DONT, 34]);
-        // Nimmt der Server sein Echo zurück, wird das bestätigt.
+        // If the server withdraws its echo, that is confirmed.
         assert_eq!(receive(&mut codec, &[IAC, WONT, ECHO]).1, [IAC, DONT, ECHO]);
         assert!(!codec.remote_echo());
         assert!(receive(&mut codec, &[IAC, WONT, ECHO, IAC, DONT, 99]).1.is_empty(), "was schon aus ist, braucht keine Antwort");
@@ -507,14 +507,14 @@ mod tests {
         receive(&mut codec, &[IAC, DO, TERMINAL_TYPE, IAC, DO, NEW_ENVIRON, IAC, DO, WINDOW_SIZE]);
         assert_eq!(receive(&mut codec, &[IAC, SB, TERMINAL_TYPE, SEND, IAC, SE]).1, [&[IAC, SB, TERMINAL_TYPE, IS][..], b"vt100", &[IAC, SE]].concat());
         assert_eq!(receive(&mut codec, &[IAC, SB, NEW_ENVIRON, SEND, VAR, b'U', b'S', b'E', b'R', IAC, SE]).1, [&[IAC, SB, NEW_ENVIRON, IS, VAR][..], b"USER", &[VALUE], b"admin", &[IAC, SE]].concat());
-        // 255 Spalten: Das Byte steht in der Unterverhandlung doppelt.
+        // 255 columns: the byte is doubled in the subnegotiation.
         assert_eq!(codec.resize(255, 50), [IAC, SB, WINDOW_SIZE, 0, IAC, IAC, 0, 50, IAC, SE]);
 
-        // Ohne Benutzer bietet diese Seite die Umgebung gar nicht erst an.
+        // Without a user this side does not even offer the environment.
         let mut nameless = Codec::new("vt100", None, (80, 24));
         assert_eq!(receive(&mut nameless, &[IAC, DO, NEW_ENVIRON]).1, [IAC, WONT, NEW_ENVIRON]);
         assert!(nameless.resize(100, 30).is_empty(), "die Fenstergröße ist nicht ausgehandelt");
-        // Eine Frage nach etwas, das nicht ausgehandelt ist, bleibt ohne Antwort.
+        // A question about something not negotiated stays unanswered.
         assert!(receive(&mut nameless, &[IAC, SB, TERMINAL_TYPE, SEND, IAC, SE]).1.is_empty());
     }
 
@@ -525,11 +525,11 @@ mod tests {
             codec.greeting(),
             [IAC, WILL, WINDOW_SIZE, IAC, WILL, TERMINAL_TYPE, IAC, WILL, NEW_ENVIRON, IAC, WILL, SUPPRESS_GO_AHEAD, IAC, DO, ECHO, IAC, DO, SUPPRESS_GO_AHEAD]
         );
-        // Der Server stimmt zu: Nur die Fenstergröße folgt, keine zweite Zusage.
+        // The server agrees: only the window size follows, no second promise.
         let (_, reply) = receive(&mut codec, &[IAC, DO, WINDOW_SIZE, IAC, DO, TERMINAL_TYPE, IAC, WILL, ECHO, IAC, WILL, SUPPRESS_GO_AHEAD]);
         assert_eq!(reply, [IAC, SB, WINDOW_SIZE, 0, 80, 0, 24, IAC, SE]);
         assert!(codec.remote_echo());
-        // Der Server lehnt etwas Vorgeschlagenes ab: hingenommen, ohne Antwort.
+        // The server refuses something proposed: accepted without an answer.
         assert!(receive(&mut codec, &[IAC, DONT, NEW_ENVIRON]).1.is_empty());
         assert!(receive(&mut codec, &[IAC, SB, NEW_ENVIRON, SEND, IAC, SE]).1.is_empty());
     }
@@ -537,22 +537,22 @@ mod tests {
     #[test]
     fn data_is_separated_from_commands_even_across_packets() {
         let mut codec = Codec::new("xterm", None, (80, 24));
-        // Doppeltes 255 ist ein Datenbyte; CR NUL ist ein CR; CR LF bleibt.
+        // Double 255 is a data byte; CR NUL is a CR; CR LF stays.
         assert_eq!(receive(&mut codec, &[b'a', IAC, IAC, b'b', b'\r', 0, b'c', b'\r', b'\n']).0, [b'a', IAC, b'b', b'\r', b'c', b'\r', b'\n']);
-        // Ein Befehl, auf drei Pakete verteilt.
+        // A command spread over three packets.
         assert!(receive(&mut codec, &[b'x', IAC]).1.is_empty());
         assert!(receive(&mut codec, &[WILL]).1.is_empty());
         assert_eq!(receive(&mut codec, &[ECHO, b'y']), (vec![b'y'], vec![IAC, DO, ECHO]));
-        // CR am Ende eines Pakets, NUL am Anfang des nächsten.
+        // CR at the end of one packet, NUL at the start of the next.
         assert_eq!(receive(&mut codec, b"zeile\r").0, b"zeile\r");
         assert_eq!(receive(&mut codec, &[0, b'!']).0, b"!");
-        // NOP und „Go Ahead“ verschwinden; eine überlange Unterverhandlung sprengt nichts.
+        // NOP and “Go Ahead” disappear; an overlong subnegotiation breaks nothing.
         assert_eq!(receive(&mut codec, &[b'1', IAC, 241, b'2', IAC, 249, b'3']).0, b"123");
         let mut long = vec![IAC, SB, 200];
         long.extend(std::iter::repeat_n(b'x', 5000));
         long.extend([IAC, SE, b'!']);
         assert_eq!(receive(&mut codec, &long).0, b"!");
-        // Im 8-Bit-Betrieb gehört ein NUL nach CR zum Text.
+        // In 8-bit mode a NUL after CR belongs to the text.
         receive(&mut codec, &[IAC, WILL, BINARY]);
         assert_eq!(receive(&mut codec, &[b'\r', 0]).0, [b'\r', 0]);
     }
@@ -563,7 +563,7 @@ mod tests {
         receive(&mut codec, &[IAC, WILL, ECHO]);
         assert_eq!(codec.typed(b"ls\r"), Typed { wire: b"ls\r\n".to_vec(), echo: Vec::new() });
         assert_eq!(codec.typed(&[0x03, 0x7f, 0x1b, b'[', b'A', IAC]).wire, [0x03, 0x7f, 0x1b, b'[', b'A', IAC, IAC]);
-        // Im 8-Bit-Betrieb bleibt die Eingabetaste, wie sie ist.
+        // In 8-bit mode Enter stays as it is.
         receive(&mut codec, &[IAC, DO, BINARY]);
         assert_eq!(codec.typed(b"\r").wire, b"\r");
     }
@@ -571,26 +571,26 @@ mod tests {
     #[test]
     fn without_remote_echo_the_line_is_built_here() {
         let mut codec = Codec::new("xterm", None, (80, 24));
-        // Zeichen erscheinen sofort, gehen aber erst mit der Eingabetaste ab.
+        // Characters appear at once but only go out with Enter.
         assert_eq!(codec.typed(b"HELO x"), Typed { wire: Vec::new(), echo: b"HELO x".to_vec() });
         assert_eq!(codec.typed(&[0x7f]), Typed { wire: Vec::new(), echo: b"\x08 \x08".to_vec() });
         assert_eq!(codec.typed("ä\r".as_bytes()), Typed { wire: "HELO ä\r\n".as_bytes().to_vec(), echo: "ä\r\n".as_bytes().to_vec() });
-        // Die Rücktaste nimmt ein ganzes Zeichen, auch eines aus zwei Bytes; auf leerer Zeile tut sie nichts.
+        // Backspace takes a whole character, even one of two bytes; on an empty line it does nothing.
         codec.typed("aö".as_bytes());
         assert_eq!(codec.typed(&[0x7f, 0x7f, 0x7f]).echo, b"\x08 \x08\x08 \x08");
         assert_eq!(codec.typed(b"\r").wire, b"\r\n");
-        // Strg+U verwirft, Strg+C meldet dem Server den Abbruch.
+        // Ctrl+U discards, Ctrl+C reports the interruption to the server.
         codec.typed(b"weg");
         assert_eq!(codec.typed(&[0x15]).echo, b"\x08 \x08\x08 \x08\x08 \x08");
         codec.typed(b"auch weg");
         assert_eq!(codec.typed(&[0x03]), Typed { wire: vec![IAC, IP], echo: b"^C\r\n".to_vec() });
         assert_eq!(codec.typed(b"\r").wire, b"\r\n", "die verworfene Zeile geht nicht mit ab");
-        // Ein Tab und eine Pfeiltaste nehmen mit, was schon dasteht.
+        // A Tab and an arrow key take along what is already there.
         codec.typed(b"sh");
         assert_eq!(codec.typed(b"\t").wire, b"sh\t");
         codec.typed(b"x");
         assert_eq!(codec.typed(b"\x1b[A").wire, b"x\x1b[A");
-        // Kündigt der Server mitten in der Zeile sein Echo an, geht das Getippte sofort ab.
+        // If the server announces its echo in the middle of a line, what was typed goes out at once.
         codec.typed(b"admin");
         assert_eq!(receive(&mut codec, &[IAC, WILL, ECHO]).1, [&[IAC, DO, ECHO][..], b"admin"].concat());
         assert_eq!(codec.typed(b"\r").wire, b"\r\n");

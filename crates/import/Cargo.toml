@@ -9,10 +9,10 @@ license.workspace = true
 glowport-core = { path = "../core" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-# Dateien anderer Programme sind selten UTF-8: UTF-16 aus der Registry, Windows-1252 aus alten INI-Dateien.
+# Other programs' files are rarely UTF-8: UTF-16 from the registry, Windows-1252 from old INI files.
 encoding_rs = "0.8"
-# Nur lesend und ohne weitere Abhängigkeiten; für mRemoteNG, FileZilla und SecureCRT.
+# Read-only and without further dependencies; for mRemoteNG, FileZilla and SecureCRT.
 roxmltree = "0.21"
-# Fingerabdrücke der Server-Schlüssel aus known_hosts, in derselben Form wie OpenSSH.
+# Fingerprints of the server keys from known_hosts, in the same form as OpenSSH.
 sha2 = "0.10"
 base64 = "0.22"

@@ -1,8 +1,8 @@
-//! SSH-Agenten auf diesem Rechner.
+//! SSH agents on this machine.
 //!
-//! Unter Windows gibt es zwei Stellen: die Pipe des OpenSSH-Agenten (dort stellen auch 1Password und Bitwarden
-//! ihren Agenten bereit) und Pageant von PuTTY. Schlüssel aus einem Agenten bleiben dort; Glowport lässt ihn nur
-//! unterschreiben.
+//! On Windows there are two places: the OpenSSH agent's pipe (1Password and Bitwarden also provide
+//! their agent there) and PuTTY's Pageant. Keys from an agent stay there; Glowport only lets it
+//! sign.
 
 use std::time::Duration;
 
@@ -15,9 +15,9 @@ use russh::keys::{
 };
 use tokio::time::timeout;
 
-/// Pipe des OpenSSH-Agenten unter Windows.
+/// Pipe of the OpenSSH agent on Windows.
 pub const OPENSSH_PIPE: &str = r"\\.\pipe\openssh-ssh-agent";
-/// Ein Agent, der nicht binnen dieser Zeit antwortet, gilt als nicht vorhanden.
+/// An agent that does not answer within this time counts as absent.
 const AGENT_TIMEOUT: Duration = Duration::from_secs(3);
 
 pub(crate) type Stream = Box<dyn AgentStream + Send + Unpin>;
@@ -29,16 +29,16 @@ pub enum Kind {
     Pageant,
 }
 
-/// Welche Agenten eine Verbindung benutzen darf.
+/// Which agents a connection may use.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Agents {
-    /// Pipe (Windows) oder Socket (sonst) des OpenSSH-Agenten. Tests setzen hier ihren eigenen.
+    /// Pipe (Windows) or socket (elsewhere) of the OpenSSH agent. Tests set their own here.
     pub openssh: Option<String>,
     pub pageant: bool,
 }
 
 impl Agents {
-    /// Die Stellen, an denen auf diesem Rechner üblicherweise ein Agent zu finden ist.
+    /// The places where an agent is usually found on this machine.
     pub fn system() -> Self {
         #[cfg(windows)]
         return Self { openssh: Some(OPENSSH_PIPE.into()), pageant: true };
@@ -50,7 +50,7 @@ impl Agents {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentKey {
     pub comment: String,
-    /// Art und Länge zum Anzeigen, etwa „Ed25519“ oder „RSA 4096“.
+    /// Kind and length for display, e.g. “Ed25519” or “RSA 4096”.
     pub label: String,
     pub fingerprint: String,
 }
@@ -66,7 +66,7 @@ async fn connect(kind: Kind, agents: &Agents) -> Option<Client> {
     match kind {
         Kind::OpenSsh => {
             let path = agents.openssh.as_deref()?;
-            // Eine Pipe, die es nicht gibt, scheitert sofort; ist sie nur belegt, wartet der Aufruf, deshalb die Grenze.
+            // A pipe that does not exist fails at once; if it is only busy, the call waits, hence the limit.
             #[cfg(windows)]
             return timeout(AGENT_TIMEOUT, AgentClient::connect_named_pipe(path)).await.ok()?.ok().map(AgentClient::dynamic);
             #[cfg(not(windows))]
@@ -82,12 +82,12 @@ async fn connect(kind: Kind, agents: &Agents) -> Option<Client> {
     }
 }
 
-/// Was der Agent anbietet. `None`: Er antwortet nicht. Bei Pageant zeigt sich erst hier, ob es überhaupt läuft.
+/// What the agent offers. `None`: it does not answer. With Pageant only this shows whether it runs at all.
 async fn identities(client: &mut Client) -> Option<Vec<AgentIdentity>> {
     timeout(AGENT_TIMEOUT, client.request_identities()).await.ok().and_then(Result::ok)
 }
 
-/// Verbindet sich mit einem Agenten und fragt ihn ab. `None`, wenn er nicht läuft oder nicht antwortet.
+/// Connects to an agent and queries it. `None` if it is not running or does not answer.
 async fn ask(kind: Kind, agents: &Agents) -> Option<(Client, Vec<AgentIdentity>)> {
     let mut client = connect(kind, agents).await?;
     let offered = identities(&mut client).await?;
@@ -106,7 +106,7 @@ fn describe(identity: &AgentIdentity) -> AgentKey {
     }
 }
 
-/// Fragt alle Stellen ab und sagt, welche Agenten laufen und welche Schlüssel sie anbieten.
+/// Queries all places and says which agents run and which keys they offer.
 pub async fn list(agents: &Agents) -> Vec<AgentInfo> {
     let mut found = Vec::new();
     for kind in [Kind::OpenSsh, Kind::Pageant] {
@@ -119,7 +119,7 @@ pub async fn list(agents: &Agents) -> Vec<AgentInfo> {
     found
 }
 
-/// Jeder laufende Agent samt den öffentlichen Schlüsseln, die er anbietet. Zertifikate folgen mit dem Rest von Meilenstein 3.
+/// Every running agent together with the public keys it offers.
 pub(crate) async fn offers(agents: &Agents) -> Vec<(Client, Vec<PublicKey>)> {
     let mut found = Vec::new();
     for kind in [Kind::OpenSsh, Kind::Pageant] {
@@ -137,7 +137,7 @@ pub(crate) async fn offers(agents: &Agents) -> Vec<(Client, Vec<PublicKey>)> {
     found
 }
 
-/// Rohe Verbindung zum ersten laufenden Agenten, für das Weiterreichen an einen Server.
+/// Raw connection to the first running agent, for forwarding it to a server.
 pub(crate) async fn stream(agents: &Agents) -> Option<Stream> {
     for kind in [Kind::OpenSsh, Kind::Pageant] {
         if let Some((client, _)) = ask(kind, agents).await {

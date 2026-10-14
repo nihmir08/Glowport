@@ -1,12 +1,12 @@
-//! Xshell: je Sitzung eine Datei `.xsh` (eine INI-Datei, meist in UTF-16), Ordner sind Ordner auf der Platte.
-//! Passwörter sind dort verschlüsselt und bleiben zurück; Schlüssel führt Xshell in einer eigenen Verwaltung.
+//! Xshell: one `.xsh` file per session (an INI file, mostly in UTF-16), folders are folders on disk.
+//! Passwords there are encrypted and stay behind; Xshell keeps keys in a manager of its own.
 
 use crate::text::ini_sections;
 use glowport_core::model::FtpSecurity;
 
 use crate::{ftp_host, host_name, port, telnet_host, usable_address, Draft, DraftHost};
 
-/// `files`: Pfad jeder Datei unterhalb des Sitzungsordners und ihr Inhalt.
+/// `files`: path of every file below the session folder and its content.
 pub fn parse(files: &[(String, String)]) -> Draft {
     let mut draft = Draft::default();
     for (path, text) in files {
@@ -18,7 +18,7 @@ pub fn parse(files: &[(String, String)]) -> Draft {
         let protocol = value("CONNECTION", "Protocol").unwrap_or("SSH").to_ascii_uppercase();
         let reason = match protocol.as_str() {
             "SSH" | "SFTP" | "TELNET" | "FTP" => None,
-            // Wie Xshell die Leitung ablegt (Nummern statt Werte), ist nicht gesichert; lieber auslassen als raten.
+            // How Xshell stores the line (numbers instead of values) is not certain; better leave it out than guess.
             "SERIAL" => Some("protocol_serial"),
             _ => Some("protocol_other"),
         };
@@ -36,7 +36,7 @@ pub fn parse(files: &[(String, String)]) -> Draft {
             continue;
         }
         if protocol == "FTP" {
-            // Wo Xshell die Verschlüsselung einer FTP-Sitzung führt, ist nicht gesichert: FTPS mit dem Hinweis, das zu prüfen.
+            // Where Xshell keeps an FTP session's encryption is not certain: FTPS with the note to check it.
             let group = draft.group_at(&parts);
             let mut host = ftp_host(name, address, value("CONNECTION", "Port").and_then(port), value("CONNECTION:AUTHENTICATION", "UserName").map(str::to_string), FtpSecurity::Explicit, false, group);
             host.password_lost = host.own.user.is_some() && value("CONNECTION:AUTHENTICATION", "Password").is_some();
@@ -79,7 +79,7 @@ mod tests {
         let host = &draft.hosts[0];
         assert_eq!((host.name.as_str(), host.protocol, host.own.port, host.own.user.as_deref()), ("webspace", crate::Protocol::Ftp, Some(2121), Some("web1")));
         assert_eq!(host.ftp.as_ref().map(|f| (f.security, f.anonymous)), Some((FtpSecurity::Explicit, false)));
-        // Das Passwort ist bei Xshell verschlüsselt und bleibt zurück; die Verschlüsselung der Verbindung ist zu prüfen.
+        // In Xshell the password is encrypted and stays behind; the connection's encryption needs checking.
         assert!(host.password.is_none() && host.password_lost);
         assert_eq!(host.notes.iter().map(|n| n.code).collect::<Vec<_>>(), ["ftp_security"]);
     }

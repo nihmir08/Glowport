@@ -6,10 +6,10 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-# Nur für die Formen des Dateimanagers (`Entry`, `Kind`, `FileError`): FTP spricht dieselbe Sprache wie SFTP.
+# Only for the file manager's shapes (`Entry`, `Kind`, `FileError`): FTP speaks the same language as SFTP.
 glowport-net = { path = "../net" }
-# FTPS über rustls mit `ring`, wie im übrigen Projekt.
-# `deprecated` schaltet in der Bibliothek FTPS von Anfang an frei (Port 990); manche Hoster bieten nur das.
+# FTPS via rustls with `ring`, as in the rest of the project.
+# `deprecated` enables implicit FTPS in the library (port 990); some hosting providers only offer that.
 suppaftp = { version = "12.2", default-features = false, features = ["tokio-rustls-ring", "deprecated"] }
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 tokio = { version = "1", features = ["rt", "net", "sync", "time", "macros", "io-util"] }
@@ -19,7 +19,7 @@ sha2 = "0.10"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "fs"] }
-# Der nachgebaute FTP-Server, gegen den geprüft wird.
+# The simulated FTP server the tests run against.
 libunftp = { version = "0.23", default-features = false, features = ["ring"] }
 unftp-sbe-fs = "0.4"
 async-trait = "0.1"

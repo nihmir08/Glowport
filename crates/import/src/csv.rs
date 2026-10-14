@@ -1,6 +1,6 @@
-//! CSV-Tabellen mit Kopfzeile. Gelesen werden die Spalten nach ihrem Namen, in beliebiger Reihenfolge; so passen
-//! die Tabelle, die Termius für seinen eigenen Import beschreibt (`Groups,Label,Tags,Hostname/IP,Protocol,Port,
-//! Username,Password,SSH_KEY`), die Dateien freier Termius-Exporter und selbst geschriebene Listen.
+//! CSV tables with a header line. Columns are read by name, in any order; that fits
+//! the table Termius describes for its own import (`Groups,Label,Tags,Hostname/IP,Protocol,Port,
+//! Username,Password,SSH_KEY`), the files of free Termius exporters and hand-written lists.
 
 use glowport_core::model::{Flow, FtpSecurity, Parity, Secret};
 
@@ -15,8 +15,8 @@ const GROUP: &[&str] = &["groups", "group", "folder", "path", "category", "grupp
 const KEY: &[&str] = &["sshkey", "key", "keyfile", "identityfile", "privatekey", "keypath", "schlüssel", "schluessel", "schlüsseldatei"];
 const PROTOCOL: &[&str] = &["protocol", "type", "protokoll"];
 
-/// Zerlegt den Text in Zeilen und Felder. Felder in Anführungszeichen dürfen Trenner und Zeilenumbrüche enthalten;
-/// ein doppeltes Anführungszeichen darin steht für eines.
+/// Splits the text into rows and fields. Fields in quotes may contain separators and line breaks;
+/// a double quote inside stands for one.
 fn rows(text: &str, delimiter: char) -> Vec<Vec<String>> {
     let mut rows = Vec::new();
     let mut row = Vec::new();
@@ -56,7 +56,7 @@ fn delimiter(text: &str) -> char {
     [',', ';', '\t'].into_iter().max_by_key(|d| head.matches(*d).count()).unwrap_or(',')
 }
 
-/// Spaltenname ohne Groß- und Kleinschreibung und ohne Zeichen wie `_` oder `/`.
+/// Column name without case and without characters such as `_` or `/`.
 fn plain(header: &str) -> String {
     header.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect()
 }
@@ -65,7 +65,7 @@ fn column(headers: &[String], names: &[&str]) -> Option<usize> {
     names.iter().find_map(|name| headers.iter().position(|h| h == name))
 }
 
-/// Sieht der Text nach einer Tabelle mit Kopfzeile und einer Spalte für die Adresse aus?
+/// Does the text look like a table with a header line and a column for the address?
 pub fn looks_like(text: &str) -> bool {
     let all = rows(text, delimiter(text));
     all.first().is_some_and(|head| head.len() > 1 && column(&head.iter().map(|h| plain(h)).collect::<Vec<_>>(), ADDRESS).is_some())
@@ -76,7 +76,7 @@ pub fn parse(text: &str) -> Result<Draft> {
     let Some(head) = all.next() else { return unreadable("leer") };
     let headers: Vec<String> = head.iter().map(|h| plain(h)).collect();
     let address = column(&headers, ADDRESS).ok_or(ImportError::Unknown)?;
-    // „host“ kann der Name oder die Adresse sein; als Name zählt es nur, wenn eine andere Spalte die Adresse trägt.
+    // “host” can be the name or the address; it only counts as the name if another column carries the address.
     let name = column(&headers, NAME).or_else(|| headers.iter().position(|h| h == "host").filter(|at| *at != address));
     let (user, password, group, key, protocol, port_at) = (column(&headers, USER), column(&headers, PASSWORD), column(&headers, GROUP), column(&headers, KEY), column(&headers, PROTOCOL), column(&headers, &["port", "sshport"]));
 
@@ -92,7 +92,7 @@ pub fn parse(text: &str) -> Result<Draft> {
         };
         let kind = cell(protocol).unwrap_or("ssh").to_ascii_lowercase();
         let path: Vec<&str> = cell(group).map(|g| g.split(['/', '\\', '>', '›']).collect()).unwrap_or_default();
-        // Eine serielle Leitung: In der Spalte der Adresse steht der Port, in der Spalte des Ports die Baudrate.
+        // A serial line: the address column holds the port, the port column the baud rate.
         if kind == "serial" {
             if usable_serial_port(target) {
                 let group_at = draft.group_at(&path);
@@ -113,7 +113,7 @@ pub fn parse(text: &str) -> Result<Draft> {
             draft.skip(if label.is_empty() { target } else { label.as_str() }, reason);
             continue;
         }
-        // In der Spalte für die Adresse darf `benutzer@adresse:port` stehen.
+        // The address column may contain `user@address:port`.
         let (user_in_target, host_part, port_in_target) = user_host_port(target);
         if !usable_address(&host_part) {
             draft.skip(if label.is_empty() { target } else { label.as_str() }, "invalid");
@@ -125,7 +125,7 @@ pub fn parse(text: &str) -> Result<Draft> {
             continue;
         }
         if kind.starts_with("ftp") {
-            // `ftp` heißt unverschlüsselt, `ftps` und `ftpes` verschlüsselt; auf Port 990 von Anfang an.
+            // `ftp` means unencrypted, `ftps` and `ftpes` encrypted; on port 990 implicit.
             let wanted = cell(port_at).and_then(port).or(port_in_target);
             let security = match (kind.as_str(), wanted) {
                 ("ftp", _) => FtpSecurity::None,
@@ -142,10 +142,10 @@ pub fn parse(text: &str) -> Result<Draft> {
         host.own.user = cell(user).map(str::to_string).or(user_in_target);
         host.own.port = cell(port_at).and_then(port).or(port_in_target).filter(|p| *p != 22);
         host.password = cell(password).map(|p| Secret::new(p.to_string()));
-        // `mosh` ist ein SSH-Host, dessen Terminal über Mosh läuft.
+        // `mosh` is an SSH host whose terminal runs over Mosh.
         host.own.mosh = (kind == "mosh").then_some(true);
         host.own.key = cell(key).and_then(|value| {
-            // Ein Schlüssel kann als Text in der Zelle stehen (Zeilenumbrüche auch als `\n` geschrieben) oder als Datei.
+            // A key can be in the cell as text (line breaks also written as `\n`) or as a file.
             let text = value.replace("\\n", "\n");
             if text.contains("PRIVATE KEY") { draft.key_text(&host.name, &text, None) } else { draft.key_file(value) }
         });
@@ -182,12 +182,12 @@ mod tests {
         let second = &draft.hosts[1];
         assert_eq!(second.own.port, Some(2200));
         assert_eq!(draft.keys[second.own.key.unwrap()].source, KeySource::File("C:\\keys\\app.pem".into()));
-        // Die Zeile mit Telnet kommt als Host mit diesem Protokoll an, in ihrer Gruppe.
+        // The row with Telnet arrives as a host with that protocol, in its group.
         let switch = draft.hosts.iter().find(|h| h.name == "switch").unwrap();
         assert_eq!((switch.protocol, switch.own.port, switch.group), (crate::Protocol::Telnet, None, Some(2)));
         assert_eq!(draft.skipped.iter().map(|s| (s.name.as_str(), s.reason)).collect::<Vec<_>>(), [("ohne-adresse", "no_address")]);
 
-        // Eine serielle Leitung: der Port in der Spalte der Adresse, die Baudrate in der Spalte des Ports.
+        // A serial line: the port in the address column, the baud rate in the port column.
         let lines = "Label,Hostname/IP,Protocol,Port\nkonsole,com4,serial,115200\nkaputt,10.0.0.1,serial,\ngeraet,COM7,serial,\n";
         let draft = parse(lines).unwrap();
         let found: Vec<_> = draft.hosts.iter().map(|h| (h.name.as_str(), h.address.as_str(), h.protocol, h.serial.map(|line| line.baud))).collect();
@@ -197,20 +197,20 @@ mod tests {
 
     #[test]
     fn reads_other_tables() {
-        // Die Datei eines freien Termius-Exporters: Schlüssel als Name, Trenner Komma, alles in Anführungszeichen.
+        // The file of a free Termius exporter: key as a name, comma as separator, everything in quotes.
         let exported = "Label,Host,Port,Username,Password,SSH_Key,OS\n\"web\",\"203.0.113.5\",\"22\",\"root\",\"pw\",\"arbeit\",\"ubuntu\"\n";
         let draft = parse(exported).unwrap();
         assert_eq!((draft.hosts[0].name.as_str(), draft.hosts[0].address.as_str()), ("web", "203.0.113.5"));
         assert_eq!(draft.keys[0].source, KeySource::File("arbeit".into()));
 
-        // Deutsche Tabellenprogramme trennen mit Strichpunkt; die Adresse darf Benutzer und Port tragen.
+        // German spreadsheet programs separate with semicolons; the address may carry user and port.
         let german = "Name;Adresse;Gruppe\nnas;admin@192.168.1.20:2222;Zuhause\\Keller\n;pi.local;\n";
         let draft = parse(german).unwrap();
         assert_eq!((draft.hosts[0].own.user.as_deref(), draft.hosts[0].own.port, draft.hosts[0].address.as_str()), (Some("admin"), Some(2222), "192.168.1.20"));
         assert_eq!(draft.groups.len(), 2);
         assert_eq!(draft.hosts[1].name, "pi.local");
 
-        // Ein Schlüssel als Text in der Zelle, über mehrere Zeilen.
+        // A key as text in the cell, over several lines.
         let inline = "name,host,key\nweb,10.0.0.1,\"-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----\"\n";
         let draft = parse(inline).unwrap();
         assert!(matches!(&draft.keys[0].source, KeySource::Text(text) if text.expose().lines().count() == 3));
@@ -228,7 +228,7 @@ mod tests {
         assert_eq!(
             found,
             [
-                // `ftp` ist unverschlüsselt; davor warnt Glowport beim Verbinden.
+                // `ftp` is unencrypted; Glowport warns about that when connecting.
                 ("web", "ftp.example.org", crate::Protocol::Ftp, Some((FtpSecurity::None, false)), None, Some("web1"), Some("geheim")),
                 ("sicher", "ftps.example.org", crate::Protocol::Ftp, Some((FtpSecurity::Implicit, false)), None, Some("web2"), None),
                 ("auch", "ftp2.example.org", crate::Protocol::Ftp, Some((FtpSecurity::Explicit, true)), Some(2121), None, None),

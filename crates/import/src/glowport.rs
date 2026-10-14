@@ -1,8 +1,8 @@
-//! Das eigene Austauschformat: eine JSON-Datei mit Hosts, Gruppen samt ihren Vorgaben, Port-Regeln, Snippets und
-//! bekannten Hosts. **Nie Geheimnisse:** keine Passwörter, keine privaten Schlüssel, keine Identitäten. Die
-//! vollständige Kopie eines Tresors ist die verschlüsselte Sicherung.
+//! The own exchange format: a JSON file with hosts, groups including their defaults, port rules, snippets and
+//! known hosts. **Never secrets:** no passwords, no private keys, no identities. The
+//! complete copy of a vault is the encrypted backup.
 //!
-//! Geschrieben wird die Datei von der Brücke (sie kennt den Tresor), gelesen hier.
+//! The file is written by the bridge (it knows the vault), read here.
 
 use std::collections::HashMap;
 
@@ -11,15 +11,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::{host_name, unreadable, usable_address, Draft, DraftForward, DraftGroup, DraftHost, DraftKnownHost, DraftSnippet, ImportError, Jump, Protocol, Result, Values};
 
-/// Wird erhöht, wenn eine ältere Version von Glowport die Datei nicht mehr richtig lesen könnte.
+/// Raised when an older version of Glowport could no longer read the file correctly.
 pub const VERSION: u32 = 1;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Export {
-    /// Fassung des Formats; an diesem Feld erkennt Glowport die Datei.
+    /// Version of the format; Glowport recognises the file by this field.
     pub glowport: u32,
-    /// Version des Programms, das die Datei geschrieben hat, nur zur Auskunft.
+    /// Version of the program that wrote the file, for information only.
     #[serde(default)]
     pub app: String,
     /// Zeitpunkt in Millisekunden seit 1970.
@@ -37,7 +37,7 @@ pub struct Export {
     pub known_hosts: Vec<KnownHost>,
 }
 
-/// Eine Gruppe. `id` gilt nur innerhalb der Datei; `parent` und der `group` eines Hosts verweisen darauf.
+/// A group. `id` only applies within the file; `parent` and a host's `group` refer to it.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Group {
@@ -47,8 +47,8 @@ pub struct Group {
     pub parent: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
-    /// Vorgaben für alles in der Gruppe. `identity` und `key` stehen nie darin; der Benutzer einer Identität
-    /// steht als `user`. `jump` ist die `id` eines Hosts derselben Datei.
+    /// Defaults for everything in the group. `identity` and `key` never appear in it; an identity's user
+    /// appears as `user`. `jump` is the `id` of a host in the same file.
     #[serde(default)]
     pub defs: Fields,
 }
@@ -59,13 +59,13 @@ pub struct Host {
     pub id: String,
     pub name: String,
     pub address: String,
-    /// Fehlt bei SSH.
+    /// Missing for SSH.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub protocol: Option<String>,
-    /// Die Leitung eines seriellen Hosts.
+    /// The line of a serial host.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub serial: Option<Serial>,
-    /// Verschlüsselung und Anmeldung eines FTP-Hosts.
+    /// Encryption and sign-in of an FTP host.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ftp: Option<Ftp>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -94,7 +94,7 @@ pub struct Forward {
     pub dest_port: u16,
 }
 
-/// Ein gespeicherter Befehl. Makros fehlen mit Absicht: Sie enthalten, was getippt wurde, womöglich ein Passwort.
+/// A saved command. Macros are missing on purpose: they contain what was typed, possibly a password.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Snippet {
@@ -111,11 +111,11 @@ pub struct KnownHost {
     pub port: u16,
     pub algorithm: String,
     pub fingerprint: String,
-    /// Öffentlicher Schlüssel im OpenSSH-Format ohne Kommentar.
+    /// Public key in OpenSSH format without comment.
     pub key: String,
 }
 
-/// Überträgt vererbbare Werte in den Entwurf. Der Sprung-Server wird danach eingetragen, wenn alle Hosts da sind.
+/// Transfers inheritable values into the draft. The jump host is entered afterwards, once all hosts are there.
 fn values(fields: &Fields, draft: &mut Draft) -> Values {
     Values {
         user: fields.user.clone().filter(|u| !u.is_empty()),
@@ -153,7 +153,7 @@ pub fn parse(text: &str) -> Result<Draft> {
 
     let group_at: HashMap<&str, usize> = file.groups.iter().enumerate().map(|(i, g)| (g.id.as_str(), i)).collect();
     for group in &file.groups {
-        // Eine Gruppe, die sich über ihre Eltern selbst enthält, wandert nach oben, statt den Import zu sprengen.
+        // A group that contains itself through its parents moves up instead of breaking the import.
         let mut parent = group.parent.as_deref().and_then(|p| group_at.get(p).copied());
         let mut seen = vec![group_at[group.id.as_str()]];
         let mut walk = parent;
@@ -180,7 +180,7 @@ pub fn parse(text: &str) -> Result<Draft> {
             (Some("telnet"), _) => Protocol::Telnet,
             (Some("serial"), Some(line)) if line.baud_valid() && line.frame_valid() => Protocol::Serial,
             (Some("ftp"), _) => Protocol::Ftp,
-            // Ein Protokoll aus einer neueren Fassung, oder eine Leitung, die es nicht geben kann.
+            // A protocol from a newer version, or a line that cannot exist.
             _ => {
                 draft.skip(host.name.clone(), "protocol_other");
                 continue;
@@ -193,7 +193,7 @@ pub fn parse(text: &str) -> Result<Draft> {
             address: host.address.trim().to_string(),
             protocol,
             serial: host.serial.filter(|_| protocol == Protocol::Serial),
-            // Ohne Angabe gilt, was auch ein neuer FTP-Host bekommt: FTPS, nicht anonym.
+            // Without a value, what a new FTP host gets applies: FTPS, not anonymous.
             ftp: (protocol == Protocol::Ftp).then(|| host.ftp.clone().unwrap_or(Ftp { security: FtpSecurity::Explicit, anonymous: false, dir: None, plain_ok: false })),
             group: host.group.as_deref().and_then(|g| group_at.get(g).copied()),
             color: host.color.clone(),
@@ -282,7 +282,7 @@ mod tests {
     fn survives_foreign_and_broken_files() {
         assert!(matches!(parse("{ kaputt"), Err(ImportError::Unreadable(_))));
         assert!(matches!(parse("{\"profiles\":[]}"), Err(ImportError::Unreadable(_))));
-        // Gruppen im Kreis, ein Host mit unbrauchbarer Adresse, eine Regel ohne ihren Host, unbekannte Felder.
+        // Groups in a cycle, a host with an unusable address, a rule without its host, unknown fields.
         let text = r#"{"glowport":1,"neu":true,"groups":[{"id":"a","name":"A","parent":"b"},{"id":"b","name":"B","parent":"a"}],
             "hosts":[{"id":"h","name":"ok","address":"10.0.0.1","group":"a","own":{"jump":"fehlt","zukunft":1}},{"id":"x","name":"schlecht","address":"-oProxyCommand=x"}],
             "forwards":[{"name":"verwaist","kind":"local","host":"weg","bindPort":80}]}"#;

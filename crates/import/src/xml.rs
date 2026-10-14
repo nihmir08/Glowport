@@ -1,5 +1,5 @@
-//! Programme, die ihre Verbindungen als XML ablegen: mRemoteNG (`confCons.xml`), FileZilla (`sitemanager.xml`) und
-//! SecureCRT (XML-Export; dazu dessen Sitzungsdateien, die dieselben Namen benutzen).
+//! Programs that store their connections as XML: mRemoteNG (`confCons.xml`), FileZilla (`sitemanager.xml`) and
+//! SecureCRT (XML export; plus its session files, which use the same names).
 
 use base64::Engine;
 use glowport_core::model::{Flow, FtpSecurity, Parity, Secret};
@@ -15,8 +15,8 @@ fn attribute<'a>(node: Node<'a, '_>, name: &str) -> Option<&'a str> {
     node.attribute(name).map(str::trim).filter(|v| !v.is_empty())
 }
 
-/// mRemoteNG: verschachtelte `Node`-Elemente, Ordner mit `Type="Container"`. Passwörter sind dort immer
-/// verschlüsselt und bleiben zurück.
+/// mRemoteNG: nested `Node` elements, folders with `Type="Container"`. Passwords there are always
+/// encrypted and stay behind.
 pub fn mremoteng(text: &str) -> Result<Draft> {
     let doc = document(text)?;
     let root = doc.root_element();
@@ -71,7 +71,7 @@ fn child_text<'a>(node: Node<'a, '_>, name: &str) -> Option<&'a str> {
     node.children().find(|c| c.is_element() && c.tag_name().name() == name).and_then(|c| c.text()).map(str::trim).filter(|v| !v.is_empty())
 }
 
-/// FileZilla: `Server`-Einträge in verschachtelten `Folder`-Elementen. Übernommen wird, was SFTP oder FTP spricht.
+/// FileZilla: `Server` entries in nested `Folder` elements. Whatever speaks SFTP or FTP is taken over.
 pub fn filezilla(text: &str) -> Result<Draft> {
     let doc = document(text)?;
     let root = doc.root_element();
@@ -82,7 +82,7 @@ pub fn filezilla(text: &str) -> Result<Draft> {
         for child in node.children().filter(Node::is_element) {
             match child.tag_name().name() {
                 "Folder" => {
-                    // Der Name eines Ordners steht als Text direkt im Element, vor seinen Kindern.
+                    // A folder's name is text directly inside the element, before its children.
                     path.push(child.children().find(|c| c.is_text()).and_then(|c| c.text()).unwrap_or_default().trim().to_string());
                     walk(child, path, draft);
                     path.pop();
@@ -90,7 +90,7 @@ pub fn filezilla(text: &str) -> Result<Draft> {
                 "Servers" => walk(child, path, draft),
                 "Server" => {
                     let name = child_text(child, "Name").unwrap_or_default().to_string();
-                    // 0 = FTP, 1 = SFTP, 3 und 4 = FTP über TLS, 6 = FTP ohne Verschlüsselung.
+                    // 0 = FTP, 1 = SFTP, 3 and 4 = FTP over TLS, 6 = FTP without encryption.
                     let kind = child_text(child, "Protocol").unwrap_or("0");
                     match kind {
                         "0" | "1" | "3" | "4" | "6" => {}
@@ -110,15 +110,15 @@ pub fn filezilla(text: &str) -> Result<Draft> {
                         host.own.key = child_text(child, "Keyfile").and_then(|file| draft.key_file(file));
                         host
                     } else {
-                        // „FTP“ (0) heißt bei FileZilla: verschlüsselt, wenn der Server es kann, sonst offen. Glowport
-                        // verbindet dann nur verschlüsselt und sagt dazu, dass das zu prüfen ist.
+                        // “FTP” (0) means in FileZilla: encrypted if the server can, otherwise plain. Glowport
+                        // then only connects encrypted and adds that this needs checking.
                         let (security, sure) = match kind {
                             "3" => (FtpSecurity::Implicit, true),
                             "6" => (FtpSecurity::None, true),
                             "4" => (FtpSecurity::Explicit, true),
                             _ => (FtpSecurity::Explicit, false),
                         };
-                        // Anmeldeart 0 ist die anonyme.
+                        // Logon type 0 is the anonymous one.
                         let user = child_text(child, "User").filter(|_| child_text(child, "Logontype") != Some("0")).map(str::to_string);
                         let group = draft.group_at(path);
                         ftp_host(&name, address, child_text(child, "Port").and_then(port), user, security, sure, group)
@@ -128,7 +128,7 @@ pub fn filezilla(text: &str) -> Result<Draft> {
                         let value = pass.text().unwrap_or_default().trim();
                         let clear = match pass.attribute("encoding") {
                             Some("base64") => base64::engine::general_purpose::STANDARD.decode(value).ok().and_then(|b| String::from_utf8(b).ok()),
-                            // `crypt`: mit dem Master-Passwort von FileZilla verschlüsselt.
+                            // `crypt`: encrypted with FileZilla's master password.
                             Some(_) => None,
                             None => Some(value.to_string()),
                         };
@@ -149,7 +149,7 @@ pub fn filezilla(text: &str) -> Result<Draft> {
     Ok(draft)
 }
 
-/// Eine SecureCRT-Sitzung aus ihren Werten: dieselben Namen stehen im XML-Export und in den Sitzungsdateien.
+/// A SecureCRT session from its values: the same names appear in the XML export and in the session files.
 fn securecrt_session(name: &str, path: &[String], values: &Entries, draft: &mut Draft) {
     let value = |key: &str| values.get(key).map(|v| v.trim()).filter(|v| !v.is_empty());
     let protocol = value("Protocol Name").unwrap_or("SSH2");
@@ -172,14 +172,14 @@ fn securecrt_session(name: &str, path: &[String], values: &Entries, draft: &mut 
         } else {
             Flow::None
         };
-        // SecureCRT zählt Stoppbits ab null: 0 ist eines, 2 sind zwei.
+        // SecureCRT counts stop bits from zero: 0 is one, 2 is two.
         let group = draft.group_at(path);
         draft.hosts.push(serial_host(name, line, serial_line(number("Baud Rate"), number("Data Bits"), parity, number("Stop Bits") == Some(2), flow), group));
         return;
     }
     let reason = match upper.as_str() {
         "SSH2" | "SSH1" | "TELNET" => None,
-        // Telnet über TLS kann Glowport nicht.
+        // Glowport cannot do Telnet over TLS.
         "TELNET/SSL" | "TELNET/TLS" => Some("protocol_other"),
         "RDP" => Some("protocol_rdp"),
         _ => Some("protocol_other"),
@@ -200,13 +200,13 @@ fn securecrt_session(name: &str, path: &[String], values: &Entries, draft: &mut 
     let mut host = DraftHost { name: host_name(name, address), address: address.to_string(), group: draft.group_at(path), ..DraftHost::default() };
     host.own.user = value("Username").map(str::to_string);
     host.own.port = value(&format!("[{protocol}] Port")).and_then(port).filter(|p| *p != 22);
-    // Hinter dem Pfad steht bei SecureCRT, wie der Schlüssel abgelegt ist (`::rawkey`).
+    // After the path SecureCRT notes how the key is stored (`::rawkey`).
     host.own.key = value("Identity Filename V2").map(|file| file.split("::").next().unwrap_or(file)).filter(|f| !f.is_empty()).and_then(|file| draft.key_file(file));
     host.password_lost = value("Password V2").is_some() || value("Password").is_some();
     draft.hosts.push(host);
 }
 
-/// SecureCRT, XML-Export (Tools → Export Settings): `key`-Elemente als Ordner und Sitzungen unter `Sessions`.
+/// SecureCRT, XML export (Tools → Export Settings): `key` elements as folders and sessions under `Sessions`.
 pub fn securecrt(text: &str) -> Result<Draft> {
     let doc = document(text)?;
     let root = doc.root_element();
@@ -223,7 +223,7 @@ pub fn securecrt(text: &str) -> Result<Draft> {
                 }
             }
             if values.contains_key("Hostname") || values.contains_key("Protocol Name") {
-                // „Default“ ist die Vorlage für neue Sitzungen.
+                // “Default” is the template for new sessions.
                 if name != "Default" || values.get("Hostname").is_some_and(|h| !h.trim().is_empty()) {
                     securecrt_session(&name, path, &values, draft);
                 }
@@ -240,8 +240,8 @@ pub fn securecrt(text: &str) -> Result<Draft> {
     Ok(draft)
 }
 
-/// SecureCRT, Ordner `Sessions` aus dem Konfigurationsordner: je Sitzung eine Datei mit Zeilen wie
-/// `S:"Hostname"=web.example.org` und `D:"[SSH2] Port"=00000016`. `files`: Pfad unterhalb des Ordners und Inhalt.
+/// SecureCRT, `Sessions` folder from the configuration folder: one file per session with lines like
+/// `S:"Hostname"=web.example.org` and `D:"[SSH2] Port"=00000016`. `files`: path below the folder and content.
 pub fn securecrt_files(files: &[(String, String)]) -> Draft {
     let mut draft = Draft::default();
     for (path, text) in files {
@@ -320,7 +320,7 @@ mod tests {
         let nas = &draft.hosts[5];
         assert!(nas.password.is_none() && nas.password_lost);
         assert_eq!(draft.keys[nas.own.key.unwrap()].source, KeySource::File("C:\\keys\\nas.ppk".into()));
-        // FTP: „verschlüsselt, wenn möglich“ wird FTPS mit dem Hinweis, das zu prüfen; die anderen Arten sind eindeutig.
+        // FTP: “encrypted if possible” becomes FTPS with the note to check it; the other kinds are unambiguous.
         let ftp: Vec<_> = draft.hosts[1..5].iter().map(|h| (h.name.as_str(), h.protocol, h.ftp.as_ref().map(|f| (f.security, f.anonymous)), h.own.port, h.own.user.as_deref(), h.notes.iter().map(|n| n.code).collect::<Vec<_>>())).collect();
         assert_eq!(
             ftp,
@@ -368,7 +368,7 @@ mod tests {
             ("Rechenzentrum\\core-02.ini".to_string(), "S:\"Hostname\"=10.0.0.3\r\nS:\"Username\"=netadmin\r\nD:\"[SSH2] Port\"=00000898\r\nS:\"Protocol Name\"=SSH2\r\n".to_string()),
             ("Default.ini".to_string(), "S:\"Hostname\"=\r\n".to_string()),
             ("__FolderData__.ini".to_string(), "S:\"Is Expanded\"=1\r\n".to_string()),
-            // Eine serielle Sitzung: 115200 Baud, 7 Datenbits, gerade Parität, zwei Stoppbits, RTS/CTS.
+            // A serial session: 115200 baud, 7 data bits, even parity, two stop bits, RTS/CTS.
             ("Labor\\konsole.ini".to_string(), "S:\"Protocol Name\"=Serial\r\nS:\"Com Port\"=COM4\r\nD:\"Baud Rate\"=0001c200\r\nD:\"Data Bits\"=00000007\r\nD:\"Parity\"=00000002\r\nD:\"Stop Bits\"=00000002\r\nD:\"RTS Flow Control\"=00000001\r\n".to_string()),
             ("Labor\\ohne-port.ini".to_string(), "S:\"Protocol Name\"=Serial\r\n".to_string()),
         ];

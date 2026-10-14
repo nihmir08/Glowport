@@ -1,15 +1,15 @@
-//! FTP und FTPS für den Dateimanager: dieselben Vorgänge wie bei SFTP ([`glowport_net::files::Remote`]), mit
-//! denselben Formen für Einträge und Fehler.
+//! FTP and FTPS for the file manager: the same operations as for SFTP ([`glowport_net::files::Remote`]), with
+//! the same shapes for entries and errors.
 //!
-//! Ein [`Remote`] hält eine Verbindung für Befehle (Ordner lesen, anlegen, löschen …). FTP kann je Verbindung nur
-//! eine Übertragung führen; [`Remote::reader`] und [`Remote::writer`] melden sich deshalb jeweils neu an und
-//! bringen ihre eigene Verbindung mit, die mit der Übertragung endet.
+//! A [`Remote`] holds one connection for commands (read, create, delete folders …). FTP can only carry
+//! one transfer per connection; [`Remote::reader`] and [`Remote::writer`] therefore each sign in anew and
+//! bring their own connection, which ends with the transfer.
 //!
-//! **Zertifikat:** Traut das System dem Zertifikat nicht und ist kein Fingerabdruck hinterlegt, endet der Aufbau
-//! vor der Anmeldung mit [`Refusal::Certificate`]; der Aufrufer fragt den Nutzer und verbindet mit
-//! [`Connect::pin`] erneut. Das Passwort geht nie an einen Server, dessen Zertifikat weder anerkannt noch bestätigt ist.
+//! **Certificate:** if the system does not trust the certificate and no fingerprint is stored, setup ends
+//! before signing in with [`Refusal::Certificate`]; the caller asks the user and connects again with
+//! [`Connect::pin`]. The password never goes to a server whose certificate is neither trusted nor confirmed.
 //!
-//! Gearbeitet wird im passiven Modus: Der Server öffnet keinen Rückweg zum Nutzer.
+//! Passive mode is used: the server opens no connection back to the user.
 
 mod tls;
 
@@ -41,18 +41,18 @@ pub const DEFAULT_PORT: u16 = 21;
 pub const DEFAULT_IMPLICIT_PORT: u16 = 990;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
-/// So oft und in diesem Abstand wird eine weitere Verbindung versucht, wenn der Server sie ablehnt, weil schon zu
-/// viele offen sind.
+/// How often and at what interval another connection is attempted if the server refuses it because too
+/// many are already open.
 const EXTRA_TRIES: u32 = 6;
 const EXTRA_WAIT: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Security {
-    /// Die Verbindung beginnt offen und schaltet vor der Anmeldung auf TLS um (`AUTH TLS`).
+    /// The connection starts in the clear and switches to TLS before signing in (`AUTH TLS`).
     Explicit,
-    /// TLS von Anfang an, üblich auf Port 990.
+    /// TLS from the start, usually on port 990.
     Implicit,
-    /// Unverschlüsselt: Passwort und Dateien sind auf dem Weg lesbar.
+    /// Unencrypted: password and files are readable along the way.
     None,
 }
 
@@ -64,33 +64,33 @@ pub struct Connect {
     pub user: String,
     pub password: String,
     pub security: Security,
-    /// Der Fingerabdruck, den der Nutzer für diesen Server bestätigt hat.
+    /// The fingerprint the user confirmed for this server.
     pub pin: Option<Fingerprint>,
 }
 
 impl std::fmt::Debug for Connect {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Ohne das Passwort.
+        // Without the password.
         write!(f, "Connect({}@{}:{}, {:?})", self.user, self.host, self.port, self.security)
     }
 }
 
-/// Warum keine Verbindung zustande kam.
+/// Why no connection was established.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Refusal {
     Offline(String),
-    /// Der Server kann oder will kein TLS.
+    /// The server cannot or will not do TLS.
     NoTls(String),
-    /// Das System traut dem Zertifikat nicht, und es ist keines hinterlegt. Angemeldet wurde nicht.
+    /// The system does not trust the certificate, and none is stored. No sign-in happened.
     Certificate(Fingerprint),
-    /// Das Zertifikat ist nicht das, das der Nutzer bestätigt hat. Angemeldet wurde nicht.
+    /// The certificate is not the one the user confirmed. No sign-in happened.
     CertificateChanged(Fingerprint),
     AuthFailed,
     Failed(String),
 }
 
 impl Refusal {
-    /// Fehlercode für die Oberfläche.
+    /// Error code for the interface.
     pub fn code(&self) -> &'static str {
         match self {
             Refusal::Offline(_) => "offline",
@@ -102,7 +102,7 @@ impl Refusal {
     }
 }
 
-/// Der Text einer Antwort des Servers, ohne Zeilenende.
+/// The text of a server reply, without line ending.
 fn said(body: &[u8]) -> String {
     String::from_utf8_lossy(body).trim().to_string()
 }
@@ -118,7 +118,7 @@ fn file_error(error: FtpError) -> FileError {
                 Status::NotAvailable => FileError::Lost(text),
                 Status::BadCommand | Status::NotImplemented | Status::NotImplementedParameter => FileError::Unsupported,
                 Status::NotLoggedIn => FileError::PermissionDenied,
-                // Für „gibt es nicht“ und „darfst du nicht“ hat FTP nur eine Nummer; den Unterschied macht der Text.
+                // For “does not exist” and “not allowed” FTP has only one number; the text makes the difference.
                 _ if lower.contains("no such") || lower.contains("not found") || lower.contains("does not exist") => FileError::NoSuchFile,
                 _ if lower.contains("permission") || lower.contains("denied") || lower.contains("not allowed") => FileError::PermissionDenied,
                 _ if lower.contains("exist") => FileError::Exists,
@@ -131,7 +131,7 @@ fn file_error(error: FtpError) -> FileError {
     }
 }
 
-/// Eine angemeldete Verbindung, offen oder über TLS. Die Bibliothek führt beides als eigene Typen.
+/// A signed-in connection, plain or over TLS. The library keeps both as separate types.
 enum Client {
     Plain(AsyncFtpStream),
     Tls(AsyncRustlsFtpStream),
@@ -146,7 +146,7 @@ macro_rules! each {
     };
 }
 
-/// Der Datenkanal einer laufenden Übertragung.
+/// The data channel of a running transfer.
 enum Data {
     Plain(TransferStream<AsyncNoTlsStream>),
     Tls(TransferStream<AsyncRustlsStream>),
@@ -174,7 +174,7 @@ impl Client {
         .map_err(file_error)
     }
 
-    /// Öffnet eine Datei zum Schreiben: neu, angehängt (`append`) oder ab einer Stelle.
+    /// Opens a file for writing: new, appended (`append`) or from a position.
     async fn stor(&mut self, path: &str, offset: u64, append: bool) -> Result<Data, FileError> {
         if offset > 0 && !append {
             each!(self, c => c.resume_transfer(offset as usize).await).map_err(file_error)?;
@@ -193,14 +193,14 @@ impl Client {
     }
 }
 
-/// Was der Server kann, soweit es den Dateimanager angeht.
+/// What the server can do, as far as the file manager is concerned.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Abilities {
-    /// Ordnerlisten in der genormten Form (`MLSD`); sonst die Ausgabe von `LIST`.
+    /// Folder listings in the standard form (`MLSD`); otherwise the output of `LIST`.
     pub mlsd: bool,
-    /// Änderungszeit setzen (`MFMT`).
+    /// Set modification time (`MFMT`).
     pub set_time: bool,
-    /// Ein unverschlüsselt verbundener Server böte TLS an.
+    /// A server connected without encryption would offer TLS.
     pub offers_tls: bool,
 }
 
@@ -243,8 +243,8 @@ async fn dial(connect: &Connect, seen: tls::Seen) -> Result<Client, Refusal> {
     }
 }
 
-/// Fragt einen Server ohne Anmeldung, ob er TLS anbietet. Kein Server, keine Antwort oder ein Server, der vor der
-/// Anmeldung nichts über sich sagt: `false`.
+/// Asks a server without signing in whether it offers TLS. No server, no answer, or a server that says nothing
+/// about itself before sign-in: `false`.
 pub async fn offers_tls(host: &str, port: u16) -> bool {
     let connect = Connect { host: host.to_string(), port, user: String::new(), password: String::new(), security: Security::None, pin: None };
     let Ok(mut client) = dial(&connect, Arc::new(StdMutex::new(None))).await else { return false };
@@ -253,13 +253,13 @@ pub async fn offers_tls(host: &str, port: u16) -> bool {
     abilities(&features).offers_tls
 }
 
-/// Baut eine Verbindung auf, prüft das Zertifikat und meldet an. `expect` nennt das Zertifikat, das schon gilt
-/// (für die weiteren Verbindungen einer Sitzung); sonst entscheidet [`Connect::pin`] oder das System.
+/// Establishes a connection, checks the certificate and signs in. `expect` names the certificate that already applies
+/// (for a session's further connections); otherwise [`Connect::pin`] or the system decides.
 async fn login(connect: &Connect, expect: Option<Fingerprint>) -> Result<(Client, Abilities, Option<Fingerprint>), Refusal> {
     let seen: tls::Seen = Arc::new(StdMutex::new(expect.map(|fingerprint| (fingerprint, true))));
     let mut client = dial(connect, seen.clone()).await?;
     let shown = *seen.lock().unwrap_or_else(|p| p.into_inner());
-    // Erst das Zertifikat, dann das Passwort.
+    // First the certificate, then the password.
     if let (Some((fingerprint, recognised)), None) = (shown, expect) {
         match connect.pin {
             Some(pin) if pin != fingerprint => return Err(Refusal::CertificateChanged(fingerprint)),
@@ -280,8 +280,8 @@ async fn login(connect: &Connect, expect: Option<Fingerprint>) -> Result<(Client
     if has("UTF8") {
         let _ = each!(&mut client, c => c.custom_command("OPTS UTF8 ON", &[Status::CommandOk, Status::CommandNotImplemented]).await);
     }
-    // Die neuere Form des passiven Modus nennt nur einen Port; die alte nennt auch eine Adresse, die hinter einem
-    // Router oft die falsche ist. Dann gilt die Adresse, zu der die Verbindung ohnehin steht.
+    // The newer form of passive mode only names a port; the old one also names an address, which behind a
+    // router is often the wrong one. Then the address the connection already goes to applies.
     let extended = has("EPSV");
     each!(&mut client, c => {
         c.set_mode(if extended { Mode::ExtendedPassive } else { Mode::Passive });
@@ -291,7 +291,7 @@ async fn login(connect: &Connect, expect: Option<Fingerprint>) -> Result<(Client
     Ok((client, abilities(&features), shown.map(|(fingerprint, _)| fingerprint)))
 }
 
-/// Der Ordner, in dem etwas liegt, und sein Name darin.
+/// The folder something lives in, and its name there.
 fn split(path: &str) -> (&str, &str) {
     let path = path.trim_end_matches('/');
     match path.rfind('/') {
@@ -332,13 +332,13 @@ fn entry(file: &suppaftp::list::File) -> Entry {
     }
 }
 
-/// Liest die Zeilen einer Ordnerliste, genormt (`MLSD`) oder so, wie `ls -l` oder `dir` sie schreiben.
+/// Reads the lines of a folder listing, standardised (`MLSD`) or as `ls -l` or `dir` write them.
 fn entries(lines: &[String], mlsd: bool) -> Vec<Entry> {
     let mut out = Vec::new();
     for line in lines {
         let parsed = if mlsd {
             let lower = line.to_ascii_lowercase();
-            // Der Ordner selbst und der darüber stehen mit in der Liste.
+            // The folder itself and the one above it are also in the listing.
             if lower.contains("type=cdir") || lower.contains("type=pdir") {
                 continue;
             }
@@ -355,8 +355,8 @@ fn entries(lines: &[String], mlsd: bool) -> Vec<Entry> {
     out
 }
 
-/// Lehnt der Server eine weitere Verbindung ab, weil schon zu viele offen sind? Die Verbindung für Befehle steht
-/// dabei mit denselben Zugangsdaten; eine abgelehnte Anmeldung kann deshalb nur das heißen.
+/// Does the server refuse another connection because too many are already open? The command connection is up
+/// with the same credentials; a refused sign-in can therefore only mean that.
 fn crowded(refusal: &Refusal) -> bool {
     match refusal {
         Refusal::AuthFailed => true,
@@ -372,13 +372,13 @@ pub struct Remote {
     connect: Connect,
     main: Mutex<Client>,
     abilities: Abilities,
-    /// Das Zertifikat, das beim Anmelden galt; jede weitere Verbindung muss dasselbe zeigen.
+    /// The certificate that applied at sign-in; every further connection must show the same.
     certificate: Option<Fingerprint>,
     home: String,
 }
 
-/// Führt etwas auf der Verbindung für Befehle aus. Hat der Server sie inzwischen geschlossen (das tun FTP-Server
-/// nach einigen Minuten Ruhe), wird neu angemeldet und noch einmal versucht.
+/// Runs something on the command connection. If the server has closed it in the meantime (FTP servers do that
+/// after a few minutes of quiet), it signs in again and tries once more.
 macro_rules! run {
     ($remote:expr, $client:ident => $body:expr) => {{
         let mut guard = $remote.main.lock().await;
@@ -408,21 +408,21 @@ impl Remote {
         self.abilities
     }
 
-    /// Das Zertifikat des Servers, wenn die Verbindung über TLS läuft.
+    /// The server's certificate, if the connection runs over TLS.
     pub fn certificate(&self) -> Option<Fingerprint> {
         self.certificate
     }
 
-    /// Eine weitere angemeldete Verbindung zum selben Server, mit demselben Zertifikat.
+    /// Another signed-in connection to the same server, with the same certificate.
     async fn again(&self) -> Result<Client, FileError> {
         let mut connect = self.connect.clone();
         connect.pin = self.certificate;
         login(&connect, self.certificate).await.map(|(client, _, _)| client).map_err(|refusal| FileError::Lost(format!("{refusal:?}")))
     }
 
-    /// Eine weitere Verbindung für eine Übertragung. Viele Server erlauben je Benutzer oder Adresse nur wenige
-    /// gleichzeitig. Lehnt der Server deshalb ab, wird gewartet und erneut versucht: So arbeitet eine Warteschlange,
-    /// die mehr gleichzeitig will, als der Server hergibt, ihre Dateien eben nacheinander ab.
+    /// Another connection for a transfer. Many servers only allow a few per user or address at the
+    /// same time. If the server refuses for that reason, it waits and tries again: so a queue that wants
+    /// more at once than the server allows simply works through its files one after another.
     async fn extra(&self) -> Result<Client, FileError> {
         let mut connect = self.connect.clone();
         connect.pin = self.certificate;
@@ -439,14 +439,14 @@ impl Remote {
         }
     }
 
-    /// Der Ordner, in dem der Server nach der Anmeldung steht.
+    /// The folder the server is in after signing in.
     pub async fn home(&self) -> Result<String, FileError> {
         Ok(self.home.clone())
     }
 
     pub async fn list(&self, path: &str) -> Result<Vec<Entry>, FileError> {
         let mlsd = self.abilities.mlsd;
-        // Erst in den Ordner, dann ohne Namen listen: Manche Server kommen mit Leerzeichen im Namen sonst nicht zurecht.
+        // First into the folder, then list without a name: some servers cannot cope with spaces in the name otherwise.
         run!(self, client => async {
             each!(&mut *client, c => c.cwd(path).await).map_err(|error| match file_error(error) {
                 FileError::Failure(text) => if text.to_lowercase().contains("directory") { FileError::NotADirectory } else { FileError::NoSuchFile },
@@ -455,7 +455,7 @@ impl Remote {
             let lines = if mlsd {
                 each!(&mut *client, c => c.mlsd(None).await)
             } else {
-                // Mit `-a` auch die versteckten; wer das nicht kennt, bekommt die gewöhnliche Liste.
+                // With `-a` the hidden ones too; whoever does not know it gets the ordinary listing.
                 match each!(&mut *client, c => c.list(Some("-a")).await) {
                     Ok(lines) if !lines.is_empty() => Ok(lines),
                     _ => each!(&mut *client, c => c.list(None).await),
@@ -466,7 +466,7 @@ impl Remote {
         }.await)
     }
 
-    /// `follow` gibt es bei FTP nicht: Eine Verknüpfung bleibt eine Verknüpfung.
+    /// `follow` does not exist with FTP: a link stays a link.
     pub async fn stat(&self, path: &str, _follow: bool) -> Result<Entry, FileError> {
         let (dir, name) = split(path);
         if name.is_empty() {
@@ -490,7 +490,7 @@ impl Remote {
         run!(self, client => each!(&mut *client, c => c.mkdir(path).await).map_err(file_error))
     }
 
-    /// Benennt um oder verschiebt. Überschreibt nie: Viele FTP-Server täten das stillschweigend.
+    /// Renames or moves. Never overwrites: many FTP servers would do that silently.
     pub async fn rename(&self, from: &str, to: &str) -> Result<(), FileError> {
         match self.stat(to, false).await {
             Ok(_) => return Err(FileError::Exists),
@@ -500,7 +500,7 @@ impl Remote {
         run!(self, client => each!(&mut *client, c => c.rename(from, to).await).map_err(file_error))
     }
 
-    /// Löscht eine Datei oder einen Ordner samt Inhalt. Verknüpfungen werden gelöscht, nicht verfolgt.
+    /// Deletes a file or a folder with its content. Links are deleted, not followed.
     pub fn remove<'a>(&'a self, path: &'a str) -> Pin<Box<dyn Future<Output = Result<(), FileError>> + Send + 'a>> {
         Box::pin(async move {
             if self.stat(path, false).await?.kind != Kind::Dir {
@@ -518,7 +518,7 @@ impl Remote {
         })
     }
 
-    /// Setzt die Rechte, wenn der Server das anbietet (`SITE CHMOD`); sonst [`FileError::Unsupported`].
+    /// Sets the permissions if the server offers that (`SITE CHMOD`); otherwise [`FileError::Unsupported`].
     pub async fn chmod(&self, path: &str, mode: u32) -> Result<(), FileError> {
         let command = format!("CHMOD {:o} {path}", mode & 0o7777);
         run!(self, client => each!(&mut *client, c => c.site(&command).await).map(|_| ()).map_err(file_error)).map_err(|error| match error {
@@ -527,7 +527,7 @@ impl Remote {
         })
     }
 
-    /// Liest eine Datei bis höchstens `limit` Bytes; der zweite Wert sagt, ob sie länger ist.
+    /// Reads a file up to `limit` bytes; the second value says whether it is longer.
     pub async fn read(&self, path: &str, limit: u64) -> Result<(Vec<u8>, bool), FileError> {
         run!(self, client => async {
             let mut data = client.retr(path, 0).await?;
@@ -540,8 +540,8 @@ impl Remote {
             bytes.truncate(limit as usize);
             read.map_err(|error| FileError::Lost(error.to_string()))?;
             if longer {
-                // Mitten in der Datei aufzuhören beantwortet jeder Server anders. Statt seine Antworten zu
-                // erraten, endet diese Verbindung hier, und eine frische tritt an ihre Stelle.
+                // Every server answers differently to stopping in the middle of a file. Instead of guessing its
+                // answers, this connection ends here, and a fresh one takes its place.
                 drop(data);
                 *client = self.extra().await?;
             } else {
@@ -551,7 +551,7 @@ impl Remote {
         }.await)
     }
 
-    /// Schreibt eine Datei neu.
+    /// Writes a file anew.
     pub async fn write(&self, path: &str, bytes: &[u8]) -> Result<(), FileError> {
         run!(self, client => async {
             let mut data = client.stor(path, 0, false).await?;
@@ -565,11 +565,11 @@ impl Remote {
         }.await)
     }
 
-    /// Öffnet eine Datei zum Lesen ab der Stelle `offset`, auf einer eigenen Verbindung.
+    /// Opens a file for reading from position `offset`, on a connection of its own.
     pub async fn reader(&self, path: &str, offset: u64) -> Result<Transfer, FileError> {
         let mut client = self.extra().await?;
-        // Manche Server nehmen den Auftrag für eine Datei an, die es nicht gibt, und melden das erst am Ende.
-        // Die Frage nach der Größe klärt es vorher; wer sie nicht kennt, wird nicht aufgehalten.
+        // Some servers accept the order for a file that does not exist and only report that at the end.
+        // Asking for the size settles it beforehand; whoever does not know it is not held up.
         if let Err(error @ (FileError::NoSuchFile | FileError::PermissionDenied)) = each!(&mut client, c => c.size(path).await).map_err(file_error) {
             client.quit().await;
             return Err(error);
@@ -583,12 +583,12 @@ impl Remote {
         }
     }
 
-    /// Öffnet eine Datei zum Schreiben, auf einer eigenen Verbindung. Ab `offset` 0 beginnt sie neu; sonst wird ab
-    /// dort weitergeschrieben, etwa um einen abgebrochenen Upload fortzusetzen. **Fertig ist die Datei erst nach
-    /// `shutdown`:** Erst dann bestätigt der Server sie.
+    /// Opens a file for writing, on a connection of its own. From `offset` 0 it starts anew; otherwise writing
+    /// continues from there, e.g. to resume an interrupted upload. **The file is only finished after
+    /// `shutdown`:** only then does the server confirm it.
     pub async fn writer(&self, path: &str, offset: u64) -> Result<Transfer, FileError> {
         let mut client = self.extra().await?;
-        // Liegt am Server genau so viel, wie schon geschrieben ist, wird angehängt; das kann jeder Server.
+        // If the server holds exactly as much as has already been written, it is appended; every server can do that.
         let append = offset > 0 && each!(&mut client, c => c.size(path).await).is_ok_and(|size| size as u64 == offset);
         match client.stor(path, offset, append).await {
             Ok(data) => Ok(Transfer::new(data, client)),
@@ -599,7 +599,7 @@ impl Remote {
         }
     }
 
-    /// Setzt die Änderungszeit, wenn der Server das anbietet (`MFMT`); sonst [`FileError::Unsupported`].
+    /// Sets the modification time if the server offers that (`MFMT`); otherwise [`FileError::Unsupported`].
     pub async fn touch(&self, path: &str, modified: u64) -> Result<(), FileError> {
         if !self.abilities.set_time {
             return Err(FileError::Unsupported);
@@ -608,7 +608,7 @@ impl Remote {
         run!(self, client => each!(&mut *client, c => c.custom_command(&command, &[Status::File]).await).map(|_| ()).map_err(file_error))
     }
 
-    /// Hält die Verbindung wach; FTP-Server schließen sie sonst nach einigen Minuten Ruhe.
+    /// Keeps the connection awake; FTP servers otherwise close it after a few minutes of quiet.
     pub async fn ping(&self) -> Result<(), FileError> {
         run!(self, client => each!(&mut *client, c => c.noop().await).map_err(file_error))
     }
@@ -618,10 +618,10 @@ impl Remote {
     }
 }
 
-/// Eine Zeit als `JJJJMMTTHHMMSS` in Weltzeit, wie FTP sie schreibt.
+/// A time as `YYYYMMDDHHMMSS` in UTC, as FTP writes it.
 fn stamp(seconds: u64) -> String {
     let (days, rest) = (seconds / 86_400, seconds % 86_400);
-    // Tage seit 1970 in ein Datum; nach Howard Hinnant, „days from civil“ rückwärts.
+    // Days since 1970 into a date; after Howard Hinnant, “days from civil” in reverse.
     let z = days as i64 + 719_468;
     let era = z.div_euclid(146_097);
     let doe = z.rem_euclid(146_097);
@@ -635,7 +635,7 @@ fn stamp(seconds: u64) -> String {
 
 type Finishing = Pin<Box<dyn Future<Output = std::io::Result<()>> + Send>>;
 
-// Je Übertragung gibt es genau eine davon; die offene Verbindung eigens auszulagern lohnt nicht.
+// There is exactly one of these per transfer; moving the open connection out separately is not worth it.
 #[allow(clippy::large_enum_variant)]
 enum Stage {
     Open(Data, Client),
@@ -643,9 +643,9 @@ enum Stage {
     Done,
 }
 
-/// Eine laufende Übertragung auf ihrer eigenen Verbindung. Beim Lesen endet sie mit dem Ende der Datei, beim
-/// Schreiben mit `shutdown`; beide Male wartet sie auf die Bestätigung des Servers und meldet sich dann ab. Sagt
-/// der Server, die Übertragung sei gescheitert, ist das ein Fehler.
+/// A running transfer on its own connection. When reading it ends with the end of the file, when
+/// writing with `shutdown`; both times it waits for the server's confirmation and then signs off. If
+/// the server says the transfer failed, that is an error.
 pub struct Transfer {
     stage: StdMutex<Stage>,
 }
@@ -691,7 +691,7 @@ impl AsyncRead for Transfer {
                 other => return other,
             }
         }
-        // Am Ende der Datei: Erst die Bestätigung des Servers macht daraus ein gutes Ende.
+        // At the end of the file: only the server's confirmation makes it a good end.
         Transfer::finish(&mut stage, cx)
     }
 }
@@ -744,15 +744,15 @@ mod tests {
     #[test]
     fn listings_are_read_in_all_three_shapes() {
         let lines = |text: &str| text.lines().map(str::to_string).collect::<Vec<_>>();
-        // Genormt: der Ordner selbst und der darüber fallen weg.
+        // Standardised: the folder itself and the one above it are dropped.
         let found = entries(&lines("type=cdir;modify=20261012120000; .\ntype=pdir;modify=20261012120000; ..\ntype=dir;modify=20261012120000;UNIX.mode=0755; web\ntype=file;size=1234;modify=20200229000000;UNIX.mode=0640;UNIX.uid=1000;UNIX.gid=33; mit leerzeichen.txt"), true);
         assert_eq!(found.iter().map(|e| (e.name.as_str(), e.kind, e.size)).collect::<Vec<_>>(), [("web", Kind::Dir, 0), ("mit leerzeichen.txt", Kind::File, 1234)]);
         assert_eq!((found[1].modified, found[1].mode, found[1].uid, found[1].owner.as_str(), found[1].group.as_str()), (1_582_934_400, 0o640, 1000, "1000", "33"));
-        // Wie `ls -l`: die Zeile „total“ fällt weg, eine Verknüpfung nennt ihr Ziel.
+        // Like `ls -l`: the “total” line is dropped, a link names its target.
         let found = entries(&lines("total 12\ndrwxr-xr-x 2 1000 1000 4096 Jan 05 2025 .\ndrwxr-xr-x 2 1000 1000 4096 Jan 05 2025 logs\n-rw-r----- 1 1000 33 77 Jan 05 2025 seite.html\nlrwxrwxrwx 1 0 0 9 Jan 05 2025 aktuell -> /srv/v2"), false);
         assert_eq!(found.iter().map(|e| (e.name.as_str(), e.kind)).collect::<Vec<_>>(), [("logs", Kind::Dir), ("seite.html", Kind::File), ("aktuell", Kind::Link)]);
         assert_eq!((found[1].size, found[1].mode, found[2].target.as_deref()), (77, 0o640, Some("/srv/v2")));
-        // Wie `dir` unter Windows.
+        // Like `dir` on Windows.
         let found = entries(&lines("10-12-26  04:54PM       <DIR>          Bilder\n10-12-26  04:54PM                 2048 bericht.pdf"), false);
         assert_eq!(found.iter().map(|e| (e.name.as_str(), e.kind, e.size)).collect::<Vec<_>>(), [("Bilder", Kind::Dir, 0), ("bericht.pdf", Kind::File, 2048)]);
     }

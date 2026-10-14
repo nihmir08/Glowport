@@ -1,5 +1,5 @@
-//! Windows Terminal: Profile aus `settings.json`, deren Befehl `ssh …` startet. Auch für sich brauchbar ist
-//! [`command_line`], das eine `ssh`-Kommandozeile in einen Host übersetzt.
+//! Windows Terminal: profiles from `settings.json` whose command starts `ssh …`. Also useful on its own is
+//! [`command_line`], which translates an `ssh` command line into a host.
 
 use glowport_core::model::ForwardKind;
 use serde_json::Value;
@@ -7,11 +7,11 @@ use serde_json::Value;
 use crate::text::{expand_home, jsonc, user_host_port, words};
 use crate::{host_name, port, unreadable, usable_address, Draft, DraftForward, DraftHost, Jump, Note, Result, Values};
 
-/// Schalter von `ssh`, denen ein Wert folgt.
+/// `ssh` switches that are followed by a value.
 const WITH_VALUE: &str = "BbcDEeFIiJLlmOoPpQRSWw";
 
-/// Liest `ssh [schalter] [benutzer@]adresse [befehl]` und hängt den Host an den Entwurf. `None`, wenn die Zeile
-/// kein `ssh` startet oder keine Adresse nennt.
+/// Reads `ssh [switches] [user@]address [command]` and adds the host to the draft. `None` if the line
+/// does not start `ssh` or names no address.
 pub fn command_line(line: &str, name: &str, home: &str, draft: &mut Draft) -> Option<usize> {
     let args = words(line);
     let program = args.first()?.rsplit(['/', '\\']).next()?.to_ascii_lowercase();
@@ -34,7 +34,7 @@ pub fn command_line(line: &str, name: &str, home: &str, draft: &mut Draft) -> Op
             target = Some(arg.to_string());
             continue;
         };
-        // Schalter ohne Wert dürfen zusammenstehen (`-AT`); der Wert eines Schalters klebt daran oder folgt.
+        // Switches without a value may be combined (`-AT`); a switch's value sticks to it or follows.
         for (at, switch) in switches.char_indices() {
             if !WITH_VALUE.contains(switch) {
                 if switch == 'A' {
@@ -83,7 +83,7 @@ pub fn command_line(line: &str, name: &str, home: &str, draft: &mut Draft) -> Op
     let label = host_name(name, &address);
     draft.hosts.push(DraftHost { name: label.clone(), address, own, notes, ..DraftHost::default() });
     for (kind, spec) in rules {
-        // `[adresse:]port[:ziel:zielport]`; für `-D` nur der vordere Teil.
+        // `[address:]port[:dest:destport]`; for `-D` only the front part.
         let parts: Vec<&str> = spec.split(':').collect();
         let rule = match (kind, parts.as_slice()) {
             (ForwardKind::Dynamic, [listen]) => port(listen).map(|p| ("127.0.0.1".to_string(), p, String::new(), 0)),

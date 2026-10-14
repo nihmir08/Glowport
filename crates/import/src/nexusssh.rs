@@ -1,5 +1,5 @@
-//! NexusSSH: die Export-Datei (`"format": "nexusssh-export"`) oder `profiles.json` aus dessen Datenordner.
-//! Beide nennen dieselben Felder, die eine in `camelCase`, die andere mit Unterstrichen. Geheimnisse stehen in keiner.
+//! NexusSSH: the export file (`"format": "nexusssh-export"`) or `profiles.json` from its data folder.
+//! Both name the same fields, one in `camelCase`, the other with underscores. Neither contains secrets.
 
 use std::collections::HashMap;
 
@@ -34,7 +34,7 @@ pub fn parse(text: &str, home: &str) -> Result<Draft> {
         host.own.user = text_of("user", "user").map(str::to_string);
         host.own.port = field(profile, "port", "port").and_then(Value::as_u64).and_then(|p| u16::try_from(p).ok()).filter(|p| *p != 0 && *p != 22);
         host.own.key = text_of("keyPath", "key_path").and_then(|file| draft.key_file(&expand_home(file, home)));
-        // NexusSSH bietet Schlüssel aus dem Agenten an, solange es nicht abgeschaltet ist.
+        // NexusSSH offers keys from the agent unless that is switched off.
         if field(profile, "useAgent", "use_agent").and_then(Value::as_bool).unwrap_or(true) {
             host.own.agent = Some(true);
         }
@@ -74,7 +74,7 @@ mod tests {
     #[test]
     fn reads_export_and_profile_store() {
         let export = r#"{
-            // geschrieben von NexusSSH
+            // written by NexusSSH
             "format": "nexusssh-export", "version": 1,
             "profiles": [
                 { "id": "a", "name": "bastion", "host": "203.0.113.10", "port": 22, "user": "deploy", "group": "Produktiv", "keyPath": "~/.ssh/id_ed25519", "useAgent": false },

@@ -1,9 +1,9 @@
-//! Terminals jenseits von SSH: Shells dieses Rechners, Telnet, serielle Leitung.
+//! Terminals beyond SSH: shells on this machine, Telnet, serial line.
 //!
-//! Jede Art liefert dieselbe [`Session`] wie der Verbindungskern (`glowport-net`): einen Strom von [`Event`]s und
-//! einen Kanal für [`Command`]s. Wer Sitzungen verwaltet, braucht deshalb nicht zu wissen, was dahintersteckt.
-//! Von den Ereignissen kommen hier nur Phase, Ausgabe, Hinweis und Ende vor; Rückfragen gibt es keine, und einen
-//! zusätzlichen Kanal ([`Command::Open`]) gibt keine dieser Arten her.
+//! Every kind returns the same [`Session`] as the connection core (`glowport-net`): a stream of [`Event`]s and
+//! a channel for [`Command`]s. Whoever manages sessions therefore does not need to know what is behind them.
+//! Of the events, only phase, output, notice and end occur here; there are no prompts, and none of these
+//! kinds offers an additional channel ([`Command::Open`]).
 
 pub mod local;
 pub mod serial;
@@ -17,35 +17,35 @@ use tokio::{
     time::{sleep_until, Instant},
 };
 
-/// Wie lange nach dem Ende eines Geräts noch auf den Rest seiner Ausgabe gewartet wird.
+/// How long to wait for the rest of a device's output after it ended.
 const DRAIN: Duration = Duration::from_secs(2);
 
-/// Die Kanäle einer Sitzung: Der Aufrufer bekommt die [`Session`], die Arbeit die Gegenstücke.
+/// The channels of a session: the caller gets the [`Session`], the work the counterparts.
 pub(crate) fn channels() -> (Session, mpsc::Sender<Event>, mpsc::UnboundedReceiver<Command>) {
     let (event_tx, events) = mpsc::channel(256);
     let (commands, command_rx) = mpsc::unbounded_channel();
     (Session { commands, events }, event_tx, command_rx)
 }
 
-/// Ein Gerät, das mit blockierenden Aufrufen gelesen und geschrieben wird (Shell, serieller Port). Seine Threads
-/// hängen an diesen Enden.
+/// A device read and written with blocking calls (shell, serial port). Its threads
+/// hang on these ends.
 pub(crate) struct Wires {
-    /// Bytes vom Gerät. Der Kanal ist begrenzt: Hält das Terminal an, staut es sich bis zum Gerät zurück.
+    /// Bytes from the device. The channel is bounded: if the terminal stops, it backs up to the device.
     pub data: mpsc::Receiver<Vec<u8>>,
-    /// Warum das Gerät endete, sobald das feststeht.
+    /// Why the device ended, as soon as that is known.
     pub end: oneshot::Receiver<End>,
     pub write: Box<dyn FnMut(Vec<u8>) + Send>,
     pub resize: Box<dyn FnMut(u32, u32) + Send>,
-    /// Beendet das Gerät auf Wunsch des Nutzers.
+    /// Ends the device at the user's request.
     pub close: Box<dyn FnOnce() + Send>,
 }
 
-/// Reicht Ausgabe und Eingabe durch, bis das Gerät endet oder der Nutzer schließt.
+/// Passes output and input through until the device ends or the user closes.
 pub(crate) async fn pump(wires: Wires, events: &mpsc::Sender<Event>, commands: &mut mpsc::UnboundedReceiver<Command>) -> End {
     let Wires { mut data, end: mut ending, mut write, mut resize, close } = wires;
     let mut close = Some(close);
     let mut paused = false;
-    // Steht das Ende fest, kommt noch der Rest der Ausgabe; danach, spätestens nach einer Gnadenfrist, ist Schluss.
+    // Once the end is known, the rest of the output still comes; after that, at the latest after a grace period, it is over.
     let mut end: Option<(End, Instant)> = None;
     loop {
         let deadline = end.as_ref().map(|(_, at)| *at);

@@ -1,13 +1,13 @@
-//! OpenSSH-Konfiguration (`~/.ssh/config`), gelesen wie `ssh` selbst es tut: Für jeden Namen gilt der erste Wert,
-//! den ein passender `Host`-Block nennt. Hosts werden daraus nur Namen ohne Platzhalter; Blöcke wie `Host *`
-//! liefern ihre Vorgaben an alle, auf die sie passen.
+//! OpenSSH configuration (`~/.ssh/config`), read the way `ssh` itself does: for every name the first value applies
+//! that a matching `Host` block names. Only names without wildcards become hosts; blocks like `Host *`
+//! pass their defaults to everyone they match.
 
 use glowport_core::model::{pattern_matches, ForwardKind};
 
 use crate::text::{expand_home, user_host_port, words};
 use crate::{host_name, port, usable_address, Draft, DraftForward, DraftHost, Jump, Note, Values};
 
-/// Tiefer wird `Include` nicht verfolgt; schützt vor Dateien, die sich gegenseitig einbinden.
+/// `Include` is not followed any deeper; protects against files that include each other.
 const MAX_DEPTH: usize = 8;
 
 struct Block {
@@ -15,7 +15,7 @@ struct Block {
     options: Vec<(String, String)>,
 }
 
-/// Sieht der Text nach einer OpenSSH-Konfiguration aus?
+/// Does the text look like an OpenSSH configuration?
 pub fn looks_like(text: &str) -> bool {
     let mut hosts = 0;
     let mut options = 0;
@@ -30,7 +30,7 @@ pub fn looks_like(text: &str) -> bool {
     hosts > 0 && options > 0
 }
 
-/// Zerlegt eine Zeile in Schlüsselwort und Rest. Zwischen beiden steht Leerraum oder ein `=`.
+/// Splits a line into keyword and rest. Between them is whitespace or an `=`.
 fn split_line(line: &str) -> Option<(String, String)> {
     let line = line.trim();
     if line.is_empty() || line.starts_with('#') {
@@ -42,14 +42,14 @@ fn split_line(line: &str) -> Option<(String, String)> {
 }
 
 fn blocks(text: &str, include: &dyn Fn(&str) -> Vec<String>, depth: usize, out: &mut Vec<Block>) {
-    // Was vor dem ersten `Host` steht, gilt für alle.
+    // Whatever comes before the first `Host` applies to all.
     let mut current = Block { patterns: vec!["*".into()], options: Vec::new() };
     for (key, value) in text.lines().filter_map(split_line) {
         match key.as_str() {
             "host" => {
                 out.push(std::mem::replace(&mut current, Block { patterns: words(&value), options: Vec::new() }));
             }
-            // `Match` hängt an Bedingungen, die sich erst beim Verbinden zeigen; sein Inhalt gilt hier für niemanden.
+            // `Match` depends on conditions that only show when connecting; its content applies to nobody here.
             "match" => out.push(std::mem::replace(&mut current, Block { patterns: Vec::new(), options: Vec::new() })),
             "include" if depth < MAX_DEPTH => {
                 out.push(std::mem::replace(&mut current, Block { patterns: Vec::new(), options: Vec::new() }));
@@ -58,7 +58,7 @@ fn blocks(text: &str, include: &dyn Fn(&str) -> Vec<String>, depth: usize, out: 
                     for file in include(&pattern) {
                         let from = out.len();
                         blocks(&file, include, depth + 1, out);
-                        // Eine Datei, die innerhalb eines Blocks eingebunden ist, gilt nur für dessen Hosts.
+                        // A file included inside a block only applies to that block's hosts.
                         if scope != ["*"] {
                             for block in &mut out[from..] {
                                 if block.patterns == ["*"] {
@@ -88,7 +88,7 @@ fn matches(patterns: &[String], name: &str) -> bool {
     hit
 }
 
-/// Alle Werte, die für einen Namen gelten, in der Reihenfolge der Datei.
+/// All values that apply to a name, in the file's order.
 fn options_for<'a>(blocks: &'a [Block], name: &str) -> Vec<(&'a str, &'a str)> {
     blocks.iter().filter(|b| matches(&b.patterns, name)).flat_map(|b| b.options.iter().map(|(k, v)| (k.as_str(), v.as_str()))).collect()
 }
@@ -101,7 +101,7 @@ fn yes(value: &str) -> bool {
     matches!(value.to_ascii_lowercase().as_str(), "yes" | "true" | "on")
 }
 
-/// `[adresse:]port` oder `adresse/port`, IPv6 in eckigen Klammern. Ohne Adresse gilt die Vorgabe.
+/// `[address:]port` or `address/port`, IPv6 in square brackets. Without an address the default applies.
 fn endpoint(text: &str, default_host: &str) -> Option<(String, u16)> {
     let text = text.trim();
     if let Some(port) = port(text) {
@@ -116,7 +116,7 @@ fn endpoint(text: &str, default_host: &str) -> Option<(String, u16)> {
     Some((host.to_string(), port(number)?))
 }
 
-/// Liest `ssh -W %h:%p sprung` aus einem `ProxyCommand`: Das ist ein Sprung-Server in alter Schreibweise.
+/// Reads `ssh -W %h:%p jump` from a `ProxyCommand`: that is a jump host in the old notation.
 fn jump_from_command(command: &str) -> Option<String> {
     let args = words(command);
     let program = args.first()?.rsplit(['/', '\\']).next()?.to_ascii_lowercase();
@@ -155,8 +155,8 @@ fn jump_from_command(command: &str) -> Option<String> {
 
 const WEAK: [&str; 8] = ["sha1", "-cbc", "3des", "ssh-rsa", "ssh-dss", "group1-", "group14-sha1", "arcfour"];
 
-/// Liest eine Konfiguration. `home` ersetzt `~` in Pfaden; `include` liefert den Inhalt der Dateien, auf die ein
-/// `Include` zeigt (das Muster kommt so an, wie es in der Datei steht).
+/// Reads a configuration. `home` replaces `~` in paths; `include` returns the content of the files an
+/// `Include` points to (the pattern arrives as written in the file).
 pub fn parse(text: &str, home: &str, include: &dyn Fn(&str) -> Vec<String>) -> Draft {
     let mut all = Vec::new();
     blocks(text, include, 0, &mut all);
@@ -169,7 +169,7 @@ pub fn parse(text: &str, home: &str, include: &dyn Fn(&str) -> Vec<String>) -> D
     }
 
     let mut draft = Draft::default();
-    // Erst alle Hosts, dann die Sprünge: Ein Sprung-Server darf weiter unten in der Datei stehen.
+    // First all hosts, then the jumps: a jump host may appear further down in the file.
     let mut jumps: Vec<(usize, String)> = Vec::new();
     for name in names {
         let options = options_for(&all, name);
@@ -193,7 +193,7 @@ pub fn parse(text: &str, home: &str, include: &dyn Fn(&str) -> Vec<String>) -> D
         own.keepalive = first(&options, "serveraliveinterval").and_then(|v| v.parse::<u16>().ok()).filter(|v| *v <= 3600);
         own.timeout = first(&options, "connecttimeout").and_then(|v| v.parse::<u16>().ok()).filter(|v| (1..=300).contains(v));
         own.startcmd = first(&options, "remotecommand").filter(|c| !c.eq_ignore_ascii_case("none")).map(str::to_string);
-        // `SetEnv` darf mehrfach stehen; alle Zeilen zählen. Dieselbe Schreibweise benutzt der Tresor.
+        // `SetEnv` may appear several times; all lines count. The vault uses the same notation.
         let env: Vec<&str> = options.iter().filter(|(k, _)| *k == "setenv").map(|(_, v)| *v).collect();
         if !env.is_empty() {
             own.env = Some(env.join(" "));
@@ -235,7 +235,7 @@ pub fn parse(text: &str, home: &str, include: &dyn Fn(&str) -> Vec<String>) -> D
     }
 
     for (index, chain) in jumps {
-        // `ProxyJump a,b`: erst a, von dort b, von dort das Ziel. Das Ziel springt also über b, b über a.
+        // `ProxyJump a,b`: first a, from there b, from there the destination. So the destination jumps via b, b via a.
         let mut previous: Option<usize> = None;
         for hop in chain.split(',').map(str::trim).filter(|h| !h.is_empty()) {
             let (user, address, port) = user_host_port(hop);
@@ -243,7 +243,7 @@ pub fn parse(text: &str, home: &str, include: &dyn Fn(&str) -> Vec<String>) -> D
             let at = match known {
                 Some(at) => at,
                 None if usable_address(&address) => {
-                    // Ein Sprung-Server, der nur hier genannt ist, wird zu einem eigenen Host.
+                    // A jump host only named here becomes a host of its own.
                     draft.hosts.push(DraftHost { name: host_name(&address, &address), address, own: Values { user, port: port.filter(|p| *p != 22), ..Values::default() }, ..DraftHost::default() });
                     let at = draft.hosts.len() - 1;
                     if let Some(before) = previous {
@@ -335,7 +335,7 @@ Host *
         assert_eq!(bastion.own.timeout, Some(20));
         assert_eq!(draft.keys[bastion.own.key.unwrap()].source, KeySource::File("C:\\Users\\ich\\.ssh\\id_ed25519".into()));
 
-        // `%h` wird ersetzt; der erste passende Wert gewinnt, also „admin“ aus `Host *` nur, wo nichts davor steht.
+        // `%h` is replaced; the first matching value wins, so “admin” from `Host *` only where nothing comes before it.
         let web = host(&draft, "web-01");
         assert_eq!(web.address, "web-01.intern.example");
         assert_eq!(web.own.user.as_deref(), Some("admin"));
@@ -344,7 +344,7 @@ Host *
         let db = host(&draft, "db");
         assert_eq!((db.address.as_str(), db.own.port, db.own.user.as_deref()), ("10.20.1.5", Some(5022), Some("postgres")));
         assert_eq!(db.own.env.as_deref(), Some("LANG=C TERM_PROGRAM=\"mein ssh\""));
-        // Kette: Ziel über bastion, bastion bleibt, wie er ist; der nur hier genannte Rechner wird ein eigener Host.
+        // Chain: destination via bastion, bastion stays as it is; the machine only named here becomes a host of its own.
         assert_eq!(db.own.jump, Jump::Host(0));
         let gate = host(&draft, "gate.example.org");
         assert_eq!((gate.own.user.as_deref(), gate.own.port), (Some("deploy"), Some(2222)));
@@ -385,7 +385,7 @@ Host *
         assert_eq!(host(&draft, "aus-datei").own.user.as_deref(), Some("eigen"));
         assert_eq!(host(&draft, "nach").own.user.as_deref(), Some("alle"));
 
-        // Eine Datei, die sich selbst einbindet, endet nach wenigen Stufen.
+        // A file that includes itself ends after a few levels.
         let looping = parse("Include selbst\nHost a\n", "", &|_| vec!["Include selbst\nHost b\n".to_string()]);
         assert!(looping.hosts.iter().any(|h| h.name == "a") && looping.hosts.iter().any(|h| h.name == "b"));
 

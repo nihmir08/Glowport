@@ -1,4 +1,4 @@
-//! `known_hosts` von OpenSSH: die Server-Schlüssel, denen der Nutzer dort schon vertraut hat.
+//! OpenSSH's `known_hosts`: the server keys the user already trusted there.
 
 use base64::engine::general_purpose::{STANDARD, STANDARD_NO_PAD};
 use base64::Engine;
@@ -8,19 +8,19 @@ use crate::{port, usable_address, Draft, DraftKnownHost};
 
 const KINDS: [&str; 6] = ["ssh-ed25519", "ssh-rsa", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521", "ssh-dss"];
 
-/// Schlüssel als Zeile ohne Kommentar und sein Fingerabdruck, beides wie bei OpenSSH.
+/// Key as a line without comment and its fingerprint, both as in OpenSSH.
 pub(crate) fn encode(algorithm: &str, blob: &[u8]) -> (String, String) {
     (format!("{algorithm} {}", STANDARD.encode(blob)), format!("SHA256:{}", STANDARD_NO_PAD.encode(Sha256::digest(blob))))
 }
 
-/// Sieht der Text nach `known_hosts` aus? Jede Zeile nennt dann Namen, Verfahren und einen Schlüssel.
+/// Does the text look like `known_hosts`? Every line then names hosts, algorithm and a key.
 pub fn looks_like(text: &str) -> bool {
     let mut lines = text.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).peekable();
     lines.peek().is_some() && lines.take(20).all(|line| line.split_whitespace().any(|word| KINDS.contains(&word) || word.starts_with("sk-")))
 }
 
-/// Liest die Datei. Verdeckte Namen (`HashKnownHosts`) lassen sich nicht zurückgewinnen und werden nur gezählt;
-/// Muster für viele Hosts und Zertifizierungsstellen übernimmt Glowport hier nicht.
+/// Reads the file. Hashed names (`HashKnownHosts`) cannot be recovered and are only counted;
+/// patterns for many hosts and certificate authorities are not taken over here.
 pub fn parse(text: &str) -> Draft {
     let mut draft = Draft::default();
     let mut hashed = 0;
@@ -28,7 +28,7 @@ pub fn parse(text: &str) -> Draft {
         let mut fields = line.split_whitespace();
         let Some(mut names) = fields.next() else { continue };
         if names.starts_with('@') {
-            // `@cert-authority` und `@revoked` sind keine Schlüssel einzelner Server.
+            // `@cert-authority` and `@revoked` are not keys of individual servers.
             draft.skip(fields.next().unwrap_or(names), "pattern");
             continue;
         }
@@ -41,7 +41,7 @@ pub fn parse(text: &str) -> Draft {
             draft.skip(names, "invalid");
             continue;
         };
-        // Der Schlüssel nennt sein Verfahren selbst; stimmt das nicht mit der Zeile überein, ist sie beschädigt.
+        // The key names its algorithm itself; if that does not match the line, the line is damaged.
         if blob.len() < 4 + algorithm.len() || &blob[4..4 + algorithm.len()] != algorithm.as_bytes() {
             draft.skip(names, "invalid");
             continue;
@@ -79,7 +79,7 @@ pub fn parse(text: &str) -> Draft {
 mod tests {
     use super::*;
 
-    // Echte Schlüssel aus einem Wegwerf-Lauf von `ssh-keygen`; der Fingerabdruck stammt von `ssh-keygen -lf`.
+    // Real keys from a throwaway run of `ssh-keygen`; the fingerprint comes from `ssh-keygen -lf`.
     const ED: &str = "AAAAC3NzaC1lZDI1NTE5AAAAIG8xl5W2c2FrEsznplCeG1VfI9zSm9CciIj3drnCX2xq";
     const ED_FINGERPRINT: &str = "SHA256:tD76U1hNhVuXZzAUSjsGP8WEJgAy+hQIg7VMbjQZ6wU";
 
