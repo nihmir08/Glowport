@@ -1,7 +1,7 @@
-# Glowport Sync-Server mit Docker. Anleitung: docs/sync-server.md
-# Start in diesem Ordner:  docker compose up -d --build
-# Einrichtungscode:        docker compose logs glowport-sync
-# Verwaltung:              docker compose exec glowport-sync glowport-sync accounts
+# Glowport sync server with Docker. Guide: docs/sync-server.md
+# Start in this folder:    docker compose up -d --build
+# Setup code:              docker compose logs glowport-sync
+# Administration:          docker compose exec glowport-sync glowport-sync accounts
 
 services:
   glowport-sync:
@@ -9,11 +9,11 @@ services:
       context: ..
       dockerfile: server/Dockerfile
     restart: unless-stopped
-    # Nur für den vorgeschalteten Webserver auf demselben Rechner erreichbar. Er übernimmt TLS.
+    # Only reachable for the web server in front on the same machine. It handles TLS.
     ports:
       - "127.0.0.1:8787:8787"
     environment:
-      # Der vorgeschaltete Webserver nennt den Absender in X-Forwarded-For.
+      # The web server in front names the sender in X-Forwarded-For.
       GLOWPORT_SYNC_TRUST_PROXY: "1"
     volumes:
       - glowport-sync-data:/data

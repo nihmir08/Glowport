@@ -1,6 +1,6 @@
-// Bilder für die README: die Oberfläche auf Englisch mit den Beispieldaten des Ersatz-Kerns (backend-fake.ts),
-// aufgenommen in einem unsichtbaren Edge mit eigenem Profil. Aufruf im Projektordner, während die Vorschau läuft
-// (`npm run dev`, Port 1420): node scripts/readme-bilder.mjs [Zielordner]
+// Pictures for the README: the interface in English with the stand-in core's sample data (backend-fake.ts),
+// captured in an invisible Edge with its own profile. Run in the project folder while the preview is running
+// (`npm run dev`, port 1420): node scripts/readme-images.mjs [target folder]
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -18,7 +18,7 @@ const profile = join(tmpdir(), 'glowport-readme-bilder');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const PASSWORD = 'vorschau-bilder';
 
-/** Der englische Text zu einem deutschen: So lassen sich die Knöpfe beim Namen nennen wie in den anderen Skripten. */
+/** The English text for a German one: that way buttons can be named the same way as in the other scripts. */
 const tr = (text) => {
   const key = Object.keys(de).find((k) => de[k] === text);
   if (!key) throw new Error(`Kein Text „${text}“ in de.ts`);
@@ -89,7 +89,7 @@ async function connect() {
   throw new Error('Edge nicht erreichbar. Läuft die Vorschau auf Port 1420?');
 }
 
-// Siehe scripts/bilder.mjs: Vergrößerung durch den Browser selbst, damit xterm.js scharf zeichnet; `--guest` ohne Microsoft-Konto.
+// See scripts/mockups.mjs: scaling by the browser itself so xterm.js draws sharply; `--guest` without a Microsoft account.
 const edge = spawn(EDGE, ['--headless=new', '--guest', `--remote-debugging-port=${PORT}`, `--user-data-dir=${profile}`, `--window-size=${SIZE.width},${SIZE.height}`, '--force-device-scale-factor=1.5', '--hide-scrollbars', URL], { stdio: 'ignore' });
 try {
   const page = await connect();
@@ -144,7 +144,7 @@ try {
     await run(`await until(()=>pane(${JSON.stringify(name)})?.querySelector('.xterm-screen')); await wait(900)`);
   };
 
-  // Englische Oberfläche, bevor der Beispiel-Tresor entsteht: Dann heißen auch Gruppen und Snippets englisch.
+  // English interface before the sample vault is created: then groups and snippets get English names too.
   await settled('.lock-card');
   await run(`localStorage.setItem('glowport.settings', JSON.stringify({ lang: 'en' })); location.reload();`).catch(() => {});
   await sleep(1000);
@@ -157,12 +157,12 @@ try {
     await until(()=>card('Production'));
   `);
 
-  // 1 · Hosts: die Wurzel mit Arbeitsbereichen und Gruppen, dann eine Gruppe mit ihren Vorgaben und Hosts.
+  // 1 · Hosts: the root with workspaces and groups, then a group with its defaults and hosts.
   await shot('hosts-overview');
   await run(`card('Production').click(); await until(()=>card('Web')); card('Web').click(); await until(()=>card('web-01')); card('web-01').click(); await wait(500);`);
   await shot('hosts');
 
-  // 2 · Ein Arbeitsbereich: drei geteilte Terminals mit einem Klick.
+  // 2 · A workspace: three split terminals with one click.
   await run(`q('.crumbs button[data-group=""]').click(); await until(()=>byText('.group.ws','Deploy round')); byText('.group.ws','Deploy round').click(); await until(()=>q('.detail .lprev'));
     byText('.detail .btn',${s('Öffnen')}).click(); await until(()=>qa('.pane:not(.off) .xterm-screen').length === 3); await wait(1200);`);
   await command('web-01', 'uptime');
@@ -171,14 +171,14 @@ try {
   await command('db-01', 'whoami');
   await shot('terminals');
 
-  // 3 · Ein Terminal mit Seitenleiste: Auslastung des Servers.
+  // 3 · A terminal with sidebar: the server's load.
   await openHost('pve-01');
   await command('pve-01', 'uptime');
-  // Ohne Dateileiste: Das Heimatverzeichnis von root ist leer.
+  // Without the file panel: root's home directory is empty.
   await run(`if(bar()) byText('.tbar .btn','Files').click(); titled(${s('Server-Info und Snippets neben dem Terminal zeigen')}).click(); await until(()=>q('.side .meter')); await wait(15000);`);
   await shot('server-info');
 
-  // 4 · Docker in der Seitenleiste.
+  // 4 · Docker in the sidebar.
   await openHost('web-01');
   await run(`if(!q('.side')) titled(${s('Server-Info und Snippets neben dem Terminal zeigen')}).click(); await until(()=>q('.side')); await side('Docker'); await until(()=>srow('shop-web'));`);
   await shot('docker');
@@ -190,7 +190,7 @@ try {
   await command('web-01', 'ls');
   await shot('file-sidebar');
 
-  // 6 · Seite „Dateien“: Server zu Server.
+  // 6 · Files page: server to server.
   const hosts = await run(`return JSON.parse(localStorage.getItem('glowport.fakevault')).hosts.map(h=>({id:h.id,name:h.name}))`);
   const id = (name) => hosts.find((h) => h.name === name).id;
   await run(`await nav(4); await until(()=>qa('.fcol').length===2);
@@ -202,14 +202,14 @@ try {
   await run(`await nav(2); await until(()=>rule('Grafana')); rule('Grafana').querySelector('.swt').click(); rule('SOCKS via bastion').querySelector('.swt').click(); await until(()=>qa('.rows .chip.ok').length===2); await wait(3200);`);
   await shot('port-forwarding');
 
-  // 8 · Ein Snippet auf allen Hosts, mit Ergebnis je Host.
+  // 8 · A snippet on all hosts, with a result per host.
   await run(`await nav(3); await until(()=>rule('Disk usage')); rule('Disk usage').querySelector('.btn').click(); await until(()=>q('.dlg .picklist'));
     byText('.dlg .pickbar .btn',${s('Alle')}).click(); await wait(150);
     q('.dlg .dlg-a .btn.primary').click(); await until(()=>q('.dlg .fld-h') && byText('.dlg .fld-h',${JSON.stringify(tr('Fertig: {ok} ohne Fehler, {failed} mit Fehler.').split(':')[0])}),30000); await wait(300);`);
   await shot('snippets');
   await run(`byText('.dlg .btn',${s('Schließen')}).click(); await wait(250);`);
 
-  // 9 · Schlüssel.
+  // 9 · Keys.
   await run(`await nav(1); await wait(500);`);
   await shot('keys');
 
@@ -217,7 +217,7 @@ try {
   await run(`await nav(7); await until(()=>q('.pve-row')); await wait(1500);`);
   await shot('proxmox');
 
-  // 11 · Sync und Teilen: eigener Server, ein geteilter Tresor mit Mitgliedern.
+  // 11 · Sync and sharing: own server, a shared vault with members.
   await run(`await nav(8); await until(()=>q('.setup-wrap'));
     fill(${s('Adresse des Sync-Servers')},'sync.example.com'); await wait(100);
     button(${s('Prüfen')}).click(); await until(()=>q('.okline'));
@@ -226,14 +226,14 @@ try {
     top(); card('Team Infra').click(); await until(()=>q('.vault-detail')); await wait(400);`);
   await shot('sync');
 
-  // 12 · Import aus anderen Programmen.
-  // Die Meldung vom Einrichten des Abgleichs erst ausklingen lassen.
+  // 12 · Import from other programs.
+  // First let the message from setting up sync fade out.
   await run(`await until(()=>!q('.toasts .toast'),15000); await nav(0); byText('.ph .acts .btn',${s('Importieren')}).click(); await until(()=>q('.imp-found')); await wait(400);`);
   await shot('import');
   await key('Escape', 'Escape', 27);
   await sleep(300);
 
-  // 13 · Schnellverbindung über die Suche.
+  // 13 · Quick connect via search.
   await run(`document.activeElement?.blur()`);
   await key('k', 'KeyK', 75, 2);
   await run(`await until(()=>q('.pal input'))`);
@@ -247,11 +247,11 @@ try {
   await run(`await nav(9); await until(()=>q('.schemes')); byText('.sec','Terminal').scrollIntoView({ block: 'start' }); await wait(300);`);
   await shot('themes');
 
-  // 15 · Hell: die geteilten Terminals.
+  // 15 · Light: the split terminals.
   await run(`top(); byText('.seg button',${s('Hell')}).click(); await wait(300); byText('.tabs .tab','Deploy round').click(); await wait(800);`);
   await shot('light');
 
-  // 16 · Titelbild aus scripts/readme-banner.html; es zeigt das Bild der geteilten Terminals aus docs/images.
+  // 16 · Banner from scripts/readme-banner.html; it shows the picture of the split terminals from docs/images.
   await page.send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 560, deviceScaleFactor: 0, mobile: false });
   await page.send('Page.navigate', { url: pathToFileURL(resolve('scripts/readme-banner.html')).href });
   await sleep(1500);

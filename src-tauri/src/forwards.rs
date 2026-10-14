@@ -1,11 +1,11 @@
-//! Port-Regeln im Betrieb: einschalten, ausschalten, Stand melden, nach einem Abriss neu verbinden.
+//! Port rules in operation: switch on, switch off, report state, reconnect after a drop.
 //!
-//! Die Regeln selbst liegen im Tresor. Hier steht nur, welche gerade eingeschaltet sind. Sie gehören dem Programm,
-//! nicht einem Fenster, und laufen weiter, wenn kein Terminal offen ist; beim Beenden des Programms enden sie.
+//! The rules themselves live in the vault. Only which ones are switched on right now is kept here. They belong to the program,
+//! not to a window, and keep running when no terminal is open; they end when the program ends.
 //!
-//! Das Einschalten baut eine eigene Verbindung auf und darf dabei fragen wie ein Terminal (unbekannter Server,
-//! Passwort): Der Aufbau läuft als Eintrag der Sitzungsverwaltung, bis die Weiterleitung steht. Reißt die Verbindung
-//! später ab, wird ohne Rückfragen neu verbunden; bräuchte das eine, bleibt die Regel als gescheitert stehen.
+//! Switching on establishes a connection of its own and may ask like a terminal while doing so (unknown server,
+//! password): setup runs as an entry of the session manager until the forward stands. If the connection drops
+//! later, it reconnects without prompts; if that would need one, the rule stays marked as failed.
 
 use std::{
     collections::HashMap,
@@ -33,7 +33,7 @@ use crate::{
     sessions,
 };
 
-/// Wartezeiten vor den Versuchen, nach einem Abriss neu zu verbinden, in Sekunden. Danach bleibt es bei der letzten.
+/// Waiting times before the attempts to reconnect after a drop, in seconds. After that the last one stays.
 const BACKOFF: [u32; 5] = [2, 5, 10, 20, 30];
 
 #[derive(Default)]
@@ -42,20 +42,20 @@ pub struct Forwards {
     rules: Mutex<HashMap<String, Running>>,
 }
 
-/// Eine eingeschaltete Regel.
+/// A switched-on rule.
 struct Running {
-    /// Unterscheidet Einschalt-Vorgänge derselben Regel. Wer nicht mehr der aktuelle ist, ändert nichts mehr.
+    /// Tells apart switch-on runs of the same rule. Whoever is no longer the current one changes nothing more.
     turn: u64,
     phase: Phase,
-    /// Fehlercode und Meldung, solange sie gescheitert ist oder neu verbindet.
+    /// Error code and message while it has failed or is reconnecting.
     error: Option<(String, String)>,
     counters: Arc<Counters>,
-    /// Seit wann die Weiterleitung steht, in Millisekunden seit 1970.
+    /// Since when the forward stands, in milliseconds since 1970.
     since: Option<i64>,
     retry_in: Option<u32>,
-    /// Nummer des Verbindungsaufbaus in der Sitzungsverwaltung, solange er läuft; damit lässt er sich abbrechen.
+    /// Number of the connection setup in the session manager while it runs; it can be cancelled with it.
     connecting: Option<u64>,
-    /// Beendet die Aufgabe, die über die stehende Weiterleitung wacht.
+    /// Ends the task that watches over the standing forward.
     stop: Option<oneshot::Sender<()>>,
 }
 
@@ -67,7 +67,7 @@ enum Phase {
     Failed,
 }
 
-/// Stand einer eingeschalteten Regel für die Oberfläche.
+/// State of a switched-on rule for the interface.
 #[derive(Serialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ForwardState {
@@ -114,7 +114,7 @@ impl Forwards {
         list
     }
 
-    /// Ändert eine Regel, wenn `turn` noch ihr aktueller Einschalt-Vorgang ist. Liefert, ob das so war.
+    /// Changes a rule if `turn` is still its current switch-on run. Returns whether that was the case.
     fn update(&self, id: &str, turn: u64, change: impl FnOnce(&mut Running)) -> bool {
         match self.rules().get_mut(id) {
             Some(rule) if rule.turn == turn => {
@@ -134,7 +134,7 @@ fn now_ms() -> i64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |since| since.as_millis() as i64)
 }
 
-/// Fehlercode und Meldung zu dem, woran ein Aufbau gescheitert ist.
+/// Error code and message for what a setup failed on.
 fn reason(end: &End) -> (String, String) {
     let (code, message) = match end {
         End::User => ("needs_prompt", ""),
@@ -148,7 +148,7 @@ fn reason(end: &End) -> (String, String) {
     (code.to_string(), message.to_string())
 }
 
-/// Was der Verbindungskern für eine Regel einrichten soll.
+/// What the connection core should set up for a rule.
 fn rule_of(view: &ForwardView) -> Rule {
     match view.kind {
         ForwardKind::Local => Rule::Local { host: view.dest_host.clone(), port: view.dest_port },
@@ -157,8 +157,8 @@ fn rule_of(view: &ForwardView) -> Rule {
     }
 }
 
-/// Öffnet den Port auf diesem Rechner, an dem eine lokale oder dynamische Regel lauscht. `None` für eine Regel,
-/// bei der der Server lauscht. So zeigt sich ein belegter Port sofort und nicht erst nach der Anmeldung.
+/// Opens the port on this machine that a local or dynamic rule listens on. `None` for a rule
+/// where the server listens. That way a port in use shows at once and not only after signing in.
 async fn listen(view: &ForwardView) -> CmdResult<Option<TcpListener>> {
     if view.kind == ForwardKind::Remote {
         return Ok(None);
@@ -170,7 +170,7 @@ async fn listen(view: &ForwardView) -> CmdResult<Option<TcpListener>> {
     }
 }
 
-/// Liest Regel und Verbindungsdaten aus dem Tresor.
+/// Reads rule and connection details from the vault.
 fn plan(app: &AppHandle, id: &str) -> CmdResult<(ForwardView, Connect, String)> {
     let state = app.state::<AppState>();
     let mut session = state.session();
@@ -181,8 +181,8 @@ fn plan(app: &AppHandle, id: &str) -> CmdResult<(ForwardView, Connect, String)> 
     Ok((view, connect, label))
 }
 
-/// Schaltet eine Regel ein. Liefert die Nummer des Verbindungsaufbaus: Unter ihr kommen Rückfragen als Ereignis
-/// `session`, und `session_answer` nimmt die Antworten an. Wie es der Regel geht, meldet das Ereignis `forwards`.
+/// Switches a rule on. Returns the number of the connection setup: prompts arrive under it as the event
+/// `session`, and `session_answer` takes the answers. The `forwards` event reports how the rule is doing.
 #[tauri::command]
 pub async fn forward_start(app: AppHandle, window: Window, id: String) -> CmdResult<u64> {
     let (view, connect, label) = plan(&app, &id)?;
@@ -209,7 +209,7 @@ pub fn forward_list(forwards: State<'_, Forwards>) -> Vec<ForwardState> {
     forwards.list()
 }
 
-/// Nimmt eine Regel aus dem Betrieb: Ein laufender Aufbau wird abgebrochen, eine stehende Weiterleitung getrennt.
+/// Takes a rule out of operation: a running setup is cancelled, a standing forward disconnected.
 fn halt(app: &AppHandle, id: &str) {
     let Some(mut rule) = app.state::<Forwards>().rules().remove(id) else { return };
     if let Some(number) = rule.connecting.take() {
@@ -220,7 +220,7 @@ fn halt(app: &AppHandle, id: &str) {
     }
 }
 
-/// Der Aufbau ist geglückt: Die Weiterleitung steht und wird ab jetzt überwacht.
+/// The setup succeeded: the forward stands and is watched from now on.
 pub(crate) fn adopt(app: &AppHandle, id: &str, turn: u64, tunnel: Tunnel) {
     let (stop, stopped) = oneshot::channel();
     let current = app.state::<Forwards>().update(id, turn, |rule| {
@@ -230,18 +230,18 @@ pub(crate) fn adopt(app: &AppHandle, id: &str, turn: u64, tunnel: Tunnel) {
         rule.connecting = None;
         rule.stop = Some(stop);
     });
-    // Inzwischen ausgeschaltet: Der Tunnel fällt weg und trennt damit die Verbindung.
+    // Switched off in the meantime: the tunnel is dropped and thereby disconnects.
     if current {
         tauri::async_runtime::spawn(supervise(app.clone(), id.to_string(), turn, tunnel, stopped));
         publish(app);
     }
 }
 
-/// Der Aufbau ist gescheitert oder wurde abgebrochen.
+/// The setup failed or was cancelled.
 pub(crate) fn ended(app: &AppHandle, id: &str, turn: u64, end: &End) {
     let forwards = app.state::<Forwards>();
     let current = if *end == End::User {
-        // Der Nutzer hat die Rückfrage abgebrochen: Die Regel ist wieder aus.
+        // The user cancelled the prompt: the rule is off again.
         let mut rules = forwards.rules();
         let mine = rules.get(id).is_some_and(|rule| rule.turn == turn);
         if mine {
@@ -260,8 +260,8 @@ pub(crate) fn ended(app: &AppHandle, id: &str, turn: u64, end: &End) {
     }
 }
 
-/// Wacht über eine stehende Weiterleitung. Reißt die Verbindung ab, wird neu verbunden, bis es klappt, die Regel
-/// ausgeschaltet wird oder feststeht, dass es ohne Rückfrage nicht geht.
+/// Watches over a standing forward. If the connection drops, it reconnects until it works, the rule
+/// is switched off or it is clear that it does not work without a prompt.
 async fn supervise(app: AppHandle, id: String, turn: u64, mut tunnel: Tunnel, mut stopped: oneshot::Receiver<()>) {
     loop {
         let end = tokio::select! {
@@ -301,7 +301,7 @@ async fn supervise(app: AppHandle, id: String, turn: u64, mut tunnel: Tunnel, mu
             };
             match outcome {
                 Ok(tunnel) => break tunnel,
-                // Vorübergehend: gleich noch einmal versuchen, mit längerer Pause.
+                // Temporary: try again right away, with a longer pause.
                 Err(error) if matches!(error.0.as_str(), "connect_failed" | "connection_lost" | "port_in_use" | "bind_failed" | "locked") => {
                     if !forwards.update(&id, turn, |rule| rule.error = Some(error)) {
                         return;
@@ -322,7 +322,7 @@ async fn supervise(app: AppHandle, id: String, turn: u64, mut tunnel: Tunnel, mu
     }
 }
 
-/// Baut die Weiterleitung noch einmal auf, ohne jemanden zu fragen: Nur bekannte Server, nur hinterlegte Zugangsdaten.
+/// Sets up the forward once more without asking anyone: only known servers, only stored credentials.
 async fn reconnect(app: &AppHandle, id: &str, counters: Arc<Counters>) -> Result<Tunnel, (String, String)> {
     let failed = |error: CmdError| (error.code().to_string(), String::new());
     let (view, connect, _) = plan(app, id).map_err(failed)?;
@@ -334,7 +334,7 @@ async fn reconnect(app: &AppHandle, id: &str, counters: Arc<Counters>) -> Result
                 let trusted = app.state::<AppState>().session().directory().is_ok_and(|d| d.judge_host_key(&host, port, &key.openssh) == Verdict::Trusted);
                 let _ = reply.send(trusted);
             }
-            // Niemand da, der antworten könnte: abbrechen. Das endet als „vom Nutzer beendet“ und heißt hier `needs_prompt`.
+            // Nobody there who could answer: cancel. That ends as “ended by the user” and is called `needs_prompt` here.
             Some(Event::Secret { reply, .. }) => drop(reply.send(None)),
             Some(Event::Interactive { reply, .. }) => drop(reply.send(None)),
             Some(Event::Forward(tunnel)) => return Ok(tunnel),
@@ -345,8 +345,8 @@ async fn reconnect(app: &AppHandle, id: &str, counters: Arc<Counters>) -> Result
     }
 }
 
-/// Meldet den Stand jede Sekunde, solange sich etwas tut (Zähler, Verbindungen), und schaltet Regeln aus, die es im
-/// Tresor nicht mehr gibt, etwa weil ihr Host gelöscht wurde. Einmal beim Start aufrufen.
+/// Reports the state every second while something happens (counters, connections), and switches off rules that no longer
+/// exist in the vault, e.g. because their host was deleted. Call once at startup.
 pub fn watch(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut last = Vec::new();
@@ -357,7 +357,7 @@ pub fn watch(app: AppHandle) {
             if on.is_empty() && last.is_empty() {
                 continue;
             }
-            // Bei gesperrtem Tresor lässt sich nicht nachsehen; dann bleibt alles, wie es ist.
+            // With a locked vault nothing can be checked; then everything stays as it is.
             let gone: Vec<String> = match app.state::<AppState>().session().directory() {
                 Ok(directory) => on.into_iter().filter(|id| directory.forward(id).is_err()).collect(),
                 Err(_) => Vec::new(),
@@ -378,7 +378,7 @@ pub fn watch(app: AppHandle) {
 pub fn forward_save(app: AppHandle, state: State<'_, AppState>, rule: ForwardInput, vault: Option<String>) -> CmdResult<Changed> {
     let mut session = state.session();
     let id = session.directory()?.in_vault(vault.as_deref(), |directory| directory.save_forward(rule))?;
-    // Eine geänderte Regel läuft nicht mit den alten Werten weiter.
+    // A changed rule does not keep running with the old values.
     halt(&app, &id);
     publish(&app);
     session.changed(Some(id))

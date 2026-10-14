@@ -1,8 +1,8 @@
-// Ende-zu-Ende-Prüfung des Abgleichs an der echten Programmdatei: drei laufende Programme (zwei Geräte eines
-// Kontos und ein zweites Konto) gegen einen Sync-Server auf diesem PC. Jedes Programm läuft als portable Kopie
-// mit eigenem Datenordner; der echte Tresor des Users und sein Server werden nicht berührt.
-// Aufruf im Projektordner nach `npm run build:dev` und `cargo build -p glowport-sync-server`:
-// node scripts/e2e-sync.mjs [Programmdatei]
+// End-to-end test of syncing on the real executable: three running programs (two devices of one
+// account and a second account) against a sync server on this PC. Every program runs as a portable copy
+// with its own data folder; the user's real vault and server are not touched.
+// Run in the project folder after `npm run build:dev` and `cargo build -p glowport-sync-server`:
+// node scripts/e2e-sync.mjs [executable]
 import { spawn } from 'node:child_process';
 import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -12,8 +12,8 @@ const exeSource = resolve(process.argv[2] ?? 'target/release/glowport-dev.exe');
 const serverExe = resolve('target/debug/glowport-sync.exe');
 const workDir = join(tmpdir(), 'glowport-e2e-sync');
 const SERVER_PORT = 18787;
-// Statt eines eigenen Servers ein schon laufender, frischer (etwa das Linux-Programm im WSL):
-// GLOWPORT_E2E_SERVER=http://127.0.0.1:8787 GLOWPORT_E2E_SETUP=<Einrichtungscode> node scripts/e2e-sync.mjs
+// Instead of a server of its own, an already running fresh one (e.g. the Linux program in WSL):
+// GLOWPORT_E2E_SERVER=http://127.0.0.1:8787 GLOWPORT_E2E_SETUP=<setup code> node scripts/e2e-sync.mjs
 const EXTERNAL = process.env.GLOWPORT_E2E_SERVER;
 const SERVER = EXTERNAL ?? `http://127.0.0.1:${SERVER_PORT}`;
 const PW_ANNA = 'e2e-abgleich-anna';
@@ -29,7 +29,7 @@ const ok = (name, cond, extra = '') => {
 rmSync(workDir, { recursive: true, force: true });
 mkdirSync(workDir, { recursive: true });
 
-/** Startet den Sync-Server und liefert den Einrichtungscode für das erste Konto. */
+/** Starts the sync server and returns the setup code for the first account. */
 function startServer() {
   if (EXTERNAL) return { child: null, code: Promise.resolve(process.env.GLOWPORT_E2E_SETUP ?? '') };
   const child = spawn(serverExe, ['--listen', `127.0.0.1:${SERVER_PORT}`, '--data', join(workDir, 'server')], { stdio: ['ignore', 'pipe', 'inherit'] });
@@ -58,7 +58,7 @@ const host=(name,extra={})=>({name,address:'10.0.0.1',group:null,color:null,os:n
 const type=(el,text)=>{el.focus();Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,text);el.dispatchEvent(new Event('input',{bubbles:true}))};
 `;
 
-/** Ein laufendes Glowport: eigene Kopie, eigener Datenordner, eigene Debug-Schnittstelle. */
+/** A running Glowport: its own copy, its own data folder, its own debug interface. */
 class Instance {
   constructor(name, port) {
     this.name = name;
@@ -67,7 +67,7 @@ class Instance {
     mkdirSync(join(this.dir, 'data'), { recursive: true });
     copyFileSync(exeSource, join(this.dir, 'glowport.exe'));
     writeFileSync(join(this.dir, 'portable'), '');
-    // Deutsch von Anfang an: Die Prüfung liest Texte der Oberfläche.
+    // German from the start: the test reads interface texts.
     writeFileSync(join(this.dir, 'data', 'settings.json'), JSON.stringify({ lang: 'de' }));
   }
 
@@ -77,7 +77,7 @@ class Instance {
     return this.attach();
   }
 
-  /** Verbindet mit dem Fenster, etwa nachdem sich das Programm selbst neu gestartet hat. */
+  /** Connects to the window, e.g. after the program restarted itself. */
   async attach() {
     for (let i = 0; i < 120; i++) {
       try {
@@ -107,7 +107,7 @@ class Instance {
     throw new Error(`${this.name}: Debug-Schnittstelle nicht erreichbar`);
   }
 
-  /** Führt Code im Fenster aus; `invoke` ruft die Befehle des Kerns wie die Oberfläche. */
+  /** Runs code in the window; `invoke` calls the core's commands like the interface does. */
   async run(body) {
     const timeout = new Promise((_, no) => setTimeout(() => no(new Error(`${this.name}: Schritt antwortet nicht (60 s)`)), 60_000));
     const r = await Promise.race([this.send('Runtime.evaluate', { expression: `(async()=>{${HELPERS}${body}})()`, awaitPromise: true, returnByValue: true }), timeout]);
@@ -132,7 +132,7 @@ try {
   const setupCode = await server.code;
   await Promise.all([a.start(), b.start(), c.start()]);
 
-  // ── Ein Tresor wird zum Konto ──────────────────────────────────────────────────────────────────────────
+  // ── A vault becomes an account ─────────────────────────────────────────────────────────────────────────
   await a.run(`await invoke('vault_create',{password:${J(PW_ANNA)}}); for (const n of ['web-01','db-01']) await invoke('host_save',{host:host(n)});`);
   const probe = await a.run(`return await invoke('sync_probe',{server:${J(SERVER + '/')}})`);
   ok('m9 Der Server antwortet und wartet auf sein erstes Konto', probe.server === SERVER && probe.fresh === true, J(probe));
@@ -145,9 +145,9 @@ try {
   ok('m9 Der eigene Sicherheitscode hat sechs Wörter', synced?.code.split(' · ').length === 6, synced?.code);
   ok('m9 Die Statusleiste zeigt „Abgeglichen“', await a.run(`return !!(await until(()=>q('.st .st-x .sdot.synced')))`));
 
-  // ── Zweites Gerät: nur Benutzername und Master-Passwort ───────────────────────────────────────────────
+  // ── Second device: only user name and master password ─────────────────────────────────────────────────
   ok('m9 Mit Konto anmelden: falsches Passwort wird abgelehnt', (await b.run(`return await fails(invoke('sync_login',{request:{server:${J(SERVER)},username:'anna',password:'falsch-falsch',device:'Laptop'}}))`)) === 'unauthorized');
-  // Von hier an über den echten Startbildschirm, wie es ein Mensch tut.
+  // From here on through the real start screen, the way a human does it.
   const wrongAddress = await b.run(`
     (await until(()=>qa('.linkbtn').at(-1))).click();
     await until(()=>q('form.setup'));
@@ -172,7 +172,7 @@ try {
   ok('m9 Das zweite Gerät zeigt die Hosts des ersten, und sie bleiben stehen', joined.arrived && joined.least === 2 && J(joined.names) === J(['db-01', 'web-01']), J(joined));
   ok('m9 Seine Oberfläche zeigt den offenen Tresor', await b.run(`return !!(await until(()=>q('.nav')))`));
 
-  // ── Änderungen kommen von selbst an ───────────────────────────────────────────────────────────────────
+  // ── Changes arrive by themselves ──────────────────────────────────────────────────────────────────────
   const started = Date.now();
   const added = await a.run(`return (await invoke('host_save',{host:host('neu-von-a')})).id`);
   const seen = await b.run(`return await until(async()=>(await hostNames()).includes('neu-von-a'), 15000)`);
@@ -182,12 +182,12 @@ try {
   const devices = await a.run(`return (await invoke('sync_devices')).map(d=>[d.name,d.current])`);
   ok('m9 Die Geräteliste nennt beide Geräte mit Namen', J(devices) === J([['PC', true], ['Laptop', false]]), J(devices));
 
-  // ── Zweites Konto über einen Einladungscode ───────────────────────────────────────────────────────────
+  // ── Second account via an invitation code ─────────────────────────────────────────────────────────────
   await c.run(`await invoke('vault_create',{password:${J(PW_BERT)}}); await invoke('host_save',{host:host('berts-server')});`);
   ok('m9 Ohne Code kein zweites Konto', (await c.run(`return await fails(invoke('sync_register',{request:{server:${J(SERVER)},code:${J(setupCode)},username:'bert',password:${J(PW_BERT)},device:'Berts PC'}}))`)) === 'code_invalid');
   const invite = await a.run(`return (await invoke('admin_invite_create')).at(-1).code`);
   ok('m9 Der Verwalter erzeugt einen Einladungscode', /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(invite), invite);
-  // „Neues Konto“ im Fenster: Gemeint ist das Master-Passwort dieses Geräts, und das Formular sagt es.
+  // “New account” in the window: this device's master password is meant, and the form says so.
   const form = await c.run(`
     qa('.nv').at(-2).click();
     await until(()=>q('form.setup'));
@@ -230,7 +230,7 @@ try {
   `);
   ok('m9 Seite „Hosts“: Umschalter mit allen Tresoren, der Host trägt die Marke seines Tresors', J(badges) === J({ tabs: ['Alle', 'Persönlich', 'Team Infra'], badge: 'Team Infra' }), J(badges));
 
-  // ── Verschieben, mehr Rechte, zweites eigenes Gerät ───────────────────────────────────────────────────
+  // ── Moving, more permissions, second own device ───────────────────────────────────────────────────────
   const web = await a.run(`return (await snapshot()).hosts.find(h=>h.name==='web-01').id`);
   const moved = await a.run(`return (await invoke('host_move',{id:${J(web)},vault:${J(team)},carry:true})).id`);
   ok('m9 Ein vorhandener Host zieht in den geteilten Tresor um', moved !== web && (await a.run(`return (await snapshot()).homes[${J(moved)}]`)) === team);
@@ -242,7 +242,7 @@ try {
   const onLaptop = await b.run(`return await until(async()=>{const s=await snapshot(); const v=s.vaults.find(v=>v.id===${J(team)}); return v && s.hosts.some(h=>h.name==='team-host') ? [v.name,v.role] : null}, 15000)`);
   ok('m9 Das zweite Gerät der Besitzerin hat den Tresor von selbst, als Besitzerin', J(onLaptop) === J(['Team Infra', 'owner']), J(onLaptop));
 
-  // ── Entfernen tauscht den Schlüssel ───────────────────────────────────────────────────────────────────
+  // ── Removing rotates the key ──────────────────────────────────────────────────────────────────────────
   await a.run(`await invoke('shared_remove',{vault:${J(team)},account:${J(candidate.account)}})`);
   ok('m9 Nach dem Entfernen verschwindet der Tresor beim Mitglied', (await c.run(`return await until(async()=>(await snapshot()).vaults.length===1, 15000)`)) === true);
   const leftover = await c.run(`return [await hostNames(), (await invoke('sync_notices')).map(n=>n.kind)]`);
@@ -250,7 +250,7 @@ try {
   ok('m9 Die Besitzerin arbeitet mit dem neuen Schlüssel weiter', (await a.run(`await invoke('host_save',{host:host('nach-dem-tausch'),vault:${J(team)}}); return (await snapshot()).vaults.find(v=>v.id===${J(team)}).members.length`)) === 1);
   ok('m9 … und ihr zweites Gerät folgt', (await b.run(`return await until(async()=>(await hostNames()).includes('nach-dem-tausch'), 15000)`)) === true);
 
-  // ── Master-Passwort ändern ────────────────────────────────────────────────────────────────────────────
+  // ── Changing the master password ──────────────────────────────────────────────────────────────────────
   await a.run(`await invoke('vault_change_password',{old:${J(PW_ANNA)},new:${J(PW_ANNA_NEU)},logoutOthers:false})`);
   ok('m9 Passwort geändert: Das andere Gerät erfährt es', (await b.run(`return await until(async()=>(await invoke('sync_now')).passwordChanged, 15000)`)) === true);
   const unlocks = await b.run(`
@@ -260,7 +260,7 @@ try {
   ok('m9 Dort öffnet das alte, bis das neue einmal benutzt wurde; danach nur noch das neue', J(unlocks) === J([null, null, 'wrong_password', null]), J(unlocks));
   ok('m9 Nach dem Entsperren läuft der Abgleich wieder', (await b.run(`return await until(async()=>{const s=await invoke('sync_state'); return s.linked && s.phase==='synced'}, 15000)`)) === true);
 
-  // ── Abmelden und Daten löschen (offen und verbunden) ───────────────────────────────────────────────────
+  // ── Sign out and delete data (open and connected) ──────────────────────────────────────────────────────
   const wipeAsk = await c.run(`
     qa('.nv').at(-1).click();
     const open = await until(()=>qa('.row').find(r=>r.textContent.includes('Abmelden und Daten löschen'))?.querySelector('.btn'));
@@ -274,7 +274,7 @@ try {
     return { linked: text.includes(${J(SERVER)}), blocked, freed };
   `).catch((e) => ({ error: e.message }));
   ok('Löschen: Die Rückfrage nennt den Sync-Server und verlangt das Häkchen', wipeAsk.linked && wipeAsk.blocked && wipeAsk.freed, J(wipeAsk));
-  // Das alte Programm endet mit dem Neustart; erst danach gehört die Debug-Schnittstelle dem neuen.
+  // The old program ends with the restart; only afterwards does the debug interface belong to the new one.
   const ended = await Promise.race([new Promise((done) => (c.child.exitCode !== null ? done(true) : c.child.once('exit', () => done(true)))), sleep(20_000).then(() => false)]);
   ok('Löschen: Das Programm beendet sich zum Neustart', ended);
   await c.attach();
@@ -282,10 +282,10 @@ try {
   ok('Löschen: Glowport startet neu, ohne Tresor und ohne Anmeldung', J(wiped) === J(['missing', 'Tresor anlegen', false]), J(wiped));
   const bertDevices = await a.run(`return (await invoke('admin_accounts')).find(x=>x.username==='bert')?.devices`);
   ok('Löschen: Das Gerät ist beim Server abgemeldet', bertDevices === 0, J(bertDevices));
-  // Ohne Tresor und Sitzungen schließt das Fenster ohne Rückfrage; das neu gestartete Programm gehört nicht der Prüfung.
+  // Without vault and sessions the window closes without asking; the restarted program does not belong to the test.
   await c.run(`q('.wc .cl').click()`).catch(() => {});
 
-  // ── Gerät abmelden, trennen ───────────────────────────────────────────────────────────────────────────
+  // ── Sign out device, disconnect ───────────────────────────────────────────────────────────────────────
   const laptop = await a.run(`return (await invoke('sync_devices')).find(d=>!d.current).id`);
   await a.run(`await invoke('sync_device_remove',{id:${J(laptop)}})`);
   ok('m9 Ein abgemeldetes Gerät merkt es und behält seinen Tresor', (await b.run(`return await until(async()=>(await invoke('sync_now').catch(()=>invoke('sync_state'))).phase==='signedOut', 15000)`)) === true && (await b.run(`return (await hostNames()).length`)) > 0);

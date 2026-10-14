@@ -6,7 +6,7 @@
 set -eu
 
 cd "$(dirname "$0")/.."
-# Nicht in den Ordner `target` des Projekts: Der gehört dem Bau unter Windows, und auf dessen Laufwerk wäre es langsam.
+# Not into the project's `target` folder: it belongs to the Windows build, and on that drive it would be slow.
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$HOME/.cache/glowport-target}"
 target=x86_64-unknown-linux-musl
 

@@ -1,12 +1,12 @@
-// Packt die portable Fassung: Programm, die Datei `portable` und eine kurze Anleitung in einem Zip.
-// Liegt neben dem Programm eine Datei `portable`, bleiben alle Daten im Ordner `data` daneben (siehe src-tauri/src/lib.rs).
-// Aufruf im Projektordner nach `npm run build:app`; `npm run portable` macht beides.
+// Packs the portable version: program, the `portable` file and a short guide in one zip.
+// If a `portable` file sits next to the program, all data stays in the `data` folder beside it (see src-tauri/src/lib.rs).
+// Run in the project folder after `npm run build:app`; `npm run portable` does both.
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 const version = JSON.parse(readFileSync('package.json', 'utf8')).version;
-// Ohne Angabe die normale Fassung; eine andere Programmdatei nur zum Ausprobieren des Packens.
+// Without an argument the normal version; another executable only for trying out the packing.
 const exe = resolve(process.argv[2] ?? 'target/release/glowport.exe');
 if (!existsSync(exe)) throw new Error(`${exe} fehlt. Vorher \`npm run build:app\` (nicht \`build:dev\`: Die portable Fassung ist die normale).`);
 
@@ -35,7 +35,7 @@ writeFileSync(
   ].join('\r\n'),
 );
 
-// Compress-Archive bringt Windows mit; so braucht das Packen kein weiteres Werkzeug.
+// Windows ships Compress-Archive; that way packing needs no further tool.
 execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Compress-Archive -Path '${stage}' -DestinationPath '${zip}' -Force`], { stdio: 'inherit' });
 rmSync(stage, { recursive: true, force: true });
 console.log(`${zip} (${(statSync(zip).size / 1024 / 1024).toFixed(1)} MB)`);

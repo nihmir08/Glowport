@@ -1,8 +1,8 @@
-//! Dateien: auf diesem PC, auf einem gespeicherten Host und am Server eines laufenden Terminals.
+//! Files: on this PC, on a saved host and on the server of a running terminal.
 //!
-//! Die Oberfläche nennt einen Ort ([`Place`]) und einen Pfad; zusammengesetzt und zerlegt werden Pfade nur hier.
-//! Zu Servern hält die Brücke je Ort eine SFTP-Verbindung offen: für ein Terminal einen zusätzlichen Kanal auf
-//! dessen Verbindung, für einen Host eine eigene, die sich ohne Rückfragen anmelden können muss.
+//! The interface names a place ([`Place`]) and a path; paths are only joined and split here.
+//! For servers the bridge keeps one SFTP connection open per place: for a terminal an additional channel on
+//! its connection, for a host a connection of its own, which must be able to sign in without prompts.
 
 use std::{
     collections::HashMap,
@@ -28,7 +28,7 @@ use crate::{
     store::Store as Remote,
 };
 
-/// Bis zu dieser Größe öffnet der Editor eine Datei ganz; darüber zeigt er nur den Anfang und lässt nichts ändern.
+/// Up to this size the editor opens a file completely; above it only shows the start and allows no changes.
 const MAX_TEXT: u64 = 2 * 1024 * 1024;
 const MAX_IMAGE: u64 = 32 * 1024 * 1024;
 const IMAGES: &[(&str, &str)] = &[("png", "image/png"), ("jpg", "image/jpeg"), ("jpeg", "image/jpeg"), ("gif", "image/gif"), ("webp", "image/webp"), ("svg", "image/svg+xml"), ("ico", "image/x-icon"), ("bmp", "image/bmp")];
@@ -39,7 +39,7 @@ pub enum Place {
     Local,
     Host { id: String },
     Session { id: u64 },
-    /// Ein FTP-Server aus der Schnellverbindung, den der Tresor nicht kennt. Ein leerer Benutzer meldet anonym an.
+    /// An FTP server from quick connect that the vault does not know. An empty user signs in anonymously.
     Ftp { host: String, port: u16, user: String, security: FtpSecurity },
 }
 
@@ -47,7 +47,7 @@ pub enum Place {
 #[derive(Default)]
 pub struct Files {
     remotes: Mutex<HashMap<Place, Arc<Remote>>>,
-    /// Benutzernummer, unter der an einem Ort gearbeitet wird, soweit bekannt (Besitzer des Heimatverzeichnisses).
+    /// User number under which work happens at a place, as far as known (owner of the home directory).
     users: Mutex<HashMap<Place, u32>>,
 }
 
@@ -65,7 +65,7 @@ pub struct EntryView {
     group: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     target: Option<String>,
-    /// Bei einer Verknüpfung: Führt sie zu einem Ordner?
+    /// For a link: does it lead to a folder?
     #[serde(skip_serializing_if = "Option::is_none")]
     links_to_dir: Option<bool>,
     hidden: bool,
@@ -73,7 +73,7 @@ pub struct EntryView {
 
 #[derive(Serialize)]
 pub struct Crumb {
-    /// Leer für die Wurzel dieses PCs; die Oberfläche nennt sie selbst.
+    /// Empty for the root of this PC; the interface names it itself.
     name: String,
     path: String,
 }
@@ -85,7 +85,7 @@ pub struct Listing {
     parent: Option<String>,
     entries: Vec<EntryView>,
     writable: bool,
-    /// Nur bei FTP: was dieser Server über das hinaus kann, was jeder kann.
+    /// FTP only: what this server can do beyond what every one can.
     #[serde(skip_serializing_if = "Option::is_none")]
     ftp: Option<FtpView>,
 }
@@ -98,9 +98,9 @@ pub struct FtpView {
 #[derive(Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Content {
-    /// `editable` ist falsch, wenn Speichern die Datei beschädigen würde: nur der Anfang geladen oder kein UTF-8.
+    /// `editable` is false if saving would damage the file: only the start loaded or not UTF-8.
     Text { text: String, truncated: bool, editable: bool },
-    /// Die Bytes holt die Oberfläche mit `fs_read_bytes`.
+    /// The interface fetches the bytes with `fs_read_bytes`.
     Image { mime: &'static str },
     Binary,
 }
@@ -124,7 +124,7 @@ fn io_error(error: std::io::Error) -> CmdError {
     FileError::from(error).into()
 }
 
-/// Ein Name für einen neuen Ordner oder zum Umbenennen: ein einzelnes Stück Pfad.
+/// A name for a new folder or for renaming: a single path segment.
 fn check_name(name: &str) -> CmdResult<&str> {
     let name = name.trim();
     if name.is_empty() || name == "." || name == ".." || name.len() > 255 || name.contains(['/', '\\', '\0']) {
@@ -159,7 +159,7 @@ fn connect_error(end: End) -> CmdError {
     }
 }
 
-/// Die SFTP-Verbindung zu einem Ort; beim ersten Zugriff wird sie aufgebaut.
+/// The SFTP connection to a place; it is established on first access.
 pub(crate) async fn remote(app: &AppHandle, place: &Place) -> CmdResult<Arc<Remote>> {
     let files = app.state::<Files>();
     if let Some(found) = files.remotes.lock().await.get(place) {
@@ -176,7 +176,7 @@ pub(crate) async fn remote(app: &AppHandle, place: &Place) -> CmdResult<Arc<Remo
         Place::Host { id } => {
             let state = app.state::<AppState>();
             let connect = connect_chain(state.session().directory()?, id)?;
-            // Das gilt für jeden Server auf dem Weg, auch für die Sprung-Server.
+            // This applies to every server along the way, the jump hosts included.
             let trusted = |host: &str, port: u16, shown: &glowport_net::HostKey| state.session().directory().is_ok_and(|d| d.judge_host_key(host, port, &shown.openssh) == Verdict::Trusted);
             Remote::Sftp(glowport_net::files::Remote::connect(&connect, trusted).await.map_err(connect_error)?)
         }
@@ -186,15 +186,15 @@ pub(crate) async fn remote(app: &AppHandle, place: &Place) -> CmdResult<Arc<Remo
     Ok(made)
 }
 
-/// Übernimmt eine fertig aufgebaute Verbindung für einen Ort; eine frühere wird damit ersetzt.
+/// Takes over an established connection for a place; an earlier one is replaced.
 pub(crate) async fn adopt(app: &AppHandle, place: Place, remote: Remote) {
     let files = app.state::<Files>();
     files.users.lock().await.remove(&place);
     files.remotes.lock().await.insert(place, Arc::new(remote));
 }
 
-/// Vergisst die FTP-Verbindung zu einem Host, dessen Einstellungen sich geändert haben oder den es nicht mehr
-/// gibt: Der nächste Zugriff verbindet neu, mit dem, was jetzt gilt. Eine SFTP-Verbindung bleibt, wie bisher.
+/// Forgets the FTP connection to a host whose settings changed or that no longer
+/// exists: the next access connects anew with what applies now. An SFTP connection stays as before.
 pub(crate) fn forget_ftp(app: &AppHandle, host: &str) {
     let (app, place) = (app.clone(), Place::Host { id: host.to_string() });
     tauri::async_runtime::spawn(async move {
@@ -207,15 +207,15 @@ pub(crate) fn forget_ftp(app: &AppHandle, host: &str) {
     });
 }
 
-/// Vergisst die Verbindung zu einem Ort, etwa wenn sie abgerissen ist oder die Sitzung endet.
+/// Forgets the connection to a place, e.g. when it dropped or the session ends.
 pub(crate) async fn forget(app: &AppHandle, place: &Place) {
     let files = app.state::<Files>();
     files.remotes.lock().await.remove(place);
     files.users.lock().await.remove(place);
 }
 
-/// Führt etwas auf der SFTP-Verbindung eines Orts aus. Ist sie abgerissen, wird sie vergessen, damit der nächste
-/// Zugriff neu verbindet.
+/// Runs something on a place's SFTP connection. If it dropped, it is forgotten so the next
+/// access connects anew.
 async fn with_remote<T, F>(app: &AppHandle, place: &Place, work: impl FnOnce(Arc<Remote>) -> F) -> CmdResult<T>
 where
     F: std::future::Future<Output = Result<T, FileError>>,
@@ -227,7 +227,7 @@ where
     result.map_err(Into::into)
 }
 
-/// `~` am Anfang steht für das Heimatverzeichnis; alles andere bringt der Server in seine eigene Form.
+/// `~` at the start stands for the home directory; the server brings everything else into its own form.
 async fn remote_path(remote: &Remote, path: &str) -> Result<String, FileError> {
     let path = path.trim();
     let wanted = match path.strip_prefix('~') {
@@ -280,8 +280,8 @@ async fn remote_list(app: &AppHandle, place: &Place, path: &str) -> CmdResult<Li
             at = format!("{at}/{part}");
             crumbs.push(Crumb { name: part.into(), path: at.clone() });
         }
-        // Ob hier geschrieben werden darf, weiß erst der Versuch. Gesperrt wird nur, was sicher nicht geht:
-        // fremder Ordner, in den weder Gruppe noch andere schreiben dürfen.
+        // Whether writing is allowed here only shows when trying. Only what surely does not work is blocked:
+        // a foreign folder that neither group nor others may write to.
         let writable = match me {
             Some(0) | None => true,
             Some(uid) if uid == own.uid => own.mode & 0o200 != 0,
@@ -293,7 +293,7 @@ async fn remote_list(app: &AppHandle, place: &Place, path: &str) -> CmdResult<Li
     .await
 }
 
-/// Benutzernummer an einem Ort: der Besitzer des Heimatverzeichnisses. Einmal ermittelt, dann gemerkt.
+/// User number at a place: the owner of the home directory. Determined once, then remembered.
 async fn my_user(app: &AppHandle, place: &Place) -> Option<u32> {
     let files = app.state::<Files>();
     if let Some(uid) = files.users.lock().await.get(place) {
@@ -312,10 +312,10 @@ fn text(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
-/// Laufwerke dieses Rechners als Wurzeln.
+/// This machine's drives as roots.
 #[cfg(windows)]
 fn roots() -> Vec<PathBuf> {
-    // SAFETY: Der Aufruf nimmt keine Zeiger und liefert nur eine Bitmaske der vorhandenen Laufwerke.
+    // SAFETY: the call takes no pointers and only returns a bitmask of the existing drives.
     let mask = unsafe { windows_sys::Win32::Storage::FileSystem::GetLogicalDrives() };
     (0..26u8).filter(|bit| mask & (1 << bit) != 0).map(|bit| PathBuf::from(format!("{}:\\", (b'A' + bit) as char))).collect()
 }
@@ -358,7 +358,7 @@ fn local_view(path: &Path, name: String, meta: &std::fs::Metadata, link: bool) -
 }
 
 fn local_list(path: &str) -> CmdResult<Listing> {
-    // Die leere Angabe ist die Wurzel über den Laufwerken.
+    // The empty value is the root above the drives.
     if path.trim().is_empty() && cfg!(windows) {
         let entries = roots()
             .into_iter()
@@ -367,7 +367,7 @@ fn local_list(path: &str) -> CmdResult<Listing> {
         return Ok(Listing { path: String::new(), crumbs: vec![Crumb { name: String::new(), path: String::new() }], parent: None, entries, writable: false, ftp: None });
     }
     let dir = std::fs::canonicalize(if path.trim().is_empty() { "/" } else { path.trim() }).map_err(io_error)?;
-    // Windows liefert die lange Form `\\?\C:\…`; angezeigt wird die gewohnte.
+    // Windows returns the long form `\\?\C:\…`; the usual one is shown.
     let dir = PathBuf::from(text(&dir).trim_start_matches(r"\\?\"));
     let meta = std::fs::metadata(&dir).map_err(io_error)?;
     if !meta.is_dir() {
@@ -376,7 +376,7 @@ fn local_list(path: &str) -> CmdResult<Listing> {
     let mut entries = Vec::new();
     for item in std::fs::read_dir(&dir).map_err(io_error)? {
         let Ok(item) = item else { continue };
-        // Was sich nicht lesen lässt (gesperrte Systemdateien), wird ausgelassen statt den ganzen Ordner zu verweigern.
+        // What cannot be read (locked system files) is left out instead of refusing the whole folder.
         let Ok(meta) = item.metadata() else { continue };
         entries.push(local_view(&item.path(), item.file_name().to_string_lossy().into_owned(), &meta, meta.file_type().is_symlink()));
     }
@@ -385,7 +385,7 @@ fn local_list(path: &str) -> CmdResult<Listing> {
     for part in dir.components() {
         at.push(part);
         let name = text(Path::new(part.as_os_str()));
-        // Der Trenner nach dem Laufwerk ist ein eigenes Stück; es gehört zum Laufwerk davor.
+        // The separator after the drive is a segment of its own; it belongs to the drive before it.
         if name == "\\" || name == "/" {
             match crumbs.last_mut() {
                 Some(drive) if !drive.path.is_empty() => drive.path = text(&at),
@@ -399,12 +399,12 @@ fn local_list(path: &str) -> CmdResult<Listing> {
     Ok(Listing { path: text(&dir), crumbs, parent, entries, writable: !meta.permissions().readonly(), ftp: None })
 }
 
-/// Verschiebt Dateien und Ordner in den Papierkorb.
+/// Moves files and folders to the recycle bin.
 #[cfg(windows)]
 fn local_remove(paths: &[String]) -> CmdResult<()> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::UI::Shell::{SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, FO_DELETE, SHFILEOPSTRUCTW};
-    // Die Liste der Pfade: jeder mit einer Null beendet, das Ganze mit einer weiteren.
+    // The list of paths: each terminated with a zero, the whole with another one.
     let mut from: Vec<u16> = Vec::new();
     for path in paths {
         if !Path::new(path).is_absolute() || !Path::new(path).exists() {
@@ -414,12 +414,12 @@ fn local_remove(paths: &[String]) -> CmdResult<()> {
         from.push(0);
     }
     from.push(0);
-    // SAFETY: Eine mit Nullen gefüllte Struktur ist für diesen Typ gültig (Zahlen und leere Zeiger).
+    // SAFETY: a zero-filled struct is valid for this type (numbers and null pointers).
     let mut operation: SHFILEOPSTRUCTW = unsafe { std::mem::zeroed() };
     operation.wFunc = FO_DELETE;
     operation.pFrom = from.as_ptr();
     operation.fFlags = (FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_NOERRORUI | FOF_SILENT) as u16;
-    // SAFETY: `from` ist doppelt mit Null beendet und lebt bis nach dem Aufruf; die übrigen Felder sind leer.
+    // SAFETY: `from` is double-null-terminated and lives until after the call; the other fields are empty.
     let code = unsafe { SHFileOperationW(&mut operation) };
     if code != 0 || operation.fAnyOperationsAborted != 0 {
         return Err(CmdError::new("file_failure", format!("Windows meldet {code:#x}")));
@@ -443,19 +443,19 @@ fn image_type(path: &str) -> Option<&'static str> {
     IMAGES.iter().find(|(known, _)| *known == extension).map(|(_, mime)| *mime)
 }
 
-/// Macht aus den ersten Bytes einer Datei, was der Editor zeigen kann.
+/// Turns the first bytes of a file into what the editor can show.
 fn as_content(bytes: Vec<u8>, truncated: bool) -> Content {
     if bytes.contains(&0) {
         return Content::Binary;
     }
     match String::from_utf8(bytes) {
         Ok(text) => Content::Text { text, truncated, editable: !truncated },
-        // Am abgeschnittenen Ende kann ein Zeichen zerteilt sein; das allein macht die Datei nicht unlesbar.
+        // At the cut-off end a character may be split; that alone does not make the file unreadable.
         Err(broken) => Content::Text { text: String::from_utf8_lossy(broken.as_bytes()).into_owned(), truncated, editable: false },
     }
 }
 
-/// Der Ordner, in dem man an einem Ort beginnt.
+/// The folder one starts in at a place.
 #[tauri::command]
 pub async fn fs_home(app: AppHandle, place: Place) -> CmdResult<String> {
     match place {
@@ -503,7 +503,7 @@ pub async fn fs_rename(app: AppHandle, place: Place, path: String, name: String)
         Place::Local => {
             let from = PathBuf::from(&path);
             let target = from.parent().ok_or_else(|| CmdError::invalid("name_required"))?.join(&name);
-            // Nur Groß- und Kleinschreibung zu ändern ist unter Windows dieselbe Datei und erlaubt.
+            // Only changing upper and lower case is the same file on Windows and allowed.
             if target.exists() && !text(&target).eq_ignore_ascii_case(&path) {
                 return Err(CmdError::new("file_exists", name));
             }
@@ -512,7 +512,7 @@ pub async fn fs_rename(app: AppHandle, place: Place, path: String, name: String)
         place => {
             with_remote(&app, &place, |remote| async move {
                 let target = remote_join(&remote_parent(&path).ok_or(FileError::NoSuchFile)?, &name);
-                // Der Server sagt bei einem vorhandenen Namen nur „fehlgeschlagen“; deshalb vorher nachsehen.
+                // For an existing name the server only says “failed”; hence check beforehand.
                 if remote.stat(&target, false).await.is_ok() {
                     return Err(FileError::Exists);
                 }
@@ -523,7 +523,7 @@ pub async fn fs_rename(app: AppHandle, place: Place, path: String, name: String)
     }
 }
 
-/// Löscht Dateien und Ordner samt Inhalt. Auf diesem PC landen sie im Papierkorb, am Server sind sie weg.
+/// Deletes files and folders with their content. On this PC they go to the recycle bin, on the server they are gone.
 #[tauri::command]
 pub async fn fs_remove(app: AppHandle, place: Place, paths: Vec<String>) -> CmdResult<()> {
     match place {
@@ -531,7 +531,7 @@ pub async fn fs_remove(app: AppHandle, place: Place, paths: Vec<String>) -> CmdR
         place => {
             with_remote(&app, &place, |remote| async move {
                 for path in &paths {
-                    // Die Wurzel und das Heimatverzeichnis löscht niemand aus Versehen mit.
+                    // Nobody deletes the root and the home directory by accident along with it.
                     if path.trim_end_matches('/').is_empty() {
                         return Err(FileError::PermissionDenied);
                     }
@@ -559,7 +559,7 @@ pub async fn fs_chmod(app: AppHandle, place: Place, request: ChmodRequest) -> Cm
     .await
 }
 
-/// Liest eine Datei zum Ansehen oder Bearbeiten.
+/// Reads a file for viewing or editing.
 #[tauri::command]
 pub async fn fs_read(app: AppHandle, place: Place, path: String) -> CmdResult<Content> {
     if let Some(mime) = image_type(&path) {
@@ -589,7 +589,7 @@ async fn read_bytes(app: &AppHandle, place: Place, path: String, limit: u64) -> 
     }
 }
 
-/// Die rohen Bytes einer Datei, für Bilder in der Vorschau.
+/// A file's raw bytes, for images in the preview.
 #[tauri::command]
 pub async fn fs_read_bytes(app: AppHandle, place: Place, path: String) -> CmdResult<Response> {
     let (bytes, longer) = read_bytes(&app, place, path, MAX_IMAGE).await?;
@@ -599,7 +599,7 @@ pub async fn fs_read_bytes(app: AppHandle, place: Place, path: String) -> CmdRes
     Ok(Response::new(bytes))
 }
 
-/// Schreibt den Text des Editors zurück an seinen Ort.
+/// Writes the editor's text back to its place.
 #[tauri::command]
 pub async fn fs_write(app: AppHandle, place: Place, path: String, text: String) -> CmdResult<()> {
     match place {
@@ -608,24 +608,24 @@ pub async fn fs_write(app: AppHandle, place: Place, path: String, text: String) 
     }
 }
 
-// ---------- Dateidialoge ----------
-// Diese Befehle laufen nicht im Thread des Fensters (`async`): Ein Dialog, der dort auf seine Antwort wartet,
-// hielte das ganze Fenster an.
+// ---------- File dialogs ----------
+// These commands do not run on the window's thread (`async`): a dialog waiting for its answer there
+// would stop the whole window.
 
-/// Der Ordner, in dem Downloads landen, wenn in den Einstellungen keiner gewählt ist.
+/// The folder downloads go to when none is chosen in the settings.
 #[tauri::command]
 pub fn fs_downloads(app: AppHandle) -> CmdResult<String> {
     app.path().download_dir().map(|dir| text(&dir)).map_err(|e| CmdError::new("internal", e.to_string()))
 }
 
-/// Lässt den Nutzer Dateien dieses PCs zum Hochladen wählen; `None`, wenn abgebrochen.
+/// Lets the user choose files of this PC for uploading; `None` if cancelled.
 #[tauri::command(async)]
 pub fn pick_uploads(app: AppHandle) -> Option<Vec<String>> {
     let chosen = app.dialog().file().blocking_pick_files()?;
     Some(chosen.into_iter().filter_map(|file| file.into_path().ok()).map(|path| text(&path)).collect())
 }
 
-/// Lässt den Nutzer ein Programm wählen, etwa den Editor für Dateien vom Server.
+/// Lets the user choose a program, e.g. the editor for files from the server.
 #[tauri::command(async)]
 pub fn pick_program(app: AppHandle) -> Option<String> {
     let dialog = app.dialog().file();
@@ -640,9 +640,9 @@ pub fn pick_folder(app: AppHandle) -> Option<String> {
 
 // ---------- Suche am Server ----------
 
-/// Mehr Treffer zeigt die Suche nicht; wer so viele hat, sucht genauer.
+/// The search shows no more hits than this; whoever has that many should search more precisely.
 const MAX_HITS: usize = 300;
-/// So viele Einträge sieht die Suche ohne `find` höchstens durch.
+/// At most this many entries are looked through by the search without `find`.
 const MAX_WALKED: usize = 5000;
 
 #[derive(Serialize, Clone)]
@@ -658,23 +658,23 @@ pub struct Hit {
     text: Option<String>,
 }
 
-/// Ein Wort für die Shell: in einfachen Anführungszeichen, die enthaltenen entschärft.
+/// A word for the shell: in single quotes, with the contained ones defused.
 fn quoted(word: &str) -> String {
     format!("'{}'", word.replace('\'', r"'\''"))
 }
 
-/// Der Befehl, der am Server sucht: nach Namen mit `find`, im Inhalt mit `grep`. Beide nehmen das Suchwort wörtlich.
+/// The command that searches on the server: by name with `find`, in content with `grep`. Both take the search term literally.
 fn search_command(dir: &str, query: &str, content: bool) -> String {
     if content {
         return format!("command -v grep >/dev/null 2>&1 || exit 127; grep -rIin -m 3 -F -e {} -- {} 2>/dev/null | head -n {MAX_HITS}", quoted(query), quoted(dir));
     }
-    // In einem Namensmuster hätten diese Zeichen eine Bedeutung.
+    // These characters would have a meaning in a name pattern.
     let literal: String = query.chars().flat_map(|c| if matches!(c, '*' | '?' | '[' | ']' | '\\') { vec!['\\', c] } else { vec![c] }).collect();
-    // Ob es `find` gibt, verrät die Pipeline sonst nicht: Ihr Ergebnis wäre das von `head`.
+    // Whether `find` exists the pipeline does not reveal otherwise: its result would be that of `head`.
     format!("command -v find >/dev/null 2>&1 || exit 127; find {} -iname {} 2>/dev/null | head -n {MAX_HITS}", quoted(dir), quoted(&format!("*{literal}*")))
 }
 
-/// Zerlegt eine Trefferzeile von `grep -n`: Pfad, Zeilennummer, Zeile.
+/// Splits a hit line of `grep -n`: path, line number, line.
 fn content_hit(line: &str) -> Option<Hit> {
     let (path, rest) = line.split_once(':')?;
     let (number, found) = rest.split_once(':')?;
@@ -682,7 +682,7 @@ fn content_hit(line: &str) -> Option<Hit> {
     Some(Hit { name: path.rsplit('/').next()?.to_string(), dir: remote_parent(path)?, path: path.to_string(), kind: "file", size: 0, line: Some(number.parse().ok()?), text: Some(shown) })
 }
 
-/// Führt einen Befehl am Server eines Orts aus: auf der Verbindung der Sitzung oder der eigenen des Hosts.
+/// Runs a command on a place's server: on the session's connection or the host's own.
 pub(crate) async fn run_at(app: &AppHandle, place: &Place, command: &str) -> CmdResult<glowport_net::Output> {
     match place {
         Place::Local => Err(CmdError::new("not_supported", "Befehle laufen nur am Server")),
@@ -694,7 +694,7 @@ pub(crate) async fn run_at(app: &AppHandle, place: &Place, command: &str) -> Cmd
     }
 }
 
-/// Sucht unterhalb eines Ordners nach Namen oder im Inhalt und meldet jeden Treffer über `hits`.
+/// Searches below a folder by name or in content and reports every hit through `hits`.
 #[tauri::command]
 pub async fn fs_search(app: AppHandle, place: Place, dir: String, query: String, content: bool, hits: tauri::ipc::Channel<Hit>) -> CmdResult<()> {
     let query = query.trim().to_string();
@@ -703,7 +703,7 @@ pub async fn fs_search(app: AppHandle, place: Place, dir: String, query: String,
     }
     let output = run_at(&app, &place, &search_command(&dir, &query, content)).await;
     let lines = output.as_ref().map(|output| String::from_utf8_lossy(&output.stdout).into_owned()).unwrap_or_default();
-    // Ohne Shell oder ohne `find` (exit 127) geht es für Namen auch über SFTP, nur langsamer.
+    // Without a shell or without `find` (exit 127) searching by name also works over SFTP, just more slowly.
     let unusable = !output.as_ref().is_ok_and(|output| !lines.is_empty() || output.exit_status == Some(0));
     if unusable && !content {
         return with_remote(&app, &place, |remote| async move {
@@ -742,7 +742,7 @@ pub async fn fs_search(app: AppHandle, place: Place, dir: String, query: String,
     }
     with_remote(&app, &place, |remote| async move {
         for path in lines.lines().filter(|line| line.starts_with('/') && *line != dir) {
-            // Art und Größe kennt `find` in dieser Form nicht; SFTP sagt sie.
+            // `find` does not know kind and size in this form; SFTP says them.
             let (kind, size) = remote.stat(path, false).await.map_or(("file", 0), |entry| (if entry.kind == Kind::Dir { "dir" } else { "file" }, entry.size));
             let _ = hits.send(Hit { name: path.rsplit('/').next().unwrap_or_default().to_string(), dir: remote_parent(path).unwrap_or_else(|| "/".into()), path: path.to_string(), kind, size, line: None, text: None });
         }
@@ -751,11 +751,11 @@ pub async fn fs_search(app: AppHandle, place: Place, dir: String, query: String,
     .await
 }
 
-// ---------- Ordner des Terminals ----------
+// ---------- The terminal's folder ----------
 
-/// Fragt den Server, in welchem Ordner die Shell einer Sitzung steht. Der Befehl läuft auf einem eigenen Kanal
-/// derselben Verbindung und sucht unter den Prozessen dieser Verbindung den mit einem Terminal.
-/// Das geht nur, wo es `/proc` gibt (Linux); sonst kommt `None`.
+/// Asks the server which folder a session's shell is in. The command runs on a channel of its own
+/// on the same connection and looks among this connection's processes for the one with a terminal.
+/// That only works where `/proc` exists (Linux); otherwise `None` comes.
 const CWD_PROBE: &str = r#"a=$PPID; n=0
 while [ $n -lt 3 ] && [ -n "$a" ] && [ "$a" != 1 ]; do
   for p in $(pgrep -P "$a" 2>/dev/null || ps -o pid= --ppid "$a" 2>/dev/null); do
@@ -772,7 +772,7 @@ pub async fn session_cwd(app: AppHandle, id: u64) -> Option<String> {
     found.starts_with('/').then_some(found)
 }
 
-/// Endet eine Sitzung, wird ihre SFTP-Verbindung nicht mehr gebraucht.
+/// When a session ends, its SFTP connection is no longer needed.
 pub(crate) fn session_ended(app: &AppHandle, id: u64) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move { forget(&app, &Place::Session { id }).await });
@@ -794,7 +794,7 @@ mod tests {
     #[test]
     fn builds_search_commands_that_take_the_query_literally() {
         assert_eq!(search_command("/var/www", "conf", false), "command -v find >/dev/null 2>&1 || exit 127; find '/var/www' -iname '*conf*' 2>/dev/null | head -n 300");
-        // Zeichen mit Bedeutung in Mustern und Anführungszeichen richten nichts an.
+        // Characters with a meaning in patterns, and quotes, do no harm.
         assert_eq!(search_command("/srv/it's", "a*b'c", false), r#"command -v find >/dev/null 2>&1 || exit 127; find '/srv/it'\''s' -iname '*a\*b'\''c*' 2>/dev/null | head -n 300"#);
         assert_eq!(search_command("/etc", "$(reboot)", true), "command -v grep >/dev/null 2>&1 || exit 127; grep -rIin -m 3 -F -e '$(reboot)' -- '/etc' 2>/dev/null | head -n 300");
     }
@@ -820,7 +820,7 @@ mod tests {
         assert!(matches!(as_content(b"hallo\n".to_vec(), false), Content::Text { editable: true, truncated: false, .. }));
         assert!(matches!(as_content(b"anfang".to_vec(), true), Content::Text { editable: false, truncated: true, .. }));
         assert!(matches!(as_content(vec![b'a', 0, b'b'], false), Content::Binary));
-        // Latin-1 statt UTF-8: lesbar, aber Speichern würde die Umlaute zerstören.
+        // Latin-1 instead of UTF-8: readable, but saving would destroy the non-ASCII characters.
         assert!(matches!(as_content(vec![b'M', 0xFC, b'l', b'l'], false), Content::Text { editable: false, .. }));
         assert_eq!(image_type("/var/www/Logo.PNG"), Some("image/png"));
         assert_eq!(image_type("/etc/hosts"), None);
@@ -841,7 +841,7 @@ mod tests {
         assert!(listing.writable);
         assert_eq!(listing.crumbs.first().map(|c| c.path.as_str()), Some(""));
         assert_eq!(listing.crumbs.last().map(|c| c.path.as_str()), Some(listing.path.as_str()));
-        // Jedes Stück des Wegs lässt sich selbst wieder öffnen.
+        // Every segment of the path can be opened again by itself.
         for crumb in &listing.crumbs {
             assert!(local_list(&crumb.path).is_ok(), "{:?}", crumb.path);
         }

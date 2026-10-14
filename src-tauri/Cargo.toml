@@ -22,28 +22,28 @@ glowport-net = { path = "../crates/net" }
 tokio = { version = "1", features = ["sync", "fs", "io-util", "time", "rt", "macros", "net"] }
 glowport-core = { path = "../crates/core" }
 glowport-import = { path = "../crates/import" }
-# Lokales Terminal, Telnet und serielle Leitung.
+# Local terminal, Telnet and serial line.
 glowport-extras = { path = "../crates/extras" }
-# Abgleich mit dem Sync-Server und geteilte Tresore.
+# Syncing with the sync server and shared vaults.
 glowport-sync = { path = "../crates/sync" }
 glowport-sync-proto = { path = "../crates/sync-proto" }
-# Zugriff auf die Schnittstelle von Proxmox VE.
+# Access to the Proxmox VE API.
 glowport-proxmox = { path = "../crates/proxmox" }
 glowport-ftp = { path = "../crates/ftp" }
 tauri-plugin-clipboard-manager = "2.4.1"
-# Für Server, die nicht UTF-8 sprechen: Die Brücke wandelt in beide Richtungen um.
+# For servers that do not speak UTF-8: the bridge converts in both directions.
 encoding_rs = "0.8"
-# Ortszeit für Namen und Kopf der Mitschnitte.
+# Local time for names and headers of recordings.
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 drag = "2.1.1"
 tauri-plugin-updater = "2"
 
 [dev-dependencies]
-# Nur für die Messung der Transfers gegen den eigenen Testserver (`measures_throughput`).
+# Only for measuring transfers against the own test server (`measures_throughput`).
 glowport-testserver = { path = "../crates/testserver" }
 tokio = { version = "1", features = ["rt-multi-thread"] }
 
 [target.'cfg(windows)'.dependencies]
-# PuTTY und WinSCP legen ihre Sitzungen in der Registry ab.
+# PuTTY and WinSCP store their sessions in the registry.
 winreg = "0.55"
 windows-sys = { version = "0.60", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Graphics_Dwm", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_UI_Shell", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging"] }

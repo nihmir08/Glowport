@@ -1,7 +1,7 @@
-// Veröffentlicht eine neue Version: Nummer überall setzen, Lizenzliste erneuern, Commit, Tag, Push.
-// Den Rest macht GitHub (.github/workflows/release.yml): bauen, signieren, Release mit latest.json.
-// Vorher in CHANGELOG.md einen Abschnitt „## <Version>“ schreiben; sonst muss alles committet sein.
-// Aufruf im Projektordner: node scripts/release.mjs 1.0.1
+// Publishes a new version: set the number everywhere, renew the license list, commit, tag, push.
+// GitHub does the rest (.github/workflows/release.yml): build, sign, release with latest.json.
+// Write a section “## <version>” in CHANGELOG.md beforehand; everything else must be committed.
+// Run in the project folder: node scripts/release.mjs 1.0.1
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 
@@ -29,7 +29,7 @@ edit('Cargo.toml', toml);
 edit('crates/rdp/Cargo.toml', toml);
 edit('src-tauri/tauri.conf.json', (s) => s.replace(`"version": "${current}"`, `"version": "${next}"`));
 edit('package.json', (s) => s.replace(`"version": "${current}"`, `"version": "${next}"`));
-// Im Lockfile nur die beiden Einträge des Projekts selbst, nicht Abhängigkeiten mit zufällig gleicher Nummer.
+// In the lockfile only the project's own two entries, not dependencies that happen to have the same number.
 edit('package-lock.json', (s) => {
   let n = 0;
   return s.replace(new RegExp(`"version": "${quoted(current)}"`, 'g'), (m) => (n++ < 2 ? `"version": "${next}"` : m));

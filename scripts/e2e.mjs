@@ -1,8 +1,8 @@
-// Ende-zu-Ende-Prüfung der echten Programmdatei über die Debug-Schnittstelle von WebView2.
-// Läuft in einer portablen Kopie mit eigenem Datenordner, der echte Tresor des Users wird nicht berührt.
-// Braucht `sh` und `ssh-keygen` im Pfad (unter Windows etwa von Git): Der Testserver führt mit `sh` das Eintragen von
-// Schlüsseln aus, `ssh-keygen` spielt die Zertifizierungsstelle.
-// Aufruf im Projektordner nach `npm run tauri build -- --no-bundle` und `cargo build -p glowport-testserver`:
+// End-to-end test of the real executable via WebView2's debug interface.
+// Runs in a portable copy with its own data folder; the user's real vault is not touched.
+// Needs `sh` and `ssh-keygen` on the path (on Windows e.g. from Git): the test server uses `sh` to install
+// keys, `ssh-keygen` plays the certificate authority.
+// Run in the project folder after `npm run tauri build -- --no-bundle` and `cargo build -p glowport-testserver`:
 // node scripts/e2e.mjs
 import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -18,12 +18,12 @@ const PW1 = 'e2e-pruefung-eins';
 const PW2 = 'e2e-pruefung-zwei';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = [];
-// Jedes Ergebnis sofort ausgeben: Bleibt ein Schritt hängen, ist sichtbar, wie weit die Prüfung kam.
+// Print every result at once: if a step hangs, it is visible how far the test got.
 const ok = (name, cond, extra = '') => {
   results.push(`${cond ? 'ok    ' : 'FEHLER'} ${name}${extra ? ` (${extra})` : ''}`);
   console.log(results.at(-1));
 };
-// Fälle, die auf diesem Rechner nicht gehen (etwa ohne mosh im WSL). Sie zählen weder als bestanden noch als Fehler.
+// Cases that do not work on this machine (e.g. without mosh in WSL). They count neither as passed nor as failed.
 const skipped = [];
 const skip = (name) => {
   skipped.push(name);
@@ -36,15 +36,15 @@ const exe = join(workDir, 'glowport.exe');
 copyFileSync(exeSource, exe);
 writeFileSync(join(workDir, 'portable'), '');
 const vaultFile = join(workDir, 'data', 'vault.db');
-// Heimatverzeichnis des Benutzers auf dem Testserver. Er führt Befehle darin aus und liest `.ssh/authorized_keys`
-// bei jeder Anmeldung, so wie ein echter Server.
+// The user's home directory on the test server. It runs commands in it and reads `.ssh/authorized_keys`
+// on every sign-in, like a real server.
 const serverHome = join(workDir, 'home');
 mkdirSync(serverHome, { recursive: true });
 const authorizedKeys = join(serverHome, '.ssh', 'authorized_keys');
-// Dateisystem des Testservers für SFTP und ein Ordner dieses Rechners als Gegenstück, beide mit bekanntem Inhalt.
+// The test server's file system for SFTP and a folder of this machine as counterpart, both with known content.
 const serverFiles = join(workDir, 'server-dateien');
 const lokal = join(workDir, 'lokal');
-/** Der Ordner, den die FTP-Server des Testservers zeigen: ein kleiner Webspace. */
+/** The folder the test server's FTP servers show: a small web space. */
 const ftpFiles = join(workDir, 'ftp-dateien');
 const put = (root, path, content) => {
   const file = join(root, ...path.split('/'));
@@ -55,7 +55,7 @@ const put = (root, path, content) => {
 put(serverFiles, 'etc/passwd', 'root:x:0:0:root:/root:/bin/sh\ntester:x:1000:1000::/home/tester:/bin/sh\n');
 put(serverFiles, 'etc/group', 'root:x:0:\ntester:x:1000:\n');
 put(serverFiles, 'etc/hosts', '127.0.0.1 localhost\n');
-// Der Webspace der FTP-Server; er muss stehen, bevor der Testserver startet.
+// The FTP servers' web space; it must exist before the test server starts.
 put(ftpFiles, 'htdocs/index.html', '<h1>Es funktioniert</h1>\n');
 put(ftpFiles, 'htdocs/mit leerzeichen und ä.txt', 'äöü');
 put(ftpFiles, 'logs/access.log', 'GET / 200\n');
@@ -63,29 +63,29 @@ put(serverFiles, 'srv/app/config.yaml', 'port: 3000\n');
 put(serverFiles, 'srv/app/notes.txt', 'notiz\n');
 put(serverFiles, 'srv/app/bild.png', Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13]));
 put(serverFiles, 'srv/app/roh.bin', Buffer.from([1, 2, 0, 3, 0, 4]));
-// Groß genug, um den Transfer mittendrin anzuhalten.
+// Large enough to pause the transfer in the middle.
 put(serverFiles, 'srv/gross.bin', Buffer.alloc(96 * 1024 * 1024, 'glowport-e2e '));
 for (let i = 0; i < 40; i++) put(lokal, `viele/${i % 2 ? 'unter/' : ''}datei-${String(i).padStart(2, '0')}.txt`, `Inhalt ${String(i).padStart(2, '0')}\n`);
 put(lokal, 'einzeln.txt', 'einzeln\n');
-// Für den Abgleich: eine gleiche Datei, eine nur links, eine nur rechts, eine links neuer.
+// For folder sync: one identical file, one only left, one only right, one newer on the left.
 const then = new Date('2026-01-15T10:00:00Z');
 for (const file of [put(lokal, 'abgleich/gleich.txt', 'gleich\n'), put(serverFiles, 'srv/abgleich/gleich.txt', 'gleich\n'), put(serverFiles, 'srv/abgleich/unter/geaendert.txt', 'alt\n')]) utimesSync(file, then, then);
 put(lokal, 'abgleich/neu-links.txt', 'links\n');
 put(lokal, 'abgleich/unter/geaendert.txt', 'neuer stand\n');
 put(serverFiles, 'srv/abgleich/nur-rechts.txt', 'rechts\n');
-// Zertifizierungsstelle. Der Testserver nimmt ihre Benutzer-Zertifikate an (wie ein echter über `TrustedUserCAKeys`)
-// und zeigt selbst ein Zertifikat von ihr für seinen Schlüssel.
+// Certificate authority. The test server accepts its user certificates (like a real one via `TrustedUserCAKeys`)
+// and itself shows a certificate from it for its key.
 const caKey = join(workDir, 'ca');
 execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-C', 'glowport-e2e-ca', '-f', caKey]);
 const shots = join(tmpdir(), 'glowport-e2e-bilder');
 mkdirSync(shots, { recursive: true });
 
 /**
- * Startet den Testserver. Seine erste Zeile nennt die Adresse des SSH-Servers, die zweite den nachgebauten
- * Proxmox-Server: `pve <Adresse> <Fingerabdruck seines Zertifikats>`. Danach folgen die beiden FTP-Server.
+ * Starts the test server. Its first line names the SSH server's address, the second the simulated
+ * Proxmox server: `pve <address> <fingerprint of its certificate>`. Then the two FTP servers follow.
  */
 function startServer() {
-  // Eingabe offen: Darüber hält die Prüfung die Weiterleitung für Mosh an (`mosh pause`, `mosh resume`).
+  // Input open: through it the test pauses the forwarder for Mosh (`mosh pause`, `mosh resume`).
   const child = spawn(resolve('target/debug/glowport-testserver.exe'), [serverHome, caKey], { stdio: ['pipe', 'pipe', 'ignore'], env: { ...process.env, GLOWPORT_TEST_FILES: serverFiles, GLOWPORT_TEST_FTP: ftpFiles, GLOWPORT_TEST_MOSH: 'Ubuntu' } });
   const lines = new Promise((ok, no) => {
     let text = '';
@@ -95,7 +95,7 @@ function startServer() {
       if (found.length >= 5) ok(found);
     });
     child.once('error', no);
-    // Das WSL braucht beim ersten Aufruf ein paar Sekunden (Suche nach mosh).
+    // WSL needs a few seconds on the first call (looking for mosh).
     setTimeout(() => no(new Error('Testserver meldet seine Adressen nicht')), 40_000);
   });
   const port = lines.then(([ssh]) => Number(ssh.trim().split(':').pop()));
@@ -103,17 +103,17 @@ function startServer() {
     const [, address, fingerprint] = line.trim().split(' ');
     return { address, fingerprint };
   });
-  // Dritte und vierte Zeile: die FTP-Server, offen (`ftp <Adresse>`) und über TLS (`ftps <Adresse> <Fingerabdruck>`).
+  // Third and fourth line: the FTP servers, plain (`ftp <address>`) and over TLS (`ftps <address> <fingerprint>`).
   const ftp = lines.then(([, , plain, tls]) => {
     const [, address, fingerprint] = tls.trim().split(' ');
     return { plain: Number(plain.trim().split(':').pop()), tls: Number(address.split(':').pop()), fingerprint };
   });
-  // Fünfte Zeile: `mosh <Adresse im WSL>` oder `mosh -`, wenn es dort kein mosh gibt.
+  // Fifth line: `mosh <address in WSL>` or `mosh -` if there is no mosh there.
   const mosh = lines.then(([, , , , line]) => { const address = line.trim().split(' ')[1]; return address && address !== '-' ? address : null; });
   return { child, port, pve, ftp, mosh };
 }
 
-/** Bild des Fensterinhalts, so wie WebView2 ihn gerade zeichnet. */
+/** Picture of the window content, as WebView2 is drawing it right now. */
 async function shot(page, name) {
   const { data } = await page.send('Page.captureScreenshot', { format: 'png' });
   const file = join(shots, `${name}.png`);
@@ -125,13 +125,13 @@ async function pressEnter(page) {
   for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: type === 'keyDown' ? '\r' : undefined });
 }
 
-/** Echte Tastatureingabe in das Element mit dem Fokus. */
+/** Real keyboard input into the focused element. */
 async function typeLine(page, text) {
   await page.send('Input.insertText', { text });
   await pressEnter(page);
 }
 
-/** Echte Mausereignisse an einer Stelle des Fensters. */
+/** Real mouse events at a spot in the window. */
 async function mouse(page, type, x, y, button = 'none', buttons = 0) {
   await page.send('Input.dispatchMouseEvent', { type, x, y, button, buttons, clickCount: type === 'mouseMoved' ? 0 : 1 });
 }
@@ -142,7 +142,7 @@ async function rightClick(page, x, y) {
   await sleep(400);
 }
 
-/** Markiert im Terminal durch Ziehen mit der linken Maustaste. */
+/** Selects in the terminal by dragging with the left mouse button. */
 async function drag(page, x1, y1, x2, y2) {
   await mouse(page, 'mousePressed', x1, y1, 'left', 1);
   for (const part of [0.3, 0.7, 1]) await mouse(page, 'mouseMoved', x1 + (x2 - x1) * part, y1 + (y2 - y1) * part, 'left', 1);
@@ -151,9 +151,9 @@ async function drag(page, x1, y1, x2, y2) {
 }
 
 /**
- * Liest die ersten Zeilen eines sichtbaren Terminals (ohne Angabe: des ersten): markieren, per Rechtsklick kopieren,
- * Zwischenablage lesen. Der Text, der vorher in der Zwischenablage lag, wird danach zurückgelegt. Mit `whole` reicht
- * die Markierung über die ganze Höhe und Breite des Terminals.
+ * Reads the first lines of a visible terminal (without argument: the first one): select, copy via right-click,
+ * read the clipboard. The text that was on the clipboard before is put back afterwards. With `whole` the
+ * selection covers the terminal's whole height and width.
  */
 async function terminalText(page, index = 0, whole = false) {
   const before = await run(page, `return await invoke('plugin:clipboard-manager|read_text').catch(()=>null)`);
@@ -166,19 +166,19 @@ async function terminalText(page, index = 0, whole = false) {
 }
 
 function launch() {
-  // Eigener WebView2-Ordner: Ein Glowport, das der Nutzer gerade offen hat, teilt sich sonst den Browser-Prozess mit der Prüfung,
-  // und der läuft dann ohne Debug-Schnittstelle.
+  // WebView2 folder of its own: a Glowport the user has open would otherwise share the browser process with the test,
+  // which then runs without a debug interface.
   const env = { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${PORT}`, WEBVIEW2_USER_DATA_FOLDER: join(workDir, 'webview') };
   return spawn(exe, [], { env, stdio: 'ignore', detached: false });
 }
 
-/** Die Fenster des Programms, wie die Debug-Schnittstelle sie nennt. */
+/** The program's windows, as the debug interface names them. */
 async function listPages() {
   const pages = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json();
   return pages.filter((p) => p.type === 'page' && p.webSocketDebuggerUrl && /tauri.localhost|^tauri:/.test(p.url));
 }
 
-/** Verbindet mit einem Fenster; ohne Angabe mit dem ersten, sonst mit dem ersten, dessen Kennung nicht in `except` steht. */
+/** Connects to a window; without argument to the first, otherwise to the first whose ID is not in `except`. */
 async function connect(except = []) {
   for (let i = 0; i < 80; i++) {
     try {
@@ -204,7 +204,7 @@ async function connect(except = []) {
   throw new Error('Debug-Schnittstelle nicht erreichbar');
 }
 
-/** Wartet, bis die Oberfläche steht. Vorher lädt das Fenster noch und jede Auswertung ginge ins Leere. */
+/** Waits until the interface stands. Before that the window is still loading and every evaluation would go nowhere. */
 async function ready(page) {
   for (let i = 0; i < 80; i++) {
     try {
@@ -227,20 +227,20 @@ const fails=async(p)=>{try{await p;return null}catch(e){return e}};
 `;
 
 async function run(page, body) {
-  // Ein Schritt, der nie antwortet, soll die Prüfung scheitern lassen statt sie anzuhalten.
+  // A step that never answers should fail the test instead of stopping it.
   const timeout = new Promise((_, no) => setTimeout(() => no(new Error('Schritt antwortet nicht (40 s)')), 40_000));
   const r = await Promise.race([page.send('Runtime.evaluate', { expression: `(async()=>{${HELPERS}${body}})()`, awaitPromise: true, returnByValue: true }), timeout]);
   if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text);
   return r.result.value;
 }
 
-/** Merkt sich das nächste Kontextmenü-Ereignis des Fensters; `menuPrevented` sagt danach, ob das Menü unterbunden wurde. */
+/** Remembers the window's next context menu event; `menuPrevented` then says whether the menu was suppressed. */
 const watchMenu = (page) => run(page, `if (!window.__watching) { window.__watching = true; window.addEventListener('contextmenu', e => (window.__menu = e), true); }`);
 const menuPrevented = (page) => run(page, `const e = window.__menu; window.__menu = null; return e ? e.defaultPrevented : null`);
 
 /**
- * Wie Windows das Hauptfenster eines Prozesses führt: „True True 0“ heißt vorhanden, sichtbar und nicht verhüllt.
- * Glowport öffnet seine Fenster verhüllt und nimmt die Hülle ab, sobald die Oberfläche steht.
+ * How Windows keeps a process's main window: “True True 0” means present, visible and not cloaked.
+ * Glowport opens its windows cloaked and removes the cloak as soon as the interface stands.
  */
 function windowState(pid) {
   const type = `using System; using System.Runtime.InteropServices; public static class Fenster { [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int a, out int v, int s); [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h); }`;
@@ -257,8 +257,8 @@ const server = startServer();
 try {
   let page = await connect();
 
-  // 0a. Allererster Start, noch ohne Einstellungen: Die Sprache richtet sich nach Windows (die portable Fassung hat
-  // keinen Installer, dessen Wahl vorginge), und das Fenster ist zu sehen, sobald die Oberfläche steht.
+  // 0a. Very first start, still without settings: the language follows Windows (the portable version has
+  // no installer whose choice would take precedence), and the window is visible as soon as the interface stands.
   const systemLang = execFileSync('powershell', ['-NoProfile', '-Command', '(Get-UICulture).TwoLetterISOLanguageName'], { encoding: 'utf8' }).trim() === 'de' ? 'de' : 'en';
   const settingsFile = join(workDir, 'data', 'settings.json');
   const fresh = await run(page, `
@@ -268,7 +268,7 @@ try {
   ok('Erster Start: Die Sprache folgt Windows, solange nichts eingestellt ist', fresh.lang === systemLang && fresh.html === systemLang && (systemLang === 'de' ? /anlegen/ : /Create/).test(fresh.title), `Windows ${systemLang}, Glowport ${fresh.lang}: „${fresh.title}“`);
   const shown = windowState(app.pid);
   ok('Das Fenster ist zu sehen, sobald die Oberfläche steht', shown === 'True True 0' && fresh.visible === true, shown);
-  // Die Prüfung selbst läuft auf Deutsch: Sprache festlegen und neu starten.
+  // The test itself runs in German: set the language and restart.
   page.close();
   app.kill();
   await sleep(1200);
@@ -276,11 +276,11 @@ try {
   app = launch();
   page = await connect();
 
-  // 0. Ohne Tresor bietet der Start neben dem Anlegen an, eine Sicherung einzuspielen.
+  // 0. Without a vault the start offers, next to creating one, to restore a backup.
   const offer = await run(page, `await until(()=>q('.lock-card')); return !!byText('.lock-card .linkbtn','Sicherung');`);
   ok('ohne Tresor bietet der Start an, eine Sicherung einzuspielen', offer);
 
-  // 1. Erster Start: kein Tresor, Anlegen über die Oberfläche.
+  // 1. First start: no vault, create one through the interface.
   const first = await run(page, `
     await until(()=>q('.lock-card'));
     const before = await invoke('vault_status');
@@ -296,7 +296,7 @@ try {
   ok('Tresor-Datei liegt im Datenordner', existsSync(vaultFile));
   ok('Schrift der Oberfläche geladen', /Inter Variable/.test(first.font), first.font.slice(0, 30));
 
-  // 2. Gruppe und Host über die Editoren anlegen, Vererbung prüfen.
+  // 2. Create group and host through the editors, check inheritance.
   const made = await run(page, `
     byText('.acts .btn','Neue Gruppe').click(); await until(()=>q('.editor'));
     type(q('.editor .fld input'),'Produktiv'); type(qa('.editor .inh-row input')[0],'deploy'); await wait(80);
@@ -316,7 +316,7 @@ try {
   ok('Kern liefert Host ohne Passwort, nur hasPassword', host?.name === 'web-01' && host.hasPassword === true && !JSON.stringify(made.status).includes('server-passwort-geheim'));
   ok('Gruppe trägt die Vorgabe', made.status.data.groups[0]?.defs.user === 'deploy');
 
-  // 2b. Im Editor speichert nur „Speichern“: Abbrechen verwirft, und kein anderer Knopf sendet das Formular ab.
+  // 2b. In the editor only “Save” saves: Cancel discards, and no other button submits the form.
   const cancelled = await run(page, `
     q('.detail button[title="Bearbeiten"]').click(); await until(()=>q('.editor'));
     type(q('.editor .fld input'),'umbenannt'); await wait(80);
@@ -328,7 +328,7 @@ try {
   ok('nur „Speichern“ sendet das Formular ab', cancelled.submitters.join() === 'Speichern' && cancelled.browseType === 'button', cancelled.submitters.join());
   ok('Abbrechen im Editor speichert nichts', cancelled.names.join() === 'web-01' && !cancelled.editorOpen, cancelled.names.join());
 
-  // 2c. Das Kontextmenü von WebView2 gibt es nirgends, auch nicht in Eingabefeldern.
+  // 2c. WebView2's context menu exists nowhere, not even in input fields.
   await watchMenu(page);
   const spots = await run(page, `
     q('.detail button[title="Bearbeiten"]').click(); await until(()=>q('.editor'));
@@ -343,7 +343,7 @@ try {
   await run(page, `byText('.editor .btn','Abbrechen').click(); await wait(300);`);
   ok('kein Kontextmenü auf der Host-Seite und in Eingabefeldern', menus.join() === 'true,true', menus.join());
 
-  // 3. Fehler des Kerns kommen als Code an; Befehle mit mehreren Argumenten funktionieren.
+  // 3. Core errors arrive as codes; commands with several arguments work.
   const errs = await run(page, `
     const st = await invoke('vault_status'); const g = st.data.groups[0].id, h = st.data.hosts[0].id;
     const e1 = await fails(invoke('host_save',{host:{name:'',address:'x',group:null,color:null,os:null,own:{}}}));
@@ -364,7 +364,7 @@ try {
   ok('Verschieben behält das Passwort, Farbe wird vereinheitlicht', errs.movedHost.hasPassword === true && errs.movedHost.color === '#22C3A6' && errs.movedHost.os === 'Ub');
   ok('Gruppe auflösen rückt den Host nach oben', errs.afterDissolve.groups.length === 1 && errs.afterDissolve.hosts[0].group === errs.afterDissolve.groups[0].id);
 
-  // 4. Passwort ändern, sperren, falsches und richtiges Passwort.
+  // 4. Change password, lock, wrong and right password.
   const lock = await run(page, `
     const weak = await fails(invoke('vault_change_password',{old:'${PW1}',new:'kurz'}));
     const wrong = await fails(invoke('vault_change_password',{old:'falsch',new:'${PW2}'}));
@@ -381,7 +381,7 @@ try {
   ok('Sperren verbirgt alles', lock.hidden);
   ok('altes Passwort wird abgelehnt', /Falsches|Wrong/.test(lock.msg ?? ''), lock.msg);
   ok('neues Passwort entsperrt', lock.open === 'open', `${lock.ms} ms bis die Oberfläche wieder da ist`);
-  // 4b. Echte Verbindung zum Testserver: Host anlegen, verbinden, Rückfragen beantworten, tippen, abmelden.
+  // 4b. Real connection to the test server: create host, connect, answer prompts, type, sign out.
   const port = await server.port;
   const opened = await run(page, `
     // Host über den Editor anlegen, danach über die Suche (Strg+K) öffnen.
@@ -421,8 +421,8 @@ try {
   await sleep(600);
   await shot(page, 'terminal');
 
-  // Rechtsklick wie bei Termius: mit Markierung kopieren, ohne Markierung einfügen, nie ein Menü.
-  // Die Zwischenablage gehört dem Nutzer; ihr Text wird gemerkt und am Ende zurückgelegt.
+  // Right-click like in Termius: with a selection copy, without a selection paste, never a menu.
+  // The clipboard belongs to the user; its text is remembered and put back at the end.
   const clipRead = () => run(page, `return await invoke('plugin:clipboard-manager|read_text').catch(()=>null)`);
   const clipWrite = (text) => run(page, `await invoke('plugin:clipboard-manager|write_text',{text:${JSON.stringify(text)}})`);
   const clipBefore = await clipRead();
@@ -431,7 +431,7 @@ try {
     return { x: r.left, y: r.top, w: r.width, h: r.height };
   `);
   await clipWrite('glowport-e2e-platzhalter');
-  // Die ersten Zeilen des Terminals markieren: Begrüßung, Eingabe „size“ und die gemeldete Größe.
+  // Select the terminal's first lines: greeting, input “size” and the reported size.
   await drag(page, area.x + 3, area.y + 3, area.x + 400, area.y + 140);
   await rightClick(page, area.x + area.w / 2, area.y + area.h / 2);
   const copied = await clipRead();
@@ -439,7 +439,7 @@ try {
   ok('Rechtsklick im Terminal öffnet kein Menü', (await menuPrevented(page)) === true);
   await clipWrite('exit');
   await rightClick(page, area.x + area.w / 2, area.y + area.h / 2);
-  // Wäre die Markierung noch da, hätte der zweite Rechtsklick wieder kopiert statt eingefügt.
+  // If the selection were still there, the second right-click would have copied again instead of pasting.
   ok('Kopieren hebt die Markierung auf', (await clipRead()) === 'exit' && (await menuPrevented(page)) === true);
   await pressEnter(page);
   const left = await run(page, `
@@ -449,7 +449,7 @@ try {
     const asked = !!q('.dlg');
     return { bar, again: !!again, asked };
   `);
-  // „exit“ kam nur über die Zwischenablage; stünde vom Kopieren etwas in der Eingabezeile, bliebe die Sitzung offen.
+  // “exit” only came via the clipboard; if something from copying were in the input line, the session would stay open.
   ok('Rechtsklick ohne Markierung fügt ein: exit beendet die Sitzung', /Server hat die Sitzung beendet/.test(left.bar ?? ''), left.bar?.trim().slice(0, 50));
   if (typeof clipBefore === 'string') await clipWrite(clipBefore);
   ok('Neu verbinden kommt ohne Rückfragen aus', left.again && !left.asked);
@@ -463,7 +463,7 @@ try {
   ok('Abriss wird gemeldet und von selbst neu verbunden', /abgerissen/.test(dropped.bar ?? '') && /Neuer Versuch/.test(dropped.bar ?? '') && dropped.again, dropped.bar?.trim().slice(0, 60));
   ok('Tab schließen trennt die Sitzung', dropped.tabs === 1 && dropped.live === 0, `${dropped.live} Sitzungen`);
 
-  // 4c. Schnellverbindung über die Suche, Warnung beim Schließen mit laufender Sitzung, danach als Host speichern.
+  // 4c. Quick connect via search, warning when closing with a running session, then save as a host.
   const quick = await run(page, `
     window.dispatchEvent(new KeyboardEvent('keydown',{key:'k',ctrlKey:true,bubbles:true}));
     const pal = await until(()=>q('.pal input')); type(pal,'ssh tester@127.0.0.1 -p ${port}'); await until(()=>byText('.pi','Direkt verbinden'));
@@ -486,7 +486,7 @@ try {
   ok('Schließen mit laufender Sitzung fragt nach', quick.warnText.includes('beenden') && quick.still, quick.warnText.trim().slice(0, 40));
   ok('Schnellverbindung als Host gespeichert', quick.renamed && quick.made?.own.user === 'tester' && quick.made.own.port === port);
 
-  // 4d. Schlüssel und Identitäten: erzeugen, einer Identität geben und damit ohne Passwort anmelden.
+  // 4d. Keys and identities: generate, give to an identity and sign in with it without a password.
   const keyMade = await run(page, `
     qa('.nv')[1].click(); await until(()=>byText('.acts .btn','Schlüssel erzeugen'));
     byText('.acts .btn','Schlüssel erzeugen').click(); await until(()=>q('.editor .seg'));
@@ -509,7 +509,7 @@ try {
   `);
   ok('Identität mit Schlüssel angelegt', identity?.user === 'tester' && identity.key === madeKey.id && identity.hasPassword === false);
 
-  // An Ort und Stelle: Im Editor einer Identität einen neuen Schlüssel erzeugen; er ist danach gleich ausgewählt.
+  // In place: generate a new key in an identity's editor; it is selected right away afterwards.
   const inPlace = await run(page, `
     byText('.acts .btn','Neue Identität').click(); await until(()=>byText('.editor .d-sub','Neue Identität'));
     const select = q('.editor select');
@@ -530,8 +530,8 @@ try {
   ok('Schlüssel lässt sich im Editor der Identität anlegen und ist danach ausgewählt', inPlace.offers.length === 2 && inPlace.stayed === '' && !!inPlace.made && inPlace.chosen === inPlace.made, inPlace.offers.join(' | '));
   await shot(page, 'schluessel');
 
-  // Zertifikat: Eine eigene Zertifizierungsstelle beglaubigt den Schlüssel. Der Testserver vertraut nur ihr; den
-  // Schlüssel selbst kennt er noch nicht.
+  // Certificate: a certificate authority of our own certifies the key. The test server only trusts it; it does not
+  // know the key itself yet.
   const publicFile = join(workDir, 'e2e-schluessel.pub');
   writeFileSync(publicFile, `${madeKey.publicKey}\n`);
   execFileSync('ssh-keygen', ['-q', '-s', caKey, '-I', 'e2e-zertifikat', '-n', 'tester', '-V', '+1h', publicFile]);
@@ -549,7 +549,7 @@ try {
   `);
   ok('Zertifikat am Schlüssel hinterlegt, Unsinn wird abgelehnt', certified.certificate?.keyId === 'e2e-zertifikat' && certified.certificate.principals.join() === 'tester' && certified.panel.includes('Gilt für: tester') && /kein Zertifikat/.test(certified.refused ?? ''), certified.refused);
 
-  // Der neue Host hat kein Passwort, und der Server kennt den Schlüssel nicht: Hinein führt nur das Zertifikat.
+  // The new host has no password, and the server does not know the key: only the certificate gets in.
   const viaKey = await run(page, `
     qa('.nv')[0].click(); await until(()=>byText('.acts .btn','Neuer Host'));
     byText('.acts .btn','Neuer Host').click(); await until(()=>q('.editor'));
@@ -566,7 +566,7 @@ try {
   ok('Host übernimmt Benutzer und Schlüssel aus der Identität', viaKey.userHint === 'tester' && viaKey.detail.includes('aus Identität „E2E“') && viaKey.detail.includes('e2e-schluessel'), viaKey.userHint);
   ok('Anmeldung mit Schlüssel und Zertifikat, ohne dass der Server den Schlüssel kennt', viaKey.connected && !viaKey.asked && !existsSync(authorizedKeys));
 
-  // Ohne Zertifikat weiter: Ab jetzt soll der Server den Schlüssel selbst kennen.
+  // Continue without certificate: from now on the server should know the key itself.
   const plain = await run(page, `
     q('.tabs .tab.on .x').click(); await wait(300);
     qa('.nv')[1].click(); await until(()=>byText('.host','e2e-schluessel'));
@@ -577,7 +577,7 @@ try {
   ok('Zertifikat entfernt', plain === null);
 
 
-  // Den öffentlichen Schlüssel über den Dialog auf den Testserver kopieren. Angemeldet wird mit dem gespeicherten Passwort.
+  // Copy the public key to the test server through the dialog. Signing in uses the saved password.
   const deploy = async () =>
     run(page, `
       byText('.host','e2e-schluessel').click(); await until(()=>byText('.editor .btn','Auf Hosts kopieren'));
@@ -598,8 +598,8 @@ try {
   const repeated = await deploy();
   ok('Ein zweites Kopieren trägt nichts doppelt ein', repeated.result === 'War schon dort' && readFileSync(authorizedKeys, 'utf8') === onServer, repeated.result);
 
-  // Schlüsseldatei mit Passphrase: Bei der Rückfrage ankreuzen, dass der Schlüssel in den Tresor soll. Danach meldet
-  // sich der Host ohne Passphrase an. Der Server kennt den Schlüssel, weil er in authorized_keys steht.
+  // Key file with passphrase: at the prompt, tick that the key should go into the vault. Afterwards the host
+  // signs in without a passphrase. The server knows the key because it is in authorized_keys.
   const fileKey = join(workDir, 'datei-schluessel');
   execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', 'datei-passphrase', '-C', 'datei', '-f', fileKey]);
   writeFileSync(authorizedKeys, onServer + readFileSync(`${fileKey}.pub`, 'utf8'));
@@ -634,8 +634,8 @@ try {
   ok('Nach der Anmeldung liegt die Schlüsseldatei im Tresor und der Host benutzt sie', adopted.connected && !!adopted.key && adopted.own?.key === adopted.key && adopted.origin === 'imported' && !adopted.leak);
   ok('Danach verbindet der Host ohne Passphrase', adopted.again && !adopted.asked);
 
-  // Über einen Sprung-Server: Der Testserver reicht an sich selbst weiter. Für den Sprung-Server ist kein Passwort
-  // hinterlegt, also fragt Glowport für genau diese Station. Dazu Startbefehl und Umgebungsvariable am Ziel.
+  // Through a jump host: the test server forwards to itself. No password is stored for the jump host,
+  // so Glowport asks for exactly that hop. Plus startup command and environment variable on the destination.
   const viaJump = await run(page, `
     qa('.nv')[0].click(); await until(()=>byText('.host','schluessel-host'));
     byText('.host','schluessel-host').click(); await until(()=>q('.detail'));
@@ -664,8 +664,8 @@ try {
   ok('Die Agenten dieses Rechners werden abgefragt', viaJump.agents.map(a => a.kind).join() === 'openssh,pageant' && viaJump.agents.every(a => typeof a.running === 'boolean' && Array.isArray(a.keys)) && viaJump.target?.own.agent === true, viaJump.agents.map(a => `${a.kind}: ${a.running ? a.keys.length + ' Schlüssel' : 'läuft nicht'}`).join(', '));
   const shell = await terminalText(page);
   ok('Startbefehl und Umgebungsvariable kommen in der Shell an', shell.includes('$ env') && shell.includes('STUFE=e2e') && viaJump.broken === 'env_invalid', JSON.stringify(shell.slice(0, 90)));
-  // Der Host spricht ISO-8859-1: „ä“ geht als ein Byte hinaus. Der Testserver hält das für kaputtes UTF-8 und antwortet
-  // mit dem Ersatzzeichen in UTF-8, dessen drei Bytes hier als drei Zeichen ankommen.
+  // The host speaks ISO-8859-1: “ä” goes out as one byte. The test server takes that for broken UTF-8 and answers
+  // with the replacement character in UTF-8, whose three bytes arrive here as three characters.
   await typeLine(page, 'term');
   await typeLine(page, 'ä');
   await sleep(600);
@@ -673,7 +673,7 @@ try {
   ok('Terminal-Typ und Zeichensatz des Hosts gelten', fineShell.includes('vt100') && fineShell.includes('unbekannt: ï¿½'), JSON.stringify(fineShell.slice(-60)));
   ok('Proxy: Passwort in der Adresse wird abgelehnt, das eigene Feld bleibt im Kern', viaJump.badProxy === 'proxy_invalid' && viaJump.proxyKept === true);
 
-  // Importieren läuft über die Befehle: Den Dateidialog kann die Prüfung nicht bedienen.
+  // Importing runs through the commands: the test cannot operate the file dialog.
   const encryptedKey = readFileSync(resolve('crates/net/tests/keys/openssh_ed25519_enc'), 'utf8');
   const imported = await run(page, `
     q('.tabs .tab.on .x').click(); await wait(300);
@@ -700,8 +700,8 @@ try {
   `);
   ok('Löschen löst die Verweise in Identität und Host', cleaned.loose === null && cleaned.adopted === undefined && cleaned.own.identity === undefined && cleaned.keys.join() === 'e2e-import' && cleaned.identities === 0, JSON.stringify(cleaned.own));
 
-  // 4e. Zertifizierungsstelle für Server: Der bekannte Eintrag für den Testserver wird entfernt. Trotzdem kommt keine
-  // Rückfrage, weil er ein gültiges Zertifikat der vertrauten Stelle für seine Adresse zeigt.
+  // 4e. Certificate authority for servers: the known entry for the test server is removed. Still no
+  // prompt comes, because it shows a valid certificate from the trusted authority for its address.
   const caPublic = readFileSync(`${caKey}.pub`, 'utf8');
   const certifiedHost = await run(page, `
     qa('.nv')[5].click(); await until(()=>byText('.acts .btn','Zertifizierungsstelle'));
@@ -731,7 +731,7 @@ try {
 
   // 4f. Meilenstein 4 – geteilte Terminals, Multi-Exec, Umordnen, Tab umbenennen.
   const mid = `const mid = el => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, l: r.left, t: r.top, w: r.width, h: r.height }; };`;
-  // Host per Ziehen in eine Gruppe verschieben und über die Brotkrumen wieder heraus.
+  // Move a host into a group by dragging and back out through the breadcrumbs.
   const carry = async (from, to) => {
     await mouse(page, 'mousePressed', from.x, from.y, 'left', 1);
     for (const part of [0.2, 0.5, 0.8, 1]) await mouse(page, 'mouseMoved', from.x + (to.x - from.x) * part, from.y + (to.y - from.y) * part, 'left', 1);
@@ -772,7 +772,7 @@ try {
   `);
   ok('Rechts teilen öffnet einen zweiten Bereich zum selben Host', split.both && split.live === 2 && split.tab === 'testserver +1' && Math.abs(split.widths[0] - split.widths[1]) < 4, `Breiten ${split.widths.join(' / ')}`);
 
-  // Ohne Multi-Exec bekommt nur der Bereich mit der Tastatur die Eingabe, mit Multi-Exec beide.
+  // Without multi-exec only the pane with the keyboard gets the input, with multi-exec both.
   await typeLine(page, 'echo allein');
   await sleep(500);
   const alone = [await terminalText(page, 0), await terminalText(page, 1)];
@@ -788,7 +788,7 @@ try {
   const together = [await terminalText(page, 0), await terminalText(page, 1)];
   ok('Multi-Exec schickt die Eingabe an alle Bereiche des Tabs', /alle 2 Terminals/.test(multiOn.banner ?? '') && multiOn.marked && together.every((text) => text.includes('$ size')), JSON.stringify(together[0].slice(-40)));
 
-  // Den rechten Bereich an seiner Kopfzeile greifen und links neben den anderen legen.
+  // Grab the right pane by its header and put it to the left of the other one.
   const grab = await run(page, `${mid} const panes = qa('.pane:not(.off)'); return { names: panes.map(p=>p.dataset.pane), from: mid(panes[1].querySelector('.pane-h b')), to: mid(panes[0]) };`);
   await mouse(page, 'mousePressed', grab.from.x, grab.from.y, 'left', 1);
   for (const part of [0.2, 0.5, 0.8, 1]) await mouse(page, 'mouseMoved', grab.from.x + (grab.to.l + grab.to.w * 0.1 - grab.from.x) * part, grab.from.y + (grab.to.y - grab.from.y) * part, 'left', 1);
@@ -802,7 +802,7 @@ try {
   const stillMulti = await run(page, `return !!q('.mx') && q('.tabs .tab.on').classList.contains('multi')`);
   ok('Die Terminals behalten beim Umordnen ihren Inhalt, Multi-Exec bleibt an', kept[0].includes('$ size') && !kept[0].includes('echo allein') && kept[1].includes('echo allein') && stillMulti, JSON.stringify(kept[1].slice(0, 50)));
 
-  // Tab umbenennen (Doppelklick) und über das Menü als Arbeitsbereich speichern.
+  // Rename the tab (double-click) and save it as a workspace through the menu.
   const named = await run(page, `
     q('.tabs .tab.on').dispatchEvent(new MouseEvent('dblclick',{bubbles:true}));
     const field = await until(()=>q('.tab-name')); type(field,'Zwei Server');
@@ -824,7 +824,7 @@ try {
   const workspace = stored.workspaces[0];
   ok('Tab als Arbeitsbereich im Tresor abgelegt', stored.prefilled === 'Zwei Server' && stored.boxes === 2 && stored.multi === true && workspace?.name === 'Zwei Server' && workspace.multi === true && workspace.layout.dir === 'row' && workspace.layout.a.pane.kind === 'host' && workspace.layout.a.pane.id === workspace.layout.b.pane.id, JSON.stringify(workspace?.layout).slice(0, 70));
 
-  // 4g. Mitschnitt: einschalten, etwas ausgeben lassen, ausschalten; die Datei ist lesbarer Text ohne Steuerzeichen.
+  // 4g. Recording: switch on, have something printed, switch off; the file is readable text without control characters.
   const logDir = join(workDir, 'data', 'logs');
   await run(page, `byText('.sview:not(.off) .tbar .btn','Multi-Exec').click(); await until(()=>!q('.mx')); byText('.sview:not(.off) .tbar .btn','Mitschnitt').click(); await until(()=>q('.pane:not(.off) .recdot'));`);
   await typeLine(page, 'echo mitgeschnitten');
@@ -860,7 +860,7 @@ try {
   ok('Mitschnitt umbenannt: Name in der Liste, Datei heißt danach so, Inhalt und Zeiten bleiben', logPage.listed.includes('testserver') && logPage.renamed.title === 'Deploy: Probe' && logPage.renamed.name === 'testserver' && logPage.renamed.file.endsWith('_Deploy__Probe.log') && logPage.renamed.endedAt === recording.done[0].endedAt && logPage.still === 'Deploy: Probe' && !existsSync(logFile), logPage.renamed.file.split(/[\\/]/).pop());
   ok('Löschen entfernt die Datei des Mitschnitts', logPage.left === 0 && !existsSync(logPage.renamed.file));
 
-  // 4h. Farbschema am Host: Der Bereich bekommt den Hintergrund des Schemas. Dazu ein zweiter Tab aus dem Arbeitsbereich.
+  // 4h. Color scheme on the host: the pane gets the scheme's background. Plus a second tab from the workspace.
   const themed = await run(page, `
     const host = (await invoke('vault_status')).data.hosts.find(h => h.name === 'testserver');
     const bad = await fails(invoke('host_save', { host: { ...host, own: { ...host.own, scheme: 'Kein Schema!' } } }));
@@ -873,7 +873,7 @@ try {
   ok('Arbeitsbereich öffnet seine Hosts in ihrer Anordnung, Multi-Exec ist an', themed.tabs.length === 2 && themed.tabs[1].startsWith('Zwei Server') && themed.multi && themed.live === 4, themed.tabs.join(' | '));
   ok('Farbschema des Hosts gilt in seinen Terminals', themed.bad === 'scheme_invalid' && themed.backgrounds.every((bg) => bg.toLowerCase().startsWith('#282a36')), themed.backgrounds.join());
 
-  // 4i. Tab in ein eigenes Fenster und zurück: Die Sitzungen laufen weiter, der Inhalt zieht mit um.
+  // 4i. Tab into a window of its own and back: the sessions keep running, the content moves along.
   await run(page, `q('.tabs .tab.on .x').click(); await wait(400); qa('.tabs .tab:not(.home)')[0].click(); await wait(300);`);
   await typeLine(page, 'echo vor-dem-umzug');
   await sleep(500);
@@ -888,8 +888,8 @@ try {
   `);
   ok('Tab öffnet sich als eigenes Fenster ohne Start-Tab, der Tresor ist dort offen', inWindow.both && inWindow.label.startsWith('tab-') && !inWindow.home && !inWindow.nav && inWindow.tab === 'Zwei Server' && inWindow.vault === 'open', inWindow.label);
   ok('Die Sitzungen sind dabei nicht neu verbunden worden', before.live === 2 && inWindow.live === 2 && (await run(page, `return await invoke('session_count')`)) === 2);
-  // Gelesen wird über die Zwischenablage von Windows. Scheitert das Kopieren in einem der beiden Bereiche, steht in
-  // seinem Text, was vorher in der Zwischenablage lag; deshalb nennt die Ausgabe den Anfang beider Texte.
+  // Reading goes through the Windows clipboard. If copying fails in one of the two panes, its text contains
+  // what was on the clipboard before; that is why the output names the start of both texts.
   const carriedPanes = [await terminalText(second, 0), await terminalText(second, 1)];
   const carried = carriedPanes.join('');
   ok('Der Inhalt des Terminals ist mit umgezogen', carried.includes('echo vor-dem-umzug') && carried.includes('Willkommen beim Testserver'), JSON.stringify(carriedPanes.map((text) => `${text.length}: ${text.slice(0, 40)}`)));
@@ -898,7 +898,7 @@ try {
   await sleep(600);
   const typed = (await terminalText(second, 0)) + (await terminalText(second, 1));
   ok('Im neuen Fenster lässt sich weiterarbeiten', typed.includes('echo im-neuen-fenster'));
-  // Ein Host, den das Hauptfenster umbenennt, heißt auch im anderen Fenster sofort so.
+  // A host renamed by the main window is called that in the other window at once too.
   const synced = await run(page, `
     const host = (await invoke('vault_status')).data.hosts.find(h => h.name === 'testserver');
     await invoke('host_save', { host: { ...host, name: 'testserver-neu' } });
@@ -923,7 +923,7 @@ try {
   await run(page, `q('.tabs .tab.on .x').click(); await wait(400); const ws = (await invoke('vault_status')).data.workspaces[0]; await invoke('workspace_delete', { id: ws.id });`);
   ok('Tab schließen trennt alle seine Sitzungen', (await run(page, `await wait(300); return await invoke('session_count')`)) === 0);
 
-  // 4j. Meilenstein 5 – Dateien: der Testserver zeigt über SFTP einen Ordner dieses Rechners als sein Dateisystem.
+  // 4j. Files: the test server shows a folder of this machine over SFTP as its file system.
   const hostId = await run(page, `return (await invoke('vault_status')).data.hosts.find(h => h.name === 'testserver').id`);
   const place = JSON.stringify({ kind: 'host', id: hostId });
   const DONE = `const done = async (ids, ms = 90000) => { const end = Date.now() + ms; while (Date.now() < end) { const list = (await invoke('transfer_list')).filter(x => ids.includes(x.id)); if (list.length === ids.length && list.every(x => ['done','failed','cancelled'].includes(x.state))) return list; await wait(150); } return null };`;
@@ -969,7 +969,7 @@ try {
   ok('Fehler kommen als Code: gesperrter Ordner, fehlender Pfad, Datei statt Ordner', ops.locked === 'permission_denied' && ops.missing === 'no_such_file' && ops.notDir === 'not_a_directory' && readFileSync(join(serverFiles, 'etc', 'hosts'), 'utf8') === '127.0.0.1 localhost\n', `${ops.locked} ${ops.missing} ${ops.notDir}`);
   ok('Löschen nimmt den Ordner samt Inhalt mit', ops.end === 'bild.png,config.yaml,notes.txt,roh.bin' && !existsSync(join(serverFiles, 'srv', 'app', 'archiv')));
 
-  // Hochladen: ein Ordner mit vielen kleinen Dateien und eine einzelne Datei; danach liegt alles am Server.
+  // Uploading: a folder with many small files and a single file; afterwards everything is on the server.
   const uploaded = await run(page, `
     ${DONE}
     const ids = await invoke('transfer_start', { request: { from: { kind: 'local' }, paths: [${JSON.stringify(join(lokal, 'viele'))}, ${JSON.stringify(join(lokal, 'einzeln.txt'))}], to: ${place}, dest: '/srv/app', policy: 'overwrite', parallel: 4 } });
@@ -981,7 +981,7 @@ try {
   ok('Ordner mit vielen Dateien und eine einzelne Datei hochladen', uploaded.list?.length === 2 && uploaded.list.every((x) => x.state === 'done' && x.direction === 'upload') && uploaded.list[0].files === 40 && uploaded.list[0].filesDone === 40 && arrived === 40 && readFileSync(join(serverFiles, 'srv', 'app', 'einzeln.txt'), 'utf8') === 'einzeln\n', `${arrived} von 40, ${uploaded.list?.map((x) => x.state).join()}`);
   ok('Quelle und Ziel im selben Ordner werden abgelehnt', uploaded.same === 'same_place');
 
-  // Vorhandene Namen: überspringen lässt das Alte stehen, „beide behalten“ legt das Neue daneben.
+  // Existing names: skip leaves the old one in place, “keep both” puts the new one next to it.
   writeFileSync(join(lokal, 'einzeln.txt'), 'neuer inhalt\n');
   const policies = await run(page, `
     ${DONE}
@@ -992,7 +992,7 @@ try {
   `);
   ok('Vorhandene Namen: überspringen oder daneben legen', policies.skipped === 'done' && policies.kept === 'done' && readFileSync(join(serverFiles, 'srv', 'app', 'einzeln.txt'), 'utf8') === 'einzeln\n' && readFileSync(join(serverFiles, 'srv', 'app', 'einzeln (2).txt'), 'utf8') === 'neuer inhalt\n');
 
-  // Große Datei herunterladen, mittendrin anhalten: Am Ziel steht genau das Übertragene.
+  // Download a large file, pause in the middle: exactly what was transferred is at the destination.
   const big = join(serverFiles, 'srv', 'gross.bin');
   const total = statSync(big).size;
   const paused = await run(page, `
@@ -1009,7 +1009,7 @@ try {
   ok('Transfer mittendrin anhalten: Am Ziel steht genau so viel wie gemeldet', paused.state === 'paused' && paused.direction === 'download' && paused.done > 0 && paused.done < total && partial === paused.done, `${paused.done} von ${total}, am Ziel ${partial}`);
   ok('Der angehaltene Transfer ist für den Neustart vorgemerkt', existsSync(join(workDir, 'data', 'transfers.json')) && readFileSync(join(workDir, 'data', 'transfers.json'), 'utf8').includes('gross.bin'));
 
-  // Programm hart beenden und neu starten: Der Transfer wird angehalten wieder angeboten und läuft ab der alten Stelle zu Ende.
+  // Kill and restart the program: the transfer is offered again as paused and finishes from the old position.
   page.close();
   app.kill();
   await sleep(1200);
@@ -1031,7 +1031,7 @@ try {
   ok('Fortgesetzt läuft er zu Ende, die Datei ist vollständig und unverändert', resumed.list?.[0].state === 'done' && resumed.list[0].done === total && hash(join(lokal, 'gross.bin')) === hash(big) && !existsSync(join(workDir, 'data', 'transfers.json')), `${resumed.list?.[0].state}`);
   ok('Nach dem Entsperren öffnet sich die Liste von selbst, die Statusleiste zeigt die Transfers', resumed.shownList && resumed.chip);
 
-  // Ordner abgleichen: Unterschiede erkennen, nur sie übertragen, danach sind beide Seiten gleich.
+  // Compare folders: detect differences, transfer only those, afterwards both sides are equal.
   const synced2 = await run(page, `
     ${DONE}
     const args = { left: { kind: 'local' }, leftPath: ${JSON.stringify(join(lokal, 'abgleich'))}, right: ${place}, rightPath: '/srv/abgleich' };
@@ -1044,7 +1044,7 @@ try {
   ok('Ordner abgleichen erkennt, was fehlt und was neuer ist', synced2.before === 'gleich.txt=same neu-links.txt=left nur-rechts.txt=right unter/geaendert.txt=newerLeft', synced2.before);
   ok('Angleichen überträgt nur die Unterschiede in beide Richtungen; danach ist alles gleich', synced2.moved === 'done:download done:upload done:upload' && synced2.after === 'same same same same' && readFileSync(join(lokal, 'abgleich', 'nur-rechts.txt'), 'utf8') === 'rechts\n' && readFileSync(join(serverFiles, 'srv', 'abgleich', 'unter', 'geaendert.txt'), 'utf8') === 'neuer stand\n', `${synced2.moved} | ${synced2.after}`);
 
-  // Im eigenen Programm bearbeiten: Die Arbeitskopie wird beobachtet; jedes Speichern lädt sie wieder hoch.
+  // Edit in your own program: the working copy is watched; every save uploads it again.
   const watching = await run(page, `
     await invoke('watch_open', { place: ${place}, path: '/srv/app/notes.txt', program: 'C:\\\\Windows\\\\System32\\\\where.exe' });
     return await invoke('watch_list');
@@ -1061,7 +1061,7 @@ try {
   `);
   ok('Bearbeiten im eigenen Programm: Arbeitskopie holen, nach dem Speichern hochladen, beim Beenden aufräumen', fetched === 'notiz\n' && watching[0]?.origin === 'testserver:/srv/app/notes.txt' && uploadedBack.watch?.uploads === 1 && !uploadedBack.watch.error && readFileSync(join(serverFiles, 'srv', 'app', 'notes.txt'), 'utf8') === 'im eigenen Programm geändert\n' && uploadedBack.left === 0 && !existsSync(copy), JSON.stringify(uploadedBack.watch));
 
-  // Dateileiste am Terminal: Sie benutzt die Verbindung der Sitzung und zeigt das Heimatverzeichnis des Servers.
+  // File panel next to the terminal: it uses the session's connection and shows the server's home directory.
   const bar = await run(page, `
     qa('.nv')[0].click(); await until(()=>byText('.host','testserver'));
     byText('.host','testserver').click(); await until(()=>q('.detail'));
@@ -1081,7 +1081,7 @@ try {
   `);
   ok('Dateileiste am Terminal zeigt die Dateien des Servers über die Verbindung der Sitzung', bar.shown && /config\.yaml/.test(bar.rows || '') && /viele/.test(bar.rows || '') && bar.hidden && bar.sessions.join() === '1,1', bar.note ?? String(bar.rows));
 
-  // Ein Host ohne gespeicherte Zugangsdaten: Die Seite „Dateien“ fragt wie das Terminal nach dem Passwort.
+  // A host without saved credentials: the Files page asks for the password like the terminal does.
   const asked = await run(page, `
     const base = (await invoke('vault_status')).data.hosts.find(h => h.name === 'testserver');
     const { id, hasPassword, ...rest } = base;
@@ -1115,8 +1115,8 @@ try {
   ok('Seite „Dateien“ fragt bei einem Host ohne Zugangsdaten nach dem Passwort, wiederholt bei einem falschen und speichert es auf Wunsch', /ohne-passwort/.test(asked.title ?? '') && /Versuch 2/.test(asked.retry ?? '') && asked.label && asked.saved && asked.listed >= 5, `${asked.title} | ${asked.retry}`);
   ok('Abgebrochene Rückfrage: Die Spalte sagt es, und keine Verbindung bleibt hängen', /abgebrochen/.test(asked.note ?? '') && !asked.dialog && asked.sessions === 0, asked.note ?? '');
 
-  // Ziehen in den Explorer: Dateien eines Servers werden dafür in einen Arbeitsordner geholt. Das Ziehen selbst
-  // beginnt die Prüfung nicht; ohne gedrückte Maustaste würde Windows dort ablegen, wo der Zeiger gerade steht.
+  // Dragging into Explorer: a server's files are fetched into a working folder for it. The test does not start the
+  // drag itself; without a pressed mouse button Windows would drop wherever the pointer happens to be.
   const staged = await run(page, `
     ${DONE}
     const got = await invoke('drag_stage', { place: ${place}, paths: ['/srv/app/config.yaml', '/srv/app/viele'] });
@@ -1127,7 +1127,7 @@ try {
   `);
   ok('Für den Explorer bereitlegen holt Dateien und Ordner in den Arbeitsordner', staged.list?.every((x) => x.state === 'done' && x.dest.startsWith('Explorer')) && staged.paths.length === 2 && staged.paths.every((path) => path.startsWith(join(workDir, 'data', 'drag')) && existsSync(path)) && readFileSync(staged.paths[0], 'utf8') === 'port: 3000\nneu: ja\n' && existsSync(join(staged.paths[1], 'unter', 'datei-01.txt')) && staged.local === 'not_supported' && staged.missing === 'no_such_file', staged.paths.map((path) => path.split(/[\\/]/).slice(-2).join('/')).join(' '));
 
-  // 4k. Meilenstein 6 – Port-Regeln: ein Ziel auf diesem Rechner, das nur über den Testserver angesprochen wird.
+  // 4k. Port rules: a destination on this machine that is only addressed through the test server.
   const echo = net.createServer((socket) => socket.on('data', (data) => socket.write(Buffer.concat([Buffer.from('echo:'), data]))).on('error', () => {}));
   await new Promise((done) => echo.listen(0, '127.0.0.1', done));
   const echoPort = echo.address().port;
@@ -1139,7 +1139,7 @@ try {
         probe.close(() => done(found));
       });
     });
-  /** Spricht mit einem Port dieses Rechners: schickt `steps` der Reihe nach und wartet je auf so viele Bytes. Liefert die Antworten oder null. */
+  /** Talks to a port on this machine: sends `steps` in order and waits for that many bytes each. Returns the answers or null. */
   const talk = (to, steps) =>
     new Promise((done) => {
       const socket = net.connect(to, '127.0.0.1');
@@ -1215,7 +1215,7 @@ try {
   ok('Ein belegter Port wird sofort gemeldet, die zweite Regel bleibt aus', ruleCount.taken === 'port_in_use' && ruleCount.stillOff, ruleCount.taken);
   ok('Der Editor zeigt den Stand der laufenden Regel und ihre Adresse', /Läuft/.test(ruleCount.live) && ruleCount.live.includes(`127.0.0.1:${pLocal}`) && /Bisher insgesamt\s*1/.test(ruleCount.live), ruleCount.live.slice(0, 90));
 
-  // Ein Host ohne gespeichertes Passwort: Beim Einschalten kommt dieselbe Rückfrage wie bei einem Terminal.
+  // A host without a saved password: switching on brings the same prompt as for a terminal.
   const asking = await run(page, `
     ${RULES}
     const base = (await invoke('vault_status')).data.hosts.find(h => h.name === 'testserver');
@@ -1242,7 +1242,7 @@ try {
   ok('Einschalten fragt wie ein Terminal nach dem Passwort; Abbrechen lässt die Regel aus', asking.asked && /regel-ohne-passwort/.test(asking.title ?? '') && asking.during === 'starting' && asking.off && asking.switchOff && asking.sessions === 0, `${asking.title} | ${asking.during}`);
   ok('Mit dem Passwort steht die Weiterleitung, ohne dass eine Sitzung offen bleibt', asking.on && viaAsked === 'echo:gefragt' && asking.after === 0, String(viaAsked));
 
-  // Abriss: Dieses Ziel bringt den Testserver dazu, die Verbindung zu kappen. Die Regel verbindet von selbst neu.
+  // Drop: this destination makes the test server cut the connection. The rule reconnects by itself.
   const lossId = await run(page, `${RULES} const id = (await saveRule(rule('E2E Abriss', 'local', ${pLoss}, { destHost: 'disconnect.test', destPort: 1 }))).id; await invoke('forward_start', { id }); await phase(id, 'running'); return id;`);
   net.connect(pLoss, '127.0.0.1').on('error', () => {});
   const loss = await run(page, `
@@ -1253,7 +1253,7 @@ try {
   `);
   ok('Nach einem Abriss verbindet die Regel von selbst neu', loss.error === 'connection_lost' && loss.again && loss.since > 0, JSON.stringify(loss));
 
-  // Ausschalten gibt den Port frei; eine geänderte Regel läuft nicht mit alten Werten weiter.
+  // Switching off frees the port; a changed rule does not keep running with old values.
   const stopped = await run(page, `
     ${RULES}
     row('E2E lokal').querySelector('.swt').click();
@@ -1267,7 +1267,7 @@ try {
   const afterStop = await say(pLocal, 'weg');
   ok('Ausschalten gibt den Port frei; Speichern schaltet eine laufende Regel aus', stopped.off && stopped.edited && afterStop === null && stopped.left.join() === asking.id, `${stopped.left.length} übrig`);
 
-  // 4l. Snippets: prüfen, anlegen, auf Hosts ausführen.
+  // 4l. Snippets: check, create, run on hosts.
   const snips = await run(page, `
     const save = (snippet) => invoke('snippet_save', { snippet });
     const base = { name: 'E2E Größe', package: 'E2E', kind: 'command', command: 'size', steps: [], hotkey: 'Alt+1' };
@@ -1308,7 +1308,7 @@ try {
   ok('Snippet über den Editor angelegt; die Variable wird erkannt, das Paket bildet einen Abschnitt', snips.vars.join() === 'wort = hallo' && snips.sections.some((s) => /Paket · E2E/i.test(s)), `${snips.vars.join()} | ${snips.sections.join(', ')}`);
   ok('Auf Hosts ausführen: Ausgabe samt Fehlerausgabe und Fehlercode je Host; ohne Zugangsdaten wird nicht gefragt', snips.preview.includes('glowport-$((6*7)) hallo') && /Auf 2 Hosts/.test(snips.button) && /Fehler 3/.test(snips.chips.good ?? '') && /Anmeldung abgelehnt/.test(snips.chips.locked ?? '') && snips.output.includes('glowport-42 welt') && snips.output.includes('fehler') && /0 ohne Fehler, 2 mit Fehler/.test(snips.summary ?? ''), `${snips.chips.good} | ${snips.chips.locked} | ${JSON.stringify(snips.output.slice(0, 40))}`);
 
-  // 4m. Im Terminal: Seitenleiste mit Server-Info und Snippets, Tastenkürzel, Makro, Vorschläge beim Tippen.
+  // 4m. In the terminal: sidebar with server info and snippets, hotkeys, macro, suggestions while typing.
   const side = await run(page, `
     qa('.nv')[0].click(); await until(()=>byText('.host', 'testserver'));
     byText('.host', 'testserver').click(); await until(()=>q('.detail'));
@@ -1339,8 +1339,8 @@ try {
   await run(page, `qa('.side .stab').find(b=>b.title==='Snippets').click(); await until(()=>q('.side .snip')); q('.pane:not(.off) .xterm-helper-textarea').focus();`);
   await pressEnter(page);
   await sleep(400);
-  // Meilenstein 10 – Docker, Dienste und Prozesse in der Seitenleiste. Der Testserver stellt dafür ein Linux nach
-  // (crates/testserver/src/admin.rs): Der Benutzer darf Container steuern, Dienste nicht, und sudo will ein Passwort.
+  // Docker, services and processes in the sidebar. The test server simulates a Linux for it
+  // (crates/testserver/src/admin.rs): the user may control containers, not services, and sudo wants a password.
   const SIDE = `
     const tab = name => qa('.side .stab').find(b=>b.title===name);
     const row = name => qa('.side .mg-row').find(r=>r.querySelector('.mg-main b')?.textContent.trim()===name);
@@ -1404,7 +1404,7 @@ try {
   ok('m10 Dienste: Filter „Fehler“ und die Suche (auch in der Beschreibung) grenzen ein', svc.label === 'Fehler 1' && svc.failedOnly.join() === 'e2e-backup' && svc.found.join() === 'e2e-idle', JSON.stringify([svc.label, svc.failedOnly, svc.found]));
   ok('m10 Dienste: Aufgeklappt stehen Zustand und letzte Meldungen da', /Active: inactive \(dead\)/.test(svc.status) && /Stopped e2e-idle\.service/.test(svc.status), svc.status);
   ok('m10 Ohne root: sudo will ein Passwort, also steht der Befehl im Terminal und ist nicht abgeschickt', !!svc.said && svc.still === 'aus' && /\$ sudo systemctl start 'e2e-idle\.service'$/.test(typedSudo.trimEnd()), JSON.stringify([svc.said, svc.still, typedSudo.slice(-120)]));
-  // Die Zeile abschicken, damit das Terminal für das Folgende wieder leer ist. Der Testserver kennt sudo nicht.
+  // Send the line so the terminal is empty again for what follows. The test server does not know sudo.
   await run(page, `q('.pane:not(.off) .xterm-helper-textarea').focus();`);
   await pressEnter(page);
   await sleep(400);
@@ -1443,7 +1443,7 @@ try {
   ok('Server-Info zeigt Auslastung und Eckdaten, oder sagt bei einem Server ohne /proc, dass sie Linux braucht', side.meters.length ? side.meters.includes('Prozessor') && side.meters.includes('Arbeitsspeicher') && /\d+ % · \d+ Kern/.test(side.cpu ?? '') && /Laufzeit/.test(side.info) : /Linux/.test(side.info ?? ''), `${side.cpu} | ${(side.info ?? '').slice(0, 110)}`);
   ok('Snippets am Terminal: Ausführen schickt ab, Variablen werden vorher abgefragt, Einfügen tippt nur', side.listed.includes('E2E Größe') && side.preview === 'term' && /\$ size\r?\n\d+x\d+/.test(afterSnippets) && /\$ term\r?\nxterm-256color/.test(afterSnippets) && /\$ size\s*$/.test(afterSnippets.trimEnd()) && side.focus === 'xterm-helper-textarea', JSON.stringify(afterSnippets.slice(-70)));
 
-  // Tastenkürzel Alt+1 führt „E2E Größe“ im Terminal aus.
+  // Hotkey Alt+1 runs “E2E Größe” in the terminal.
   const sizes = (text) => (text.match(/\d+x\d+/g) ?? []).length;
   const beforeKey = sizes(await terminalText(page, 0, true));
   for (const type of ['rawKeyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, key: '1', code: 'Digit1', windowsVirtualKeyCode: 49, modifiers: 1 });
@@ -1451,9 +1451,9 @@ try {
   const sizesAfterKey = sizes(await terminalText(page, 0, true));
   ok('Das Tastenkürzel eines Snippets führt es im Terminal aus', sizesAfterKey === beforeKey + 1, `${beforeKey} → ${sizesAfterKey}`);
 
-  // Strg+K gehört im Terminal der Sitzung (nano: Zeile ausschneiden, bash: bis zum Zeilenende löschen); die Suche
-  // öffnet dort Strg+Umschalt+K. Der Testserver schickt jedes Zeichen zurück; Strg+K ist ein Zeilenvorschub ohne
-  // Wagenrücklauf: Kommt es an, steht das danach getippte Q eine Zeile tiefer als die Eingabeaufforderung.
+  // In the terminal Ctrl+K belongs to the session (nano: cut line, bash: delete to end of line); search
+  // opens there with Ctrl+Shift+K. The test server echoes every character; Ctrl+K is a line feed without
+  // carriage return: if it arrives, the Q typed afterwards is one line below the prompt.
   await run(page, `q('.pane:not(.off) .xterm-helper-textarea').focus();`);
   for (const type of ['rawKeyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, key: 'k', code: 'KeyK', windowsVirtualKeyCode: 75, modifiers: 2 });
   await sleep(400);
@@ -1465,7 +1465,7 @@ try {
   for (const type of ['rawKeyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, key: 'K', code: 'KeyK', windowsVirtualKeyCode: 75, modifiers: 10 });
   await sleep(400);
   const paletteAfterShiftK = await run(page, `const open = !!q('.pal'); if (open) q('.pal input').dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); await wait(200); q('.pane:not(.off) .xterm-helper-textarea').focus(); return open;`);
-  // Die Zeile abschließen; der Testserver kennt sie nicht und schweigt.
+  // Finish the line; the test server does not know it and stays silent.
   await pressEnter(page);
   await sleep(400);
   ok('Strg+K geht im Terminal an die Sitzung, ohne die Suche zu öffnen; Strg+Umschalt+K öffnet dort die Suche', !paletteAfterK && afterK.at(-1)?.trim() === 'Q' && /\$$/.test(afterK.at(-2) ?? '') && paletteAfterShiftK, JSON.stringify([paletteAfterK, afterK.slice(-3), paletteAfterShiftK]));
@@ -1491,7 +1491,7 @@ try {
   const afterMacro = sizes(await terminalText(page, 0, true));
   ok('Makro: Getipptes wird mitgeschrieben, mit Namen gespeichert und beim Abspielen wieder getippt', /2 Schritte/.test(macro.counted) && macro.warned && macro.kind === 'macro' && macro.keys === 'size\r|term\r' && afterMacro === sizesAfterKey + 2 && !macro.playing, `${macro.counted} | ${JSON.stringify(macro.keys)} | ${sizesAfterKey} → ${afterMacro}`);
 
-  // Vorschläge beim Tippen: Befehle, Unterbefehle, Pfade am Server. Tab übernimmt.
+  // Suggestions while typing: commands, subcommands, paths on the server. Tab accepts.
   const hints = () => run(page, `return qa('.hints .hint').map(h => (h.classList.contains('on') ? '*' : '') + h.querySelector('b').textContent)`);
   const tab = async () => {
     for (const type of ['rawKeyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });
@@ -1521,7 +1521,7 @@ try {
   ok('Vorschläge: Befehl, nach Tab seine Unterbefehle, beim Weitertippen eingegrenzt; die Eingabetaste räumt ab', commandHints.join() === '*systemctl' && subHints[0] === '*status' && subHints.includes('restart') && narrowed.join() === '*restart,reload' && hintsGone.length === 0, `${commandHints.join()} | ${subHints.slice(0, 3).join()} | ${narrowed.join()}`);
   ok('Vorschläge: Pfade kommen vom Server, Tab ergänzt den Ordner und zeigt seinen Inhalt', pathHints.join() === '*app/' && inside.map((name) => name.replace(/^\*/, '')).includes('config.yaml') && /cat \/srv\/app\/\s*$/.test(typedPath.trimEnd()), `${pathHints.join()} | ${inside.slice(0, 4).join()}`);
 
-  // Aufräumen: Leiste zu, Tab zu; mit dem Host verschwindet seine Regel, auch aus dem Betrieb.
+  // Clean up: panel closed, tab closed; with the host its rule disappears, also from operation.
   const tidied = await run(page, `
     q('.side .side-h .btn.ghost').click(); await wait(200);
     q('.tabs .tab.on .x').click(); await wait(400);
@@ -1536,8 +1536,8 @@ try {
   ok('Mit dem Host verschwindet seine Regel aus Tresor und Betrieb', tidied.before.join() === asking.id && tidied.left.length === 0 && !tidied.rules.includes('E2E Rückfrage') && tidied.rules.includes('E2E lokal') && tidied.sessions === 0 && !tidied.side, tidied.rules.join(', '));
   echo.close();
 
-  // 4n. Meilenstein 7 – Import. Eine OpenSSH-Konfiguration mit Sprung-Server, drei Schlüsseldateien (frei, mit
-  // Passphrase, fehlend), zwei Port-Regeln und einem Host, den es im Tresor schon gibt.
+  // 4n. Import. An OpenSSH configuration with a jump host, three key files (plain, with
+  // passphrase, missing), two port rules and a host that already exists in the vault.
   const importDir = join(workDir, 'import');
   mkdirSync(importDir, { recursive: true });
   const freeKey = join(importDir, 'id_e2e');
@@ -1573,7 +1573,7 @@ try {
     ].join('\n'),
   );
 
-  // Der Dialog geht von der Seite „Hosts“ auf und zeigt alle Quellen; die Suche auf diesem PC antwortet.
+  // The dialog opens from the Hosts page and shows all sources; the search on this PC answers.
   const impDialog = await run(page, `
     q('.tabs .tab.home')?.click(); await wait(150); qa('.nv')[0].click(); await wait(300);
     byText('.ph .acts .btn','Importieren').click();
@@ -1585,7 +1585,7 @@ try {
   `);
   ok('Importieren öffnet den Dialog mit allen Quellen, die Suche auf diesem PC antwortet', impDialog.tiles === 13 && impDialog.scanned && impDialog.closed, `${impDialog.tiles} Kacheln`);
 
-  // Eine Datei ins Fenster ziehen: Tauri meldet das als Ereignis, das sich hier nachstellen lässt.
+  // Drag a file into the window: Tauri reports that as an event, which can be simulated here.
   const impPreview = await run(page, `
     await invoke('plugin:event|emit', { event: 'tauri://drag-drop', payload: { paths: [${JSON.stringify(configFile)}], position: { x: 500, y: 400 } } }).catch(()=>null);
     const list = await until(()=>q('.imp-list'), 8000);
@@ -1621,7 +1621,7 @@ try {
     `);
     ok('Import über die Oberfläche: Bericht nennt Hosts, Gruppe, Schlüssel und Regeln', impDone.sum.join(', ') === '3 neue Hosts, 1 neue Gruppe, 1 Schlüssel im Tresor, 1 Schlüsseldatei, 2 Port-Regeln, 1 ausgelassen' && impDone.closed && impDone.shown, impDone.sum.join(', '));
   } else {
-    // Ohne das nachgestellte Ablegen läuft derselbe Import über die Befehle, damit der Rest geprüft bleibt.
+    // Without the simulated drop the same import runs through the commands, so the rest stays tested.
     await run(page, `
       const d = await invoke('import_file', { path: ${JSON.stringify(configFile)} });
       await invoke('import_apply', { token: d.token, options: { hosts: d.hosts.map(h=>h.ref), keys: d.keys.filter(k=>k.state!=='missing').map(k=>k.ref), forwards: d.forwards.map(f=>f.ref), snippets: [], knownHosts: [], into: { name: 'OpenSSH' }, existing: 'skip', keysToVault: true, passwords: true } });
@@ -1644,7 +1644,7 @@ try {
   ok('Im Tresor: Hosts in ihrer Gruppe, Sprung-Server und Werte der Konfiguration, kein doppelter Host', impVault.inGroup && !impVault.doubled && impVault.web === '198.51.100.11|deploy|2200|40|true|true|', `${impVault.web}, ${impVault.total} Hosts`);
   ok('Im Tresor: freier Schlüssel importiert und am Host eingetragen, fehlender nirgends, Regeln angelegt', impVault.bastion === 'true|imported|' && impVault.old === '||' && impVault.rules === 'dynamic:11080>0,local:18080>80', `${impVault.bastion} · ${impVault.old} · ${impVault.rules}`);
 
-  // Eine Tabelle mit Gruppen und Passwörtern, einmal mit und einmal ohne „Passwörter übernehmen“. Dazu known_hosts.
+  // A table with groups and passwords, once with and once without “take over passwords”. Plus known_hosts.
   const csvFile = put(importDir, 'hosts.csv', 'Groups,Label,Hostname/IP,Port,Username,Password\r\nE2E-CSV/Unter,csv-a,198.51.100.21,22,root,pw-a\r\nE2E-CSV/Unter,csv-b,198.51.100.22,2222,root,pw-b\r\n,csv-telnet,198.51.100.23,23,admin,\r\n'.replace('\r\n,csv-telnet,198.51.100.23,23,admin,', '\r\n,csv-leer,,22,admin,'));
   const knownFile = put(importDir, 'known_hosts', `198.51.100.21 ${readFileSync(`${freeKey}.pub`, 'utf8').split(' ').slice(0, 2).join(' ')}\n|1|c2FsdA==|aGFzaA== ${readFileSync(`${lockedKey}.pub`, 'utf8').split(' ').slice(0, 2).join(' ')}\n`);
   const impTable = await run(page, `
@@ -1673,7 +1673,7 @@ try {
   ok('Tabelle: Gruppen entstehen einmal, ein Entwurf gilt nur einmal, Passwörter nur auf Wunsch', impTable.first === '1/2' && impTable.gone === 'not_found' && impTable.second === '1/0' && impTable.d2existing === 'true,false' && impTable.path && impTable.passwords === 'true,false,2222', `${impTable.first} ${impTable.second} ${impTable.passwords}`);
   ok('known_hosts: Schlüssel übernommen, verdeckter Name ausgelassen; eine Schlüsseldatei ist kein Import', impTable.known === 'knownhosts:1:hashed:1' && impTable.knownHost && impTable.unknown === 'import_unknown', `${impTable.known} ${impTable.unknown}`);
 
-  // Portable Fassung und Updates: Die Prüfung läuft als portable Kopie, die nie nach Updates sucht.
+  // Portable version and updates: the test runs as a portable copy, which never looks for updates.
   const impDelivery = await run(page, `
     const info = await invoke('app_info');
     const refused = await fails(invoke('update_check'));
@@ -1684,7 +1684,7 @@ try {
   `);
   ok('Portable Fassung: Daten neben dem Programm, auch die des Webviews; keine Suche nach Updates', impDelivery.portable === true && impDelivery.updates === false && impDelivery.refused === 'update_unavailable' && !impDelivery.button && !impDelivery.switch && impDelivery.rows && existsSync(join(workDir, 'data', 'webview')), `${impDelivery.dataDir} ${impDelivery.refused}`);
 
-  // Aufräumen: Was der Import angelegt hat, verschwindet wieder; die späteren Schritte zählen die Einträge.
+  // Clean up: what the import created disappears again; the later steps count the entries.
   const impCleared = await run(page, `
     let s = (await invoke('vault_status')).data;
     for (const g of s.groups.filter(g => ['OpenSSH','E2E-CSV'].includes(g.name))) await invoke('group_delete', { id: g.id, withContents: true });
@@ -1697,9 +1697,9 @@ try {
   `);
   ok('Nach dem Aufräumen ist der Tresor wie vor dem Import', !/e2e-|csv-/.test(impCleared.hosts) && !/OpenSSH|E2E-CSV/.test(impCleared.groups), `${impCleared.hosts} · ${impCleared.groups}`);
 
-  // 4o. Meilenstein 8 – lokales Terminal, Telnet, serielle Leitung.
-  // Ein Gegenspieler für Telnet: Er handelt aus wie ein Switch (Echo, Zeichenbetrieb, Terminal-Typ, Fenstergröße),
-  // gibt Getipptes zurück und merkt sich, was der Client schickt. Die Zeile „ende“ lässt ihn die Verbindung schließen.
+  // 4o. Local terminal, Telnet, serial line.
+  // A counterpart for Telnet: it negotiates like a switch (echo, character mode, terminal type, window size),
+  // echoes what is typed and remembers what the client sends. The line “ende” makes it close the connection.
   const telnetSeen = { bytes: Buffer.alloc(0), lines: [] };
   const telnetServer = net.createServer((socket) => {
     let line = '';
@@ -1711,7 +1711,7 @@ try {
       for (let i = 0; i < data.length; ) {
         const byte = data[i];
         if (byte === 255) {
-          // Befehle des Protokolls gehören nicht zum Text.
+          // Protocol commands are not part of the text.
           const verb = data[i + 1];
           const end = verb === 250 ? data.indexOf(Buffer.from([255, 240]), i) : -1;
           i = verb === 250 ? (end < 0 ? data.length : end + 2) : i + (verb === 255 ? 2 : 3);
@@ -1735,7 +1735,7 @@ try {
   const telnetPort = telnetServer.address().port;
   const m8Tabs = await run(page, `return qa('.tabs .tab:not(.home)').length`);
 
-  // Das Plus der Tab-Leiste bietet die Shells an, die der Kern auf diesem PC findet; die Eingabeaufforderung startet.
+  // The tab bar's plus offers the shells the core finds on this PC; the command prompt starts.
   const m8Shells = await run(page, `
     const shells = await invoke('local_shells');
     q('.tab-add').click(); await until(()=>q('.menu.newtab'));
@@ -1749,7 +1749,7 @@ try {
   `);
   ok('Der Kern findet die Shells dieses PCs, das Plus bietet genau sie an', m8Shells.ids.includes('cmd') && m8Shells.ids.includes('powershell') && m8Shells.offered.join() === m8Shells.ids.join() && m8Shells.first, m8Shells.ids.join(', '));
   ok('Lokales Terminal: Die Eingabeaufforderung läuft als Tab, ohne Dateileiste', m8Shells.running && m8Shells.state === 'Läuft' && m8Shells.tab === 'Eingabeaufforderung' && m8Shells.address === 'Dieser PC' && !m8Shells.bar && !m8Shells.filesButton && m8Shells.icon, `${m8Shells.state} · ${m8Shells.tab}`);
-  // Die Antwort enthält, was erst die Shell einsetzt; das Echo der Eingabe allein enthielte es nicht.
+  // The answer contains what only the shell fills in; the echo of the input alone would not contain it.
   await typeLine(page, 'echo m8-%OS%-ok');
   await sleep(1200);
   const m8Echo = await terminalText(page);
@@ -1766,7 +1766,7 @@ try {
   `);
   ok('Lokales Terminal: Das Ende nennt den Rückgabewert der Shell, „Neu starten“ startet sie wieder', m8Ended.text.includes('Die Shell wurde beendet (3).') && m8Ended.state === 'Beendet' && m8Ended.again, m8Ended.text.slice(0, 60));
 
-  // Strg+Umschalt+T öffnet die Standard-Shell (ohne Einstellung die erste gefundene).
+  // Ctrl+Shift+T opens the default shell (without a setting the first one found).
   const m8Hotkey = await run(page, `
     const first = (await invoke('local_shells'))[0];
     const before = qa('.tabs .tab:not(.home)').length;
@@ -1780,7 +1780,7 @@ try {
   `);
   ok('Strg+Umschalt+T öffnet die Standard-Shell; Schließen beendet sie', m8Hotkey.opened && m8Hotkey.running && m8Hotkey.tab === m8Hotkey.first && m8Hotkey.left === 0, m8Hotkey.tab);
 
-  // Die Suche findet Shells und versteht „telnet adresse port“.
+  // Search finds shells and understands “telnet address port”.
   const m8Search = await run(page, `
     window.dispatchEvent(new KeyboardEvent('keydown',{key:'k',ctrlKey:true,bubbles:true}));
     const pal = await until(()=>q('.pal input')); type(pal,'eingabeauff');
@@ -1804,7 +1804,7 @@ try {
   ok('Telnet: verbunden, das Getippte kommt als Echo des Servers zurück', m8Search.connected && m8Search.tab === '127.0.0.1' && !m8Search.bar && m8Telnet.includes('Username: admin') && m8Telnet.includes('echo:show m8'), m8Telnet.trim().split('\n').at(-2)?.trim());
   ok('Telnet: Terminal-Typ und Fenstergröße ausgehandelt, die Eingabetaste ist CR LF', has(255, 251, 24) && has(255, 251, 31) && has(255, 250, 31) && has(255, 250, 24, 0, ...Buffer.from('xterm-256color'), 255, 240) && has(13, 10) && !has(13, 0) && telnetSeen.lines.join() === 'admin,show m8', telnetSeen.lines.join());
 
-  // Als Host gespeichert trägt die Verbindung ihr Protokoll. Was nur über SSH geht, lehnt der Kern für sie ab.
+  // Saved as a host, the connection carries its protocol. The core refuses what only works over SSH for it.
   const m8Saved = await run(page, `
     byText('.sview:not(.off) .tbar .btn','Als Host speichern').click();
     await until(()=>!byText('.sview:not(.off) .tbar .btn','Als Host speichern'));
@@ -1826,7 +1826,7 @@ try {
   `);
   ok('Telnet: Schließt der Server, endet die Sitzung mit dieser Auskunft', m8Closed.text.includes('Die Gegenstelle hat die Verbindung beendet.'), m8Closed.text.slice(0, 60));
 
-  // Ein serieller Host über den Editor. Ein Gerät gibt es hier nicht: Der Port, den niemand hat, lässt sich nicht öffnen.
+  // A serial host via the editor. There is no device here: the port nobody has cannot be opened.
   const m8Serial = await run(page, `
     q('.tabs .tab.home').click(); qa('.nv')[0].click(); await wait(300);
     byText('.ph .acts .btn','Neuer Host').click(); await until(()=>q('.editor'));
@@ -1856,7 +1856,7 @@ try {
   ok('Serieller Host gespeichert: Port und Leitung im Tresor, Kachel zeigt beides', m8Serial.made?.protocol === 'serial' && m8Serial.made.address === 'COM254' && m8Serial.made.serial?.baud === 115200 && m8Serial.made.serial.dataBits === 8 && m8Serial.card.includes('COM254 · 115200 8N1') && m8Serial.card.includes('SERIAL'), m8Serial.card.trim().slice(0, 50));
   ok('Serielle Leitung: Ein Port, den es nicht gibt, wird mit dem Grund des Systems gemeldet', m8Serial.end.includes('Der Port lässt sich nicht öffnen:') && m8Serial.state === 'Geschlossen' && m8Serial.address === 'COM254 · 115200 8N1', m8Serial.end.slice(0, 70));
 
-  // Arbeitsbereiche nehmen lokale Terminals auf; der Import übernimmt Telnet und serielle Leitungen.
+  // Workspaces take in local terminals; the import takes over Telnet and serial lines.
   const m8Csv = put(importDir, 'netz.csv', 'Groups,Label,Hostname/IP,Protocol,Port,Username\r\nM8-Netz,m8-switch,198.51.100.31,telnet,,admin\r\nM8-Netz,m8-com,COM7,serial,115200,\r\n');
   const m8Import = await run(page, `
     const server = (await invoke('vault_status')).data.hosts.find(h=>h.name==='testserver');
@@ -1873,7 +1873,7 @@ try {
   ok('Arbeitsbereich mit lokalem Terminal wird gespeichert', m8Import.workspace === 'local:cmd:true', m8Import.workspace);
   ok('Import: Telnet und serielle Leitung kommen als Hosts mit ihrem Protokoll an und gelten danach als vorhanden', m8Import.draft === 'm8-switch:telnet,m8-com:serial' && m8Import.report === '2/1' && m8Import.vault === 'm8-com:serial:115200,m8-switch:telnet:admin' && m8Import.existing, m8Import.vault);
 
-  // Aufräumen: Tabs und Hosts dieses Abschnitts verschwinden; die späteren Schritte zählen die Einträge.
+  // Clean up: this section's tabs and hosts disappear; the later steps count the entries.
   const m8Cleared = await run(page, `
     while (qa('.tabs .tab:not(.home)').length > ${m8Tabs}) { qa('.tabs .tab:not(.home) .x').at(-1).click(); await wait(250); }
     let s = (await invoke('vault_status')).data;
@@ -1887,8 +1887,8 @@ try {
   telnetServer.close();
   ok('Nach dem Aufräumen: keine Hosts dieses Abschnitts, keine Tabs, keine Sitzung mehr', !/m8-|telnet|serial|M8/.test(m8Cleared.hosts + m8Cleared.groups) && m8Cleared.tabs === m8Tabs, `${m8Cleared.hosts} · ${m8Cleared.sessions} Sitzungen`);
 
-  // Meilenstein 11 – FTP und FTPS. Der Testserver bringt zwei FTP-Server auf demselben Ordner mit
-  // (crates/testserver/src/ftp.rs): einen offenen und einen mit selbst erstelltem Zertifikat.
+  // FTP and FTPS. The test server brings two FTP servers on the same folder
+  // (crates/testserver/src/ftp.rs): a plain one and one with a self-signed certificate.
   {
   const ftp = await server.ftp;
   const ftpLokal = join(workDir, 'ftp-lokal');
@@ -1913,7 +1913,7 @@ try {
     const finished = async (ids, ms = 90000) => { const end = Date.now() + ms; while (Date.now() < end) { const list = (await invoke('transfer_list')).filter(x => ids.includes(x.id)); if (list.length === ids.length && list.every(x => ['done','failed','cancelled'].includes(x.state))) return list.map(x => x.state); await wait(200); } return ['timeout']; };
   `;
 
-  // FTPS: unbekanntes Zertifikat vor der Anmeldung, danach der Startordner.
+  // FTPS: unknown certificate before signing in, then the start folder.
   const ftps = await run(page, `${FTP_TOOLS}
     await invoke('host_save', { host: { name: 'm11-ftps', address: '127.0.0.1', protocol: 'ftp', group: null, color: null, os: null, own: { user: 'tester', port: ${ftp.tls}, term: 'xterm' }, ftp: { security: 'explicit', anonymous: false, dir: '/htdocs' }, password: 'richtig' } });
     const id = (await invoke('vault_status')).data.hosts.find(h=>h.name==='m11-ftps').id;
@@ -1934,7 +1934,7 @@ try {
   ok('m11 FTPS: „Dateien öffnen“ führt in den Dateimanager, in den Startordner, mit dem Zeichen „FTPS“', ftps.shown.page && ftps.shown.path === '/htdocs' && ftps.shown.text.includes('mit leerzeichen und ä.txt'), `${ftps.shown.path} ${ftps.chip}`);
   ok('m11 FTPS: Das bestätigte Zertifikat steht bei den bekannten Hosts', ftps.known.join() === `127.0.0.1:${ftp.tls} ${ftp.fingerprint}`, ftps.known.join());
 
-  // Alles, was der Dateimanager tut, am echten Kern über FTPS; geprüft wird am Ordner des Servers.
+  // Everything the file manager does, on the real core over FTPS; checked against the server's folder.
   const ftpPlace = `{ kind: 'host', id: '${ftps.id}' }`;
   const ftpWork = await run(page, `${FTP_TOOLS}
     const place = ${ftpPlace};
@@ -1954,8 +1954,8 @@ try {
     const listed = await names('/htdocs/neu');
     return { root: root.entries.map(e => e.name + ':' + e.kind).sort().join(), writable: root.writable, tidy, read, taken, missing, before, chmod, after, up, listed };
   `);
-  // Der nachgebaute Server bestätigt eine Datei, kurz bevor ihr letztes Stück auf der Platte liegt. Ein echter
-  // Server tut das nicht; hier wartet die Prüfung, statt eine halbe Datei zu vergleichen oder wieder zu holen.
+  // The simulated server confirms a file shortly before its last piece is on disk. A real
+  // server does not do that; here the test waits instead of comparing or fetching half a file.
   for (let i = 0; i < 50 && (!existsSync(join(ftpFiles, 'htdocs/neu/gross.bin')) || statSync(join(ftpFiles, 'htdocs/neu/gross.bin')).size < ftpBig.length); i++) await sleep(100);
   const ftpDown = await run(page, `${FTP_TOOLS}
     const place = ${ftpPlace};
@@ -1970,7 +1970,7 @@ try {
   ok('m11 Übertragungen über FTPS: eine große Datei und ein Ordner samt Unterordner hinauf, unverändert', ftpWork.up.every((s) => s === 'done') && ftpWork.up.length === 2 && onFtp('htdocs/neu/gross.bin')?.equals(ftpBig) && onFtp('htdocs/neu/ordner/tief/b.txt')?.toString() === 'b', `${ftpWork.up.join()} ${ftpWork.listed} ${onFtp('htdocs/neu/gross.bin')?.length} von ${ftpBig.length}`);
   ok('m11 Übertragungen über FTPS: dasselbe wieder herunter, unverändert', ftpDown.down.every((s) => s === 'done') && ftpBack('gross.bin')?.equals(ftpBig) && ftpBack('ordner/a.txt')?.toString() === 'a' && ftpBack('ordner/tief/b.txt')?.toString() === 'b', `${ftpDown.down.join()} ${ftpBack('gross.bin')?.length} von ${ftpBig.length}`);
 
-  // Unverschlüsselt und ohne gespeichertes Passwort: erst die Warnung, dann die Frage nach dem Passwort.
+  // Unencrypted and without a saved password: first the warning, then the question for the password.
   const plain = await run(page, `${FTP_TOOLS}
     await invoke('host_save', { host: { name: 'm11-offen', address: '127.0.0.1', protocol: 'ftp', group: null, color: null, os: null, own: { user: 'tester', port: ${ftp.plain} }, ftp: { security: 'none', anonymous: false } } });
     const id = (await invoke('vault_status')).data.hosts.find(h=>h.name==='m11-offen').id;
@@ -2004,7 +2004,7 @@ try {
   ok('m11 Unverschlüsselt: „Nicht erneut fragen“ steht danach am Host', plain.remembered.plainOk === true && plain.host.ftp.plainOk === true && plain.host.ftp.security === 'none', JSON.stringify(plain.host.ftp));
   ok('m11 Passwort: Ein falsches führt zur zweiten Frage, das richtige verbindet und liegt auf Wunsch im Tresor', /Versuch 2/.test(plain.retry ?? '') && plain.host.hasPassword === true && plain.read === '<h1>Es funktioniert</h1>\n' && plain.tls === 1, `${plain.retry} ${plain.host.hasPassword}`);
 
-    // Suche nach Namen, Kopieren zwischen SFTP und FTP, die Namen in der Liste der Übertragungen.
+    // Search by name, copying between SFTP and FTP, the names in the list of transfers.
     const ftpMore = await run(page, `${FTP_TOOLS}
       const place = ${ftpPlace};
       const shownAs = (await invoke('transfer_list')).filter(x => (x.source + x.dest).includes('/htdocs/neu')).map(x => x.direction + ' ' + x.source + ' -> ' + x.dest);
@@ -2027,7 +2027,7 @@ try {
     ok('m11 Von einem SSH-Host (SFTP) direkt auf den FTP-Server kopiert, unverändert', ftpMore.across.join() === 'done' && onFtp('htdocs/neu/config.yaml')?.equals(readFileSync(join(serverFiles, 'srv/app/config.yaml'))), `${ftpMore.across.join()} ${onFtp('htdocs/neu/config.yaml')?.length}`);
     ok('m11 Suche über FTP: nach Namen, ohne Rücksicht auf Groß und Klein, durch die Unterordner; die Suche im Inhalt wird nicht angeboten', !ftpMore.modes && ftpMore.hits.join() === 'b.txt in /htdocs/neu/ordner/tief', ftpMore.hits.join(' | '));
 
-    // Schnellverbindung: `ftp://` ist unverschlüsselt und warnt, ohne etwas zu merken; das Passwort wird gefragt und nicht gespeichert.
+    // Quick connect: `ftp://` is unencrypted and warns without remembering anything; the password is asked for and not saved.
     const quick = await run(page, `${FTP_TOOLS}
       const palette = async text => {
         window.dispatchEvent(new KeyboardEvent('keydown',{key:'k',ctrlKey:true,bubbles:true}));
@@ -2084,7 +2084,7 @@ try {
     ok('m11 Schnellverbindung: Kann der Server FTPS, öffnet „Auf FTPS umstellen“ ihn verschlüsselt', quick.offered.buttons.includes('Auf FTPS umstellen') && quick.secure.chosen === `tester@127.0.0.1:${ftp.tls}` && quick.secure.read === '<h1>Es funktioniert</h1>\n', JSON.stringify(quick.secure));
     ok('m11 Schnellverbindung über `ftps://`: verschlüsselt, im genannten Ordner, über die Verbindung, die schon steht; im Tresor entsteht kein Host', quick.direct.path === '/logs' && quick.hostsAfter === quick.hostsBefore, `${quick.direct.path} ${quick.hostsBefore}/${quick.hostsAfter}`);
 
-    // Geänderte Einstellungen gelten für die nächste Verbindung: Die alte wird nicht weiterbenutzt.
+    // Changed settings apply to the next connection: the old one is not used any further.
     const changed = await run(page, `${FTP_TOOLS}
       const place = ${ftpPlace};
       const before = await code(invoke('fs_list', { place, path: '/htdocs' }));
@@ -2096,7 +2096,7 @@ try {
     `);
     ok('m11 Wird ein verbundener FTP-Host geändert, gilt die alte Verbindung nicht weiter: Der nächste Zugriff fragt neu', changed.before === null && changed.after === 'files_auth', `${changed.before} ${changed.after}`);
 
-  // Ein Host, der offen angelegt ist, obwohl sein Server TLS kann: Die Rückfrage bietet an, ihn umzustellen.
+  // A host set up plain although its server can do TLS: the prompt offers to switch it.
   const secure = await run(page, `${FTP_TOOLS}
     await invoke('host_save', { host: { name: 'm11-umstellen', address: '127.0.0.1', protocol: 'ftp', group: null, color: null, os: null, own: { user: 'tester', port: ${ftp.tls} }, ftp: { security: 'none', anonymous: false }, password: 'richtig' } });
     const id = (await invoke('vault_status')).data.hosts.find(h=>h.name==='m11-umstellen').id;
@@ -2119,12 +2119,12 @@ try {
   ok('m11 Nach dem Aufräumen: keine Hosts und keine Zertifikate dieses Abschnitts mehr', secure.hosts === 0 && secure.known === 0, `${secure.hosts} ${secure.known}`);
   }
 
-  // Meilenstein 10 – Proxmox. Der Testserver bringt einen nachgebauten Proxmox-Server mit (crates/testserver/src/pve.rs):
-  // HTTPS mit einem selbst erstellten Zertifikat, zwei Tokens (einer darf alles, einer nur sehen), sechs Maschinen.
+  // Proxmox. The test server brings a simulated Proxmox server (crates/testserver/src/pve.rs):
+  // HTTPS with a self-signed certificate, two tokens (one may do everything, one may only look), six machines.
   const pve = await server.pve;
   const PVE_TOKEN = 'glowport@pve!test';
   const PVE_SECRET = '0c6f2c1e-58a1-4c0e-9d3b-7a1f0e2b4c55';
-  /** Stellschrauben und Zähler des nachgebauten Servers, an Glowport vorbei. */
+  /** Knobs and counters of the simulated server, bypassing Glowport. */
   const pveTest = (path) =>
     new Promise((done, failed) => {
       const request = https.get(`${pve.address}/test/${path}`, { rejectUnauthorized: false }, (response) => {
@@ -2170,7 +2170,7 @@ try {
   ok('m10 Proxmox: Mit bestätigtem Fingerabdruck gilt der Token; die Verbindung liegt im Tresor, ihr Geheimnis erreicht die Oberfläche nicht', /Proxmox VE 9\.0\.11 antwortet/.test(pveSaved.proven ?? '') && pveSaved.connection.length === 1 && pveSaved.connection[0].name === 'E2E-PVE' && pveSaved.connection[0].address === pve.address && pveSaved.connection[0].fingerprint === pve.fingerprint && !('secret' in pveSaved.connection[0]) && !pveSaved.secretShown && (await pveTest('seen')).tokens > 0, JSON.stringify(pveSaved.connection));
   ok('m10 Proxmox: Die Seite zeigt Knoten und Maschinen mit Art, Zustand und der Adresse samt ihrer Herkunft', pveSaved.head.includes('Proxmox VE 9.0.11') && pveSaved.nodes.some((n) => n.startsWith('alt') && n.includes('nicht erreichbar')) && pveSaved.nodes.some((n) => /^pve Prozessor 21 % von 32 Kernen/.test(n)) && JSON.stringify(pveSaved.rows) === JSON.stringify([['shop-01', 'VM 101', 'deploy@10.0.10.11 aus Cloud-Init'], ['pihole', 'Container 111', 'root@10.0.0.53 aus den Einstellungen'], ['gitea', 'Container 112', 'root@10.0.10.74 vom Container gemeldet'], ['monitoring', 'VM 120', '10.0.10.90 vom Gastagenten'], ['spielwiese', 'VM 130', 'keine Adresse bekannt'], ['debian-13-vorlage', 'VM 9000 · Vorlage', '']]) && pveSaved.states.join() === 'läuft,aus' && pveSaved.offer === '5 Hosts anlegen', JSON.stringify([pveSaved.head, pveSaved.nodes, pveSaved.rows, pveSaved.states, pveSaved.offer]));
 
-  // Nachlesen fragt nicht jedes Mal jede Maschine nach ihren Einstellungen; „Neu lesen“ schon.
+  // Refreshing does not ask every machine for its settings every time; “Reload” does.
   const configsBefore = (await pveTest('seen')).configs;
   await run(page, `await invoke('proxmox_overview', { id: '${pveId}' }); await invoke('proxmox_overview', { id: '${pveId}' });`);
   const configsQuiet = (await pveTest('seen')).configs;
@@ -2192,7 +2192,7 @@ try {
   ok('m10 Proxmox: Die Vorschau wählt vor, was eine Adresse hat und keine Vorlage ist', pveImport.picks === 'shop-01:true,pihole:true,gitea:true,monitoring:true,spielwiese:false,debian-13-vorlage:false' && pveImport.run === '4 Hosts anlegen', `${pveImport.picks} · ${pveImport.run}`);
   ok('m10 Proxmox: Aus den Maschinen werden verknüpfte Hosts mit Adresse, Benutzer und Betriebssystem', pveImport.made === 'gitea,monitoring,pihole,shop-01' && pveImport.shop.address === '10.0.10.11' && pveImport.shop.own.user === 'deploy' && pveImport.shop.os === 'Li' && pveImport.shop.proxmox.connection === pveId && pveImport.shop.proxmox.kind === 'qemu' && pveImport.dns.own.user === 'root' && pveImport.dns.os === 'De' && pveImport.dns.proxmox.kind === 'lxc' && pveImport.offer === '1 Host anlegen' && pveImport.linked, JSON.stringify([pveImport.made, pveImport.shop, pveImport.offer]));
 
-  // Aktuell halten: In Proxmox ändern sich Name und Adresse der VM 101. Was am Host von Hand geändert ist, bleibt.
+  // Keeping up to date: in Proxmox name and address of VM 101 change. What was changed by hand on the host stays.
   await pveTest('rename/shop-neu');
   await pveTest('address/10.0.10.99');
   const pveFollow = await run(page, PVE + `
@@ -2216,9 +2216,9 @@ try {
   ok('m10 Proxmox: Ändern sich in Proxmox Name und Adresse, zieht der Host nach; die Kachel zeigt den Zustand der Maschine', pveFollow.first.join() === 'shop-neu,10.0.10.99' && pveFollow.kept === 101 && pveFollow.card === 'läuft', JSON.stringify(pveFollow));
   ok('m10 Proxmox: Ein von Hand gesetzter Name bleibt, die Adresse zieht weiter nach', pveByHand.host.join() === 'Von Hand,10.0.10.100' && pveByHand.row === 'Gehört zum Host „Von Hand“', JSON.stringify(pveByHand));
 
-  // Schalten: starten ohne Rückfrage, herunterfahren mit; von dort geht es zum harten Stoppen. Glowport wartet, bis
-  // Proxmox den Auftrag ausgeführt hat. Wie bei Proxmox nennt die Liste der Maschinen danach noch acht Sekunden den
-  // alten Zustand; die Anzeige muss trotzdem sofort stimmen, samt dem Knopf für den nächsten Schritt.
+  // Switching: start without a prompt, shut down with one; from there on to the hard stop. Glowport waits until
+  // Proxmox has carried out the task. As with Proxmox, the list of machines still names the old state for eight
+  // seconds afterwards; the display must still be right at once, including the button for the next step.
   const staleBefore = (await pveTest('seen')).stale;
   const pvePower = await run(page, PVE + `
     let from = Date.now();
@@ -2246,8 +2246,8 @@ try {
   ok('m10 Proxmox: Starten schaltet sofort, Herunterfahren fragt nach und führt zu „Hart stoppen“ mit eigener Rückfrage', pvePower.started && pvePower.asked === '„monitoring“ herunterfahren?' && pvePower.choices === 'Abbrechen|Hart stoppen|Herunterfahren' && pvePower.hard === '„monitoring“ hart stoppen?' && pvePower.stopped && pvePower.offered === 'Starten', JSON.stringify(pvePower));
   ok('m10 Proxmox: Führt Proxmox einen Auftrag nicht aus, steht sein Grund in der Meldung', pvePower.refused?.code === 'proxmox_failed' && /VM is a template/.test(pvePower.refused.message), JSON.stringify(pvePower.refused));
 
-  // Am Host: Zustand und Knöpfe der Maschine. „Starten und verbinden“ wartet, bis der Host Verbindungen annimmt;
-  // dafür zeigt der Host der ausgeschalteten VM 120 auf den Testserver.
+  // On the host: the machine's state and buttons. “Start and connect” waits until the host accepts connections;
+  // for that the host of the switched-off VM 120 points to the test server.
   const pveHost = await run(page, PVE + `
     const host = await linked(120);
     await invoke('host_save', { host: { ...host, address: '127.0.0.1', own: { ...host.own, user: 'tester', port: ${port} } } });
@@ -2273,8 +2273,8 @@ try {
   ok('m10 Proxmox: „Starten und verbinden“ startet die Maschine und öffnet den Tab, sobald sie Verbindungen annimmt', pveHost.opened && pveHost.tab === 'monitoring', JSON.stringify([pveHost.opened, pveHost.tab]));
   ok('m10 Proxmox: „Verknüpfung lösen“ fragt nach und lässt den Host, wie er ist', pveHost.asked === 'Verknüpfung von „monitoring“ lösen?' && pveHost.unlinked && pveHost.detail, JSON.stringify(pveHost));
 
-  // Rechte und Zertifikat: Dem Token, der nur sehen darf, fehlt das Schalten; ein anderes Zertifikat als das bestätigte
-  // wird nicht hingenommen, und davor geht kein Token hinaus.
+  // Permissions and certificate: the token that may only look lacks switching; a certificate other than the confirmed one
+  // is not accepted, and no token goes out before.
   const tokensBefore = (await pveTest('seen')).tokens;
   const pveRights = await run(page, PVE + `
     const wrong = await invoke('proxmox_probe', { input: { name: 'x', address: '${pve.address}', tokenId: '${PVE_TOKEN}', secret: '${PVE_SECRET}', fingerprint: '${'AB:'.repeat(31)}AB' } });
@@ -2295,8 +2295,8 @@ try {
   ok('m10 Proxmox: Beim Bearbeiten gilt der bestätigte Fingerabdruck weiter; was dem Token fehlt, steht da', /Proxmox VE 9\.0\.11/.test(pveRights.proven ?? '') && !pveRights.asksAgain && pveRights.missing === 'Dem Token fehlt das Recht: ein- und ausschalten, den Gastagenten fragen', JSON.stringify([pveRights.proven, pveRights.missing, pveRights.asksAgain]));
   ok('m10 Proxmox: Falsches Geheimnis, Adresse ohne https und eine Kennung ohne Form werden abgelehnt', pveRights.bad === 'proxmox_token' && pveRights.shape === 'proxmox_address' && pveRights.token === 'invalid:token_invalid' && (await pveTest('seen')).tokens > tokensBefore, JSON.stringify(pveRights));
 
-  // Anmeldung an den Maschinen: Die Verbindung nennt eine Identität. Sie gilt, wo Cloud-Init keinen Schlüssel aus dem
-  // Tresor nennt, beim Verbinden wie an neu angelegten Hosts. Name und Identität lassen sich ohne neue Prüfung speichern.
+  // Signing in to the machines: the connection names an identity. It applies where Cloud-Init names no key from the
+  // vault, when connecting as on newly created hosts. Name and identity can be saved without a new check.
   const pveLogin = await run(page, PVE + `
     const admin = (await invoke('identity_save', { identity: { name: 'E2E-Admin', user: 'admin', key: null } })).id;
     await go('Hosts'); await go('Proxmox'); await until(()=>machine('monitoring'));
@@ -2323,8 +2323,8 @@ try {
   ok('m10 Proxmox: Die Vorschau nennt die Anmeldung, und der neue Host trägt die Identität', pveLogin.preview === 'monitoring:E2E-Admin:true,spielwiese:E2E-Admin:false,debian-13-vorlage:E2E-Admin:false' && JSON.stringify(pveLogin.own) === JSON.stringify(pveLogin.wanted), JSON.stringify([pveLogin.preview, pveLogin.own]));
   ok('m10 Proxmox: Eine gelöschte Identität verschwindet aus der Verbindung und vom Host', pveLogin.cleared.join() === ',', JSON.stringify(pveLogin.cleared));
 
-  // Eine zweite Verbindung entfernen: Ihre Hosts bleiben und verlieren nur die Verknüpfung. Danach aufräumen; die
-  // erste Verbindung bleibt bis über den Neustart im Tresor.
+  // Remove a second connection: its hosts stay and only lose the link. Then clean up; the
+  // first connection stays in the vault beyond the restart.
   const pveRemove = await run(page, PVE + `
     const second = (await invoke('proxmox_save', { input: { name: 'Zweite', address: '${pve.address}', tokenId: '${PVE_TOKEN}', secret: '${PVE_SECRET}', fingerprint: '${pve.fingerprint}' } })).id;
     await invoke('proxmox_import', { id: second, picks: [{ node: 'pve', vmid: 130, kind: 'qemu' }], group: null });
@@ -2344,8 +2344,8 @@ try {
   ok('m10 Proxmox: Ohne bekannte Adresse steht am neuen Host vorerst der Name der Maschine', pveRemove.made.join() === 'spielwiese,spielwiese,130', JSON.stringify(pveRemove.made));
   ok('m10 Proxmox: Mit der Verbindung verschwindet nur die Verknüpfung, der Host bleibt', pveRemove.asked === 'Verbindung „Zweite“ entfernen?' && pveRemove.connections === 'E2E-PVE' && pveRemove.left && !/shop|pihole|gitea|monitoring|spielwiese|Von Hand/.test(pveRemove.hosts) && pveRemove.still === 'E2E-PVE', JSON.stringify(pveRemove));
 
-  // 4z. Meilenstein 12 – Mosh. Angemeldet wird per SSH am Testserver; mosh-server läuft im WSL dieses Rechners, der
-  // Testserver reicht UDP über 127.0.0.1 weiter und kann die Leitung anhalten (Aussetzer).
+  // 4z. Mosh. Signing in happens over SSH at the test server; mosh-server runs in this machine's WSL, the
+  // test server forwards UDP via 127.0.0.1 and can pause the line (dropout).
   const moshHost = await run(page, `return (await invoke('vault_status')).data.hosts.find(h => h.name === 'testserver')`);
   const setMosh = (own) => run(page, `await invoke('host_save', { host: { ...${JSON.stringify(moshHost)}, own: ${JSON.stringify(own)} } })`);
   const openTestserver = () =>
@@ -2382,7 +2382,7 @@ try {
     await run(page, `q('.tabs .tab.on .x').click(); await wait(600);`);
     ok('Mosh: Tab schließen beendet die Sitzung', (await run(page, `await wait(300); return await invoke('session_count')`)) === 0);
   }
-  // Fehlt mosh-server, verbindet der Host per SSH und nennt den Befehl zum Installieren (der Testserver gilt als Ubuntu).
+  // If mosh-server is missing, the host connects over SSH and names the install command (the test server counts as Ubuntu).
   await setMosh({ ...moshHost.own, mosh: true, moshServer: 'mosh-fehlt' });
   const fallbackConnected = await openTestserver();
   const fallback = await run(page, `return (await until(()=>q('.sview:not(.off) .moshbar')?.textContent, 10000)) ?? ''`);
@@ -2392,9 +2392,9 @@ try {
   await setMosh(moshHost.own);
   ok('Mosh: Host wieder ohne Mosh', (await run(page, `return (await invoke('vault_status')).data.hosts.find(h => h.name === 'testserver').own.mosh ?? null`)) === null);
 
-  // 5. Start ohne Master-Passwort einschalten: Der Schlüssel liegt als geschützte Datei im Datenordner.
+  // 5. Switch on starting without the master password: the key is stored as a protected file in the data folder.
   const keyFile = join(workDir, 'data', 'start-unlock.bin');
-  // Über die Oberfläche, so wie der Nutzer es tut: Optionen, Schalter, Rückfrage bestätigen. Ein Mal muss reichen.
+  // Through the interface, the way the user does it: options, switch, confirm the prompt. Once must be enough.
   const enabled = await run(page, `
     qa('.nv').at(-1).click();
     const startSwitch = () => qa('button.swt[role=switch]').find(b => b.getAttribute('aria-label')?.includes('Master-Passwort'));
@@ -2409,7 +2409,7 @@ try {
   ok('Schalter steht anfangs auf „verlangen“ und fragt beim Ausschalten nach', enabled.before && enabled.dialog.includes('Windows-Benutzerkonto'));
   ok('Start ohne Passwort ist nach einem Mal Bestätigen eingeschaltet', enabled.off && enabled.start === true && existsSync(keyFile));
 
-  // 5b. Abbruch mit offenem Tab: Beim nächsten Start fragt Glowport, ob er wiederhergestellt werden soll.
+  // 5b. Crash with an open tab: at the next start Glowport asks whether it should be restored.
   const restoreFile = join(workDir, 'data', 'open-tabs.json');
   await run(page, `
     qa('.nv')[0].click(); await until(()=>byText('.host','testserver'));
@@ -2431,8 +2431,8 @@ try {
     return { list: !!list, text, before, connected: !!connected, tab: q('.tabs .tab.on .nm')?.textContent };
   `);
   ok('Nach einem Abbruch fragt Glowport und stellt erst nach Zustimmung wieder her', offered.list && offered.text.includes('nicht ordentlich beendet') && offered.text.includes('testserver') && offered.before === 0 && offered.connected && offered.tab === 'testserver', offered.text.trim().slice(0, 50));
-  // Ordentlich beenden: Warnung bestätigen, das Programm endet selbst, es bleibt nichts wiederherzustellen.
-  // Dabei „Bei offenen Sitzungen nicht erneut fragen“ anhaken; es muss gespeichert sein, bevor das Fenster verschwindet.
+  // End properly: confirm the warning, the program ends itself, nothing is left to restore.
+  // Tick “Don't ask again with open sessions” on the way; it must be saved before the window disappears.
   const exited = new Promise((done) => app.once('exit', () => done(true)));
   await run(page, `q('.wc .cl').click(); await until(()=>q('.dlg')); q('.dlg input[type=checkbox]').click(); await wait(100); qa('.dlg .btn').find(b=>b.textContent.trim() === 'Beenden').click();`).catch(() => {});
   const gone = await Promise.race([exited, sleep(8000).then(() => false)]);
@@ -2440,7 +2440,7 @@ try {
   ok('Schließen: „Nicht erneut fragen“ ist gespeichert', JSON.parse(readFileSync(settingsFile, 'utf8')).closePrompt === false);
   page.close();
 
-  // 6. Neustart: offen ohne Passwort, Daten vollständig, in der Datei steht kein Klartext.
+  // 6. Restart: open without a password, data complete, no plaintext in the file.
   app.kill();
   await sleep(1200);
   const bytes = readFileSync(vaultFile);
@@ -2471,7 +2471,7 @@ try {
   ok('Ausschalten entfernt den hinterlegten Schlüssel', auto.off === false && !existsSync(keyFile));
   page.close();
 
-  // 7. Neustart nach dem Ausschalten: wieder gesperrt.
+  // 7. Restart after switching off: locked again.
   app.kill();
   await sleep(1200);
   app = launch();
@@ -2485,7 +2485,7 @@ try {
   `);
   ok('nach dem Ausschalten startet Glowport wieder gesperrt', again.state === 'locked' && again.open === 'open');
 
-  // 7b. Nach „Nicht erneut fragen“ endet Glowport mit offener Sitzung ohne Rückfrage.
+  // 7b. After “Don't ask again” Glowport ends with an open session without a prompt.
   const quietExit = new Promise((done) => app.once('exit', () => done(true)));
   const quiet = await run(page, `
     qa('.nv')[0].click(); await until(()=>byText('.host','testserver'));
@@ -2503,7 +2503,7 @@ try {
     await sleep(1200);
   }
 
-  // 8. Abmelden und Daten löschen, vom Sperrbildschirm aus: Danach startet Glowport neu, ohne Tresor.
+  // 8. Sign out and delete data, from the lock screen: afterwards Glowport restarts without a vault.
   app = launch();
   page = await connect();
   const wipeExit = new Promise((done) => app.once('exit', () => done(true)));
@@ -2523,7 +2523,7 @@ try {
   page = await connect();
   const afterWipe = await run(page, `await until(()=>q('.lock-card')); return [(await invoke('vault_status')).state, q('.lock-card h1')?.textContent]`);
   ok('Löschen: Glowport startet neu, Tresor und Schlüsselablage sind weg, die Einstellungen bleiben', wipeRestarted && JSON.stringify(afterWipe) === JSON.stringify(['missing', 'Tresor anlegen']) && !existsSync(vaultFile) && !existsSync(keyFile) && existsSync(settingsFile), JSON.stringify(afterWipe));
-  // Das neu gestartete Programm ist kein Kind der Prüfung: über sein Fenster beenden.
+  // The restarted program is not a child of the test: end it through its window.
   await run(page, `setTimeout(()=>q('.wc .cl').click(), 50); return true`).catch(() => {});
   await sleep(1500);
   page.close();
@@ -2534,7 +2534,7 @@ try {
   app.kill();
   server.child.kill();
   await sleep(800);
-  // Die WebView2-Prozesse geben ihren Ordner erst kurz nach dem Ende des Programms frei.
+  // The WebView2 processes only release their folder shortly after the program ends.
   try {
     rmSync(workDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 400 });
   } catch (e) {

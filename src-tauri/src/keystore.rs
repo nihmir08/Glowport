@@ -1,8 +1,8 @@
-//! Ablage des Schlüssels, mit dem Glowport den Tresor beim Start ohne Master-Passwort öffnet.
+//! Storage of the key with which Glowport opens the vault at startup without the master password.
 //!
-//! Unter Windows schützt DPAPI den Schlüssel: Nur dasselbe Windows-Benutzerkonto auf demselben PC kann ihn lesen.
-//! Das ist bequem, schützt aber nicht vor Programmen oder Personen, die unter diesem Konto arbeiten. Deshalb ist
-//! die Ablage abgeschaltet, bis der Nutzer sie in den Einstellungen ausdrücklich einschaltet.
+//! On Windows DPAPI protects the key: only the same Windows user account on the same PC can read it.
+//! That is convenient, but does not protect against programs or people working under this account. That is why
+//! the storage is switched off until the user explicitly switches it on in the settings.
 
 use std::{fs, io, path::PathBuf};
 
@@ -10,14 +10,14 @@ use glowport_core::crypto::{Key, KEY_LEN};
 use zeroize::Zeroizing;
 
 pub trait KeyStore: Send {
-    /// Liest den hinterlegten Schlüssel. `context` bindet ihn an genau einen Tresor.
+    /// Reads the stored key. `context` binds it to exactly one vault.
     fn load(&self, context: &[u8]) -> Option<Key>;
     fn store(&self, context: &[u8], key: &Key) -> io::Result<()>;
     fn clear(&self) -> io::Result<()>;
     fn is_set(&self) -> bool;
 }
 
-/// Datei im Datenordner, deren Inhalt das Betriebssystem an das Benutzerkonto bindet.
+/// File in the data folder whose content the operating system binds to the user account.
 pub struct ProtectedFile {
     path: PathBuf,
 }
@@ -41,7 +41,7 @@ impl KeyStore for ProtectedFile {
         if let Some(dir) = self.path.parent() {
             fs::create_dir_all(dir)?;
         }
-        // Erst daneben schreiben, dann umbenennen: nie eine halbe Datei.
+        // Write next to it first, then rename: never a half-written file.
         let temp = self.path.with_extension("neu");
         fs::write(&temp, protected)?;
         fs::rename(&temp, &self.path)
@@ -73,9 +73,9 @@ mod os {
         CRYPT_INTEGER_BLOB { cbData: bytes.len() as u32, pbData: bytes.as_ptr().cast_mut() }
     }
 
-    /// Übernimmt das Ergebnis von Windows in eigenen Speicher und gibt den von Windows frei, vorher überschrieben.
+    /// Takes Windows' result into memory of its own and frees Windows' memory, overwritten first.
     fn take(output: CRYPT_INTEGER_BLOB) -> Zeroizing<Vec<u8>> {
-        // SAFETY: Windows hat `cbData` Bytes an `pbData` angelegt; der Bereich gehört bis `LocalFree` uns.
+        // SAFETY: Windows allocated `cbData` bytes at `pbData`; the region is ours until `LocalFree`.
         unsafe {
             let bytes = std::slice::from_raw_parts_mut(output.pbData, output.cbData as usize);
             let copy = Zeroizing::new(bytes.to_vec());
@@ -87,7 +87,7 @@ mod os {
 
     pub fn protect(secret: &[u8], context: &[u8]) -> io::Result<Vec<u8>> {
         let mut output = CRYPT_INTEGER_BLOB { cbData: 0, pbData: ptr::null_mut() };
-        // SAFETY: Alle Zeiger zeigen auf gültige Puffer, die den Aufruf überdauern; `output` wird von Windows gefüllt.
+        // SAFETY: all pointers point to valid buffers that outlive the call; Windows fills `output`.
         let ok = unsafe { CryptProtectData(&input(secret), ptr::null(), &input(context), ptr::null(), ptr::null(), CRYPTPROTECT_UI_FORBIDDEN, &mut output) };
         if ok == 0 {
             return Err(io::Error::last_os_error());
@@ -97,7 +97,7 @@ mod os {
 
     pub fn unprotect(protected: &[u8], context: &[u8]) -> io::Result<Zeroizing<Vec<u8>>> {
         let mut output = CRYPT_INTEGER_BLOB { cbData: 0, pbData: ptr::null_mut() };
-        // SAFETY: wie oben.
+        // SAFETY: as above.
         let ok = unsafe { CryptUnprotectData(&input(protected), ptr::null_mut(), &input(context), ptr::null(), ptr::null(), CRYPTPROTECT_UI_FORBIDDEN, &mut output) };
         if ok == 0 {
             return Err(io::Error::last_os_error());
@@ -106,7 +106,7 @@ mod os {
     }
 }
 
-/// Für macOS (Schlüsselbund) und Linux (Secret Service) folgt die Anbindung mit deren Veröffentlichung.
+/// The connection to macOS (Keychain) and Linux (Secret Service) is still missing.
 #[cfg(not(windows))]
 mod os {
     use std::io;
@@ -121,7 +121,7 @@ mod os {
     }
 }
 
-/// Ablage nur im Speicher, für Tests der Abläufe ohne das Betriebssystem.
+/// Storage in memory only, for testing the flows without the operating system.
 #[cfg(test)]
 #[derive(Default)]
 pub struct MemoryStore(std::sync::Mutex<Option<(Vec<u8>, Key)>>);
@@ -162,7 +162,7 @@ mod tests {
         assert_eq!(store.load(b"tresor-a").unwrap().as_ref(), key.as_ref());
         assert!(store.load(b"tresor-b").is_none(), "ein anderer Tresor bekommt den Schlüssel nicht");
 
-        // Die Datei enthält den Schlüssel nicht im Klartext, und ein verändertes Byte macht sie unbrauchbar.
+        // The file does not contain the key in plain text, and a changed byte makes it unusable.
         let mut bytes = fs::read(&path).unwrap();
         assert!(!bytes.windows(KEY_LEN).any(|w| w == key.as_ref()));
         let last = bytes.len() - 1;

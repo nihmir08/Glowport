@@ -1,7 +1,7 @@
-//! Glowport – Tauri-Hülle.
+//! Glowport – Tauri shell.
 //!
-//! Hier liegen nur Fenster und die Brücke zur Oberfläche. Der Kern (Tresor, SSH, Dateien)
-//! kommt ab Meilenstein 1 in eigenen Crates dazu, die ohne Tauri testbar sind.
+//! Only windows and the bridge to the interface live here. The core (vault, SSH, files)
+//! lives in crates of its own that can be tested without Tauri.
 
 mod app;
 mod dragout;
@@ -29,9 +29,9 @@ use std::path::PathBuf;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, Window, WindowEvent};
 
-/// Name des Programms: „Glowport“ oder, bei der Entwicklungsversion, „Glowport Dev“ (siehe `tauri.dev.conf.json`).
-/// Er ist zugleich der Ordnername unter `%APPDATA%`. Dadurch hat jede Fassung ihren eigenen Tresor und beide
-/// können nebeneinander laufen.
+/// Name of the program: “Glowport” or, for the development version, “Glowport Dev” (see `tauri.dev.conf.json`).
+/// It is also the folder name under `%APPDATA%`. That way every version has its own vault and both
+/// can run side by side.
 fn app_name(app: &AppHandle) -> String {
     app.config().product_name.clone().unwrap_or_else(|| "Glowport".into())
 }
@@ -42,22 +42,22 @@ struct AppInfo {
     name: String,
     version: &'static str,
     data_dir: String,
-    /// Durchscheinendes Fenster, mit dem das Programm gestartet ist: „mica“, „acrylic“ oder leer.
+    /// Translucent window the program was started with: “mica”, “acrylic” or empty.
     effect: String,
-    /// Liegen die Daten neben dem Programm (portable Fassung)?
+    /// Does the data live next to the program (portable version)?
     portable: bool,
-    /// Kann diese Fassung nach Updates suchen?
+    /// Can this version look for updates?
     updates: bool,
-    /// Name dieses Rechners, als Vorschlag für den Namen des Geräts beim Abgleich.
+    /// Name of this computer, as a suggestion for the device name when syncing.
     device: String,
 }
 
-/// Portable Fassung: Neben dem Programm liegt eine Datei `portable`.
+/// Portable version: a `portable` file sits next to the program.
 pub(crate) fn portable() -> bool {
     std::env::current_exe().ok().and_then(|exe| exe.parent().map(|dir| dir.join("portable").exists())).unwrap_or(false)
 }
 
-/// Portable Variante: Liegt neben dem Programm eine Datei `portable`, bleiben alle Daten im Ordner `data` daneben.
+/// Portable variant: if a `portable` file sits next to the program, all data stays in the `data` folder beside it.
 fn data_dir(app: &AppHandle) -> Result<PathBuf, String> {
     if let Some(dir) = std::env::current_exe().ok().and_then(|exe| exe.parent().map(PathBuf::from)) {
         if dir.join("portable").exists() {
@@ -67,10 +67,10 @@ fn data_dir(app: &AppHandle) -> Result<PathBuf, String> {
     app.path().config_dir().map(|dir| dir.join(app_name(app))).map_err(|e| e.to_string())
 }
 
-/// Seite des Projekts auf GitHub: Quellcode, Lizenzen, Veröffentlichungen.
+/// The project's page on GitHub: source code, licenses, releases.
 const REPO: &str = "https://github.com/nihmir08/Glowport";
 
-/// Öffnet die Seite des Projekts im Browser. Die Adresse steht fest; von der Oberfläche kommt nichts hinein.
+/// Opens the project's page in the browser. The address is fixed; nothing comes in from the interface.
 #[tauri::command]
 fn about_open() -> Result<(), String> {
     let opener = if cfg!(windows) { "explorer.exe" } else if cfg!(target_os = "macos") { "open" } else { "xdg-open" };
@@ -82,8 +82,8 @@ fn app_info(app: AppHandle) -> Result<AppInfo, String> {
     Ok(AppInfo { name: app_name(&app), version: env!("CARGO_PKG_VERSION"), data_dir: data_dir(&app)?.display().to_string(), effect: app.state::<windows::Desk>().effect(), portable: portable(), updates: updates::enabled(), device: std::env::var("COMPUTERNAME").unwrap_or_default() })
 }
 
-/// Liest die Einstellungen. Gibt es noch keine (erster Start), steht darin nur die Sprache: die im Installer
-/// gewählte, sonst die von Windows. Die portable Fassung hat keinen Installer.
+/// Reads the settings. If there are none yet (first start), they only contain the language: the one chosen in
+/// the installer, otherwise Windows'. The portable version has no installer.
 #[tauri::command]
 fn settings_load(app: AppHandle) -> Result<Option<serde_json::Value>, String> {
     if let Some(saved) = settings::load(&data_dir(&app)?).map_err(|e| e.to_string())? {
@@ -94,8 +94,8 @@ fn settings_load(app: AppHandle) -> Result<Option<serde_json::Value>, String> {
     Ok(Some(serde_json::json!({ "lang": settings::first_language(installer.as_deref(), settings::system_language()) })))
 }
 
-/// Speichert die Einstellungen und gibt sie den anderen Fenstern weiter. Unverändertes wird weder geschrieben noch
-/// gemeldet; sonst schickten sich zwei Fenster denselben Stand endlos hin und her.
+/// Saves the settings and passes them on to the other windows. Unchanged values are neither written nor
+/// reported; otherwise two windows would send each other the same state back and forth endlessly.
 #[tauri::command]
 fn settings_save(app: AppHandle, window: Window, settings: serde_json::Value) -> Result<(), String> {
     let dir = data_dir(&app)?;
@@ -116,7 +116,7 @@ pub fn run() {
             let dir = data_dir(app.handle())?;
             let state = app::AppState::new(dir.join("vault.db"));
             let handle = app.handle().clone();
-            // Jede Änderung am Tresor geht an die anderen Fenster und stößt den Abgleich an.
+            // Every change to the vault goes to the other windows and triggers syncing.
             state.watch(move || {
                 let _ = handle.emit("vault-sync", ());
                 sync::poke(&handle);
@@ -137,8 +137,8 @@ pub fn run() {
             app.manage(proxmox::Links::default());
             forwards::watch(app.handle().clone());
             app::spawn_auto_lock(app.handle().clone());
-            // Der Fenstertitel steht in der Taskleiste und im Fensterwechsler; dort soll die Fassung zu erkennen sein
-            // („Glowport“ oder „Glowport Dev“). Das Fenster entsteht hier und nicht aus `tauri.conf.json`.
+            // The window title appears in the taskbar and the window switcher; the version should be recognisable there
+            // (“Glowport” or “Glowport Dev”). The window is created here and not from `tauri.conf.json`.
             windows::create_main(app.handle())?;
             Ok(())
         })

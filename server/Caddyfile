@@ -1,6 +1,6 @@
-# Caddy vor dem Glowport Sync-Server. Anleitung: docs/sync-server.md
-# `sync.example.de` durch die eigene Adresse ersetzen. Caddy holt und verlängert das Zertifikat selbst,
-# reicht den WebSocket durch und nennt dem Server den Absender.
+# Caddy in front of the Glowport sync server. Guide: docs/sync-server.md
+# Replace `sync.example.com` with your own address. Caddy obtains and renews the certificate by itself,
+# passes the WebSocket through and tells the server the sender.
 
 sync.example.de {
     reverse_proxy 127.0.0.1:8787

@@ -1,8 +1,8 @@
-//! Dateien aus Glowport in den Explorer und in andere Programme ziehen.
+//! Dragging files from Glowport into Explorer and other programs.
 //!
-//! Windows will dafür Dateien, die es auf diesem Rechner gibt. Was auf diesem PC liegt, lässt sich deshalb sofort
-//! ziehen. Was auf einem Server liegt, wird beim Verlassen des Fensters erst in einen Arbeitsordner geholt
-//! (`drag_stage`, als gewöhnlicher Transfer) und danach gezogen (`drag_out`), solange die Maustaste gedrückt bleibt.
+//! Windows wants files that exist on this machine for that. What lies on this PC can therefore be dragged
+//! at once. What lies on a server is first fetched into a working folder when leaving the window
+//! (`drag_stage`, as an ordinary transfer) and then dragged (`drag_out`) while the mouse button stays pressed.
 
 use std::{
     path::PathBuf,
@@ -22,7 +22,7 @@ use crate::{
     transfers::{self, Queue},
 };
 
-/// Bildchen, das beim Ziehen am Mauszeiger hängt.
+/// Little picture hanging at the mouse pointer while dragging.
 const BADGE: &[u8] = include_bytes!("../icons/32x32.png");
 
 static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -33,33 +33,33 @@ fn staging(app: &AppHandle) -> CmdResult<PathBuf> {
 
 #[derive(Serialize)]
 pub struct Staged {
-    /// Die Transfers, die die Dateien holen.
+    /// The transfers that fetch the files.
     ids: Vec<u64>,
-    /// Wo die Dateien danach auf diesem Rechner liegen.
+    /// Where the files lie on this machine afterwards.
     paths: Vec<String>,
 }
 
-/// Holt Dateien und Ordner eines Servers in einen Arbeitsordner, damit sie sich danach aus dem Fenster ziehen lassen.
+/// Fetches a server's files and folders into a working folder so they can then be dragged out of the window.
 #[tauri::command]
 pub fn drag_stage(app: AppHandle, queue: State<'_, Queue>, place: Place, paths: Vec<String>) -> CmdResult<Staged> {
     if place == Place::Local || paths.is_empty() {
         return Err(CmdError::new("not_supported", "Bereitlegen gibt es nur für Dateien eines Servers"));
     }
-    // Jeder Zug bekommt seinen eigenen Ordner, damit gleiche Namen aus verschiedenen Zügen sich nicht überschreiben.
+    // Every drag gets its own folder, so equal names from different drags do not overwrite each other.
     let dir = staging(&app)?.join(format!("{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed) + 1));
     std::fs::create_dir_all(&dir).map_err(|e| CmdError::new("internal", e.to_string()))?;
     let (ids, staged) = transfers::stage(&app, &queue, &place, paths, &dir);
     Ok(Staged { ids, paths: staged })
 }
 
-/// Ist die Maustaste gedrückt, mit der gezogen wird? Ohne sie würde Windows sofort dort ablegen, wo der Zeiger steht.
+/// Is the mouse button used for dragging pressed? Without it Windows would drop at once wherever the pointer is.
 #[cfg(windows)]
 fn button_down() -> bool {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
     use windows_sys::Win32::UI::WindowsAndMessaging::{GetSystemMetrics, SM_SWAPBUTTON};
-    // SAFETY: Beide Aufrufe lesen nur den Zustand des Systems und nehmen keine Zeiger.
+    // SAFETY: both calls only read the system's state and take no pointers.
     unsafe {
-        // Bei vertauschten Maustasten ist die rechte die Haupttaste.
+        // With swapped mouse buttons the right one is the primary button.
         let key = if GetSystemMetrics(SM_SWAPBUTTON) != 0 { VK_RBUTTON } else { VK_LBUTTON };
         GetAsyncKeyState(i32::from(key)) < 0
     }
@@ -70,8 +70,8 @@ fn button_down() -> bool {
     true
 }
 
-/// Beginnt das Ziehen der genannten Dateien dieses Rechners aus dem Fenster heraus. Die Maustaste muss noch
-/// gedrückt sein; sonst geschieht nichts. Liefert, ob die Dateien irgendwo abgelegt wurden.
+/// Starts dragging the named files of this machine out of the window. The mouse button must still be
+/// pressed; otherwise nothing happens. Returns whether the files were dropped somewhere.
 #[tauri::command]
 pub async fn drag_out(window: Window, paths: Vec<String>) -> CmdResult<bool> {
     let files: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
@@ -86,7 +86,7 @@ pub async fn drag_out(window: Window, paths: Vec<String>) -> CmdResult<bool> {
         }
     };
     let source = window.clone();
-    // Ziehen und Ablegen läuft bei Windows in dem Thread, dem das Fenster gehört.
+    // On Windows, drag and drop runs on the thread that owns the window.
     window
         .run_on_main_thread(move || {
             if !button_down() {
@@ -106,7 +106,7 @@ pub async fn drag_out(window: Window, paths: Vec<String>) -> CmdResult<bool> {
     }
 }
 
-/// Beim Start: Was vom letzten Mal im Arbeitsordner liegt, wird nicht mehr gebraucht.
+/// At startup: what is left in the working folder from last time is no longer needed.
 pub fn clean(app: &AppHandle) {
     if let Ok(dir) = staging(app) {
         let _ = std::fs::remove_dir_all(dir);

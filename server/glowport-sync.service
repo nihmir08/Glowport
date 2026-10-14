@@ -1,5 +1,5 @@
-# Glowport Sync-Server als Dienst. Anleitung: docs/sync-server.md
-# Ablegen als /etc/systemd/system/glowport-sync.service
+# Glowport sync server as a service. Guide: docs/sync-server.md
+# Put it at /etc/systemd/system/glowport-sync.service
 
 [Unit]
 Description=Glowport Sync-Server
@@ -10,22 +10,22 @@ Wants=network-online.target
 ExecStart=/usr/local/bin/glowport-sync serve
 User=glowport-sync
 Group=glowport-sync
-# Legt /var/lib/glowport-sync an; nur der Dienst darf hinein.
+# Creates /var/lib/glowport-sync; only the service may access it.
 StateDirectory=glowport-sync
 StateDirectoryMode=0700
 Environment=GLOWPORT_SYNC_DATA=/var/lib/glowport-sync
 
-# Hinter einem Webserver (NGINX, Caddy) auf demselben Rechner, der TLS übernimmt:
+# Behind a web server (NGINX, Caddy) on the same machine that handles TLS:
 Environment=GLOWPORT_SYNC_LISTEN=127.0.0.1:8787
 Environment=GLOWPORT_SYNC_TRUST_PROXY=1
 
-# Der Webserver läuft auf einem anderen Rechner oder Container: stattdessen auf allen Adressen hören und
-# den Absender nur dem Webserver glauben (seine innere Adresse eintragen). `install.sh` trägt das mit
-# PROXY=<Adresse> von selbst ein.
+# The web server runs on another machine or container: listen on all addresses instead and
+# only believe the web server about the sender (enter its internal address). `install.sh` enters this
+# by itself with PROXY=<address>.
 #Environment=GLOWPORT_SYNC_LISTEN=0.0.0.0:8787
 #Environment=GLOWPORT_SYNC_TRUST_PROXY=10.0.0.10
 
-# Ohne Webserver davor, mit eigenem Zertifikat: stattdessen
+# Without a web server in front, with its own certificate: instead
 #Environment=GLOWPORT_SYNC_LISTEN=0.0.0.0:443
 #Environment=GLOWPORT_SYNC_TLS_CERT=/var/lib/glowport-sync/tls/fullchain.pem
 #Environment=GLOWPORT_SYNC_TLS_KEY=/var/lib/glowport-sync/tls/privkey.pem
@@ -34,7 +34,7 @@ Environment=GLOWPORT_SYNC_TRUST_PROXY=1
 Restart=on-failure
 RestartSec=3
 
-# Der Dienst braucht nichts vom übrigen System.
+# The service needs nothing from the rest of the system.
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes

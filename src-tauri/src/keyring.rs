@@ -1,7 +1,7 @@
-//! Brücke für Schlüssel und Identitäten.
+//! Bridge for keys and identities.
 //!
-//! Erzeugen, Lesen und Schreiben von Schlüsseln macht `glowport-net`, abgelegt wird im Kern. Der private Teil
-//! verlässt dieses Modul nur beim ausdrücklichen Export in eine Datei, die der Nutzer wählt.
+//! Generating, reading and writing keys is done by `glowport-net`, storing by the core. The private part
+//! only leaves this module on an explicit export into a file the user chooses.
 
 use glowport_core::{
     directory::{IdentityInput, NewAuthority, NewKey, Verdict},
@@ -22,7 +22,7 @@ use crate::{
     sessions::connect_chain,
 };
 
-/// Schlüsseldateien sind wenige Kilobyte groß; alles darüber ist etwas anderes.
+/// Key files are a few kilobytes in size; anything above is something else.
 const MAX_KEY_FILE: u64 = 64 * 1024;
 
 impl From<KeyError> for CmdError {
@@ -71,14 +71,14 @@ pub struct Import {
     passphrase: Option<String>,
 }
 
-/// Was in einer Schlüsseldatei steckt, für die Anzeige vor dem Importieren.
+/// What is inside a key file, for display before importing.
 #[derive(Debug, Serialize, PartialEq)]
 pub struct Info {
     kind: Option<KeyKind>,
     bits: Option<u32>,
     fingerprint: Option<String>,
     encrypted: bool,
-    /// `openssh`, `pem` oder `ppk`.
+    /// `openssh`, `pem` or `ppk`.
     format: &'static str,
     comment: String,
 }
@@ -109,9 +109,9 @@ pub(crate) fn generate(state: &AppState, key: Generate) -> CmdResult<Changed> {
     generate_in(state, key, None)
 }
 
-/// `vault`: der Tresor, in den der Schlüssel kommt; ohne Angabe der persönliche.
+/// `vault`: the vault the key goes into; without one, the personal one.
 fn generate_in(state: &AppState, key: Generate, vault: Option<&str>) -> CmdResult<Changed> {
-    // Erst prüfen, ob der Tresor offen ist; das Rechnen selbst geschieht ohne die Sperre auf dem Zustand.
+    // First check whether the vault is open; the computing itself happens without the lock on the state.
     state.session().directory()?;
     let material = keys::generate(to_net(key.kind), key.bits)?;
     store(state, key.name, material, KeyOrigin::Generated, vault)
@@ -140,7 +140,7 @@ fn import_in(state: &AppState, key: Import, vault: Option<&str>) -> CmdResult<Ch
     store(state, key.name, material, KeyOrigin::Imported, vault)
 }
 
-/// Dateiname für den Export: nur Zeichen, die überall erlaubt sind.
+/// File name for the export: only characters allowed everywhere.
 fn file_name(name: &str) -> String {
     let safe: String = name.chars().map(|c| if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') { c } else { '_' }).collect();
     if safe.trim_matches('_').is_empty() {
@@ -155,7 +155,7 @@ pub fn key_generate(state: State<'_, AppState>, key: Generate, vault: Option<Str
     generate_in(&state, key, vault.as_deref())
 }
 
-/// Lässt den Nutzer eine Schlüsseldatei wählen und liest sie. `None`, wenn der Dialog abgebrochen wurde.
+/// Lets the user choose a key file and reads it. `None` if the dialog was cancelled.
 #[tauri::command(async)]
 pub fn key_pick_file(app: AppHandle) -> CmdResult<Option<PickedFile>> {
     let Some(path) = app.dialog().file().blocking_pick_file().and_then(|chosen| chosen.into_path().ok()) else {
@@ -164,7 +164,7 @@ pub fn key_pick_file(app: AppHandle) -> CmdResult<Option<PickedFile>> {
     read_file(&path.display().to_string()).map(Some)
 }
 
-/// Liest eine Schlüsseldatei an einem bekannten Ort: vom Nutzer ins Fenster gezogen oder im Feld „Schlüsseldatei“ eingetragen.
+/// Reads a key file in a known place: dragged into the window by the user or entered in the “Key file” field.
 pub(crate) fn read_file(path: &str) -> CmdResult<PickedFile> {
     let unreadable = || CmdError::from(KeyError::Unreadable);
     if std::fs::metadata(path).map_err(|_| unreadable())?.len() > MAX_KEY_FILE {
@@ -179,9 +179,9 @@ pub fn key_read_file(path: String) -> CmdResult<PickedFile> {
     read_file(&path)
 }
 
-/// Übernimmt eine Schlüsseldatei in den Tresor und lässt den Host sich künftig damit anmelden. Aufgerufen, nachdem
-/// die Anmeldung mit Datei und Passphrase geklappt hat. Liegt derselbe Schlüssel schon im Tresor, wird er benutzt
-/// statt ein zweites Mal angelegt.
+/// Takes a key file into the vault and lets the host sign in with it from now on. Called after
+/// signing in with file and passphrase worked. If the same key already is in the vault, it is used
+/// instead of being created a second time.
 pub(crate) fn adopt_file(state: &AppState, path: &str, passphrase: &str, host: &str) -> CmdResult<()> {
     let file = read_file(path)?;
     let text = Zeroizing::new(file.text);
@@ -232,8 +232,8 @@ pub fn key_delete(state: State<'_, AppState>, id: String) -> CmdResult<Changed> 
     session.changed(None)
 }
 
-/// Hinterlegt ein Benutzer-Zertifikat am Schlüssel; ohne Text wird es entfernt. Angenommen wird nur eines,
-/// das zu genau diesem Schlüssel gehört.
+/// Attaches a user certificate to the key; without text it is removed. Only one that belongs
+/// to exactly this key is accepted.
 #[tauri::command]
 pub fn key_set_certificate(state: State<'_, AppState>, id: String, text: Option<String>) -> CmdResult<Changed> {
     let mut session = state.session();
@@ -249,21 +249,21 @@ pub fn key_set_certificate(state: State<'_, AppState>, id: String, text: Option<
     session.changed(Some(id))
 }
 
-/// Schreibt den privaten Schlüssel in eine Datei, die der Nutzer wählt. `None`, wenn der Dialog abgebrochen wurde.
+/// Writes the private key into a file the user chooses. `None` if the dialog was cancelled.
 #[tauri::command(async)]
 pub fn key_export(app: AppHandle, state: State<'_, AppState>, id: String, passphrase: Option<String>) -> CmdResult<Option<String>> {
     let passphrase = passphrase.map(Zeroizing::new);
     let (name, private) = {
         let mut session = state.session();
         let directory = session.directory()?;
-        // Mit Leserecht lässt sich ein Schlüssel benutzen, aber nicht herausgeben (`docs/sync.md`, „Rollen“).
+        // With read permission a key can be used, but not handed out (`docs/sync.md`, “Roles”).
         if directory.role_of(&id) == glowport_core::roster::Role::Read {
             return Err(CmdError::new("read_only", "Mit Leserecht lässt sich der private Schlüssel nicht exportieren"));
         }
         directory.key_private(&id)?
     };
     let text = keys::export(private.expose(), &name, passphrase.as_ref().map(|p| p.as_str()))?;
-    // Der Dialog blockiert; währenddessen bleibt der Zustand für andere Befehle frei.
+    // The dialog blocks; meanwhile the state stays free for other commands.
     let Some(chosen) = app.dialog().file().set_file_name(file_name(&name)).blocking_save_file() else {
         return Ok(None);
     };
@@ -272,23 +272,23 @@ pub fn key_export(app: AppHandle, state: State<'_, AppState>, id: String, passph
     Ok(Some(path.display().to_string()))
 }
 
-/// Ergebnis für einen Host beim Kopieren eines öffentlichen Schlüssels.
+/// Result for one host when copying a public key.
 #[derive(Clone, Serialize)]
 pub struct Deployed {
     host: String,
-    /// `added`, `present` oder `failed`.
+    /// `added`, `present` or `failed`.
     outcome: &'static str,
-    /// Grund des Scheiterns als Code, den die Oberfläche übersetzt.
+    /// Reason for failure as a code the interface translates.
     #[serde(skip_serializing_if = "Option::is_none")]
     message: Option<&'static str>,
 }
 
-/// Trägt den Schlüssel auf einem Host ein. Angemeldet wird mit dem, was für den Host hinterlegt ist, ohne Rückfragen;
-/// der Schlüssel des Servers muss schon bekannt sein.
+/// Installs the key on a host. Signing in uses what is stored for the host, without prompts;
+/// the server's key must already be known.
 async fn deploy_to(app: &AppHandle, host_id: &str, command: &str) -> Result<Installed, &'static str> {
     let state = app.state::<AppState>();
     let connect = connect_chain(state.session().directory().map_err(|_| "locked")?, host_id).map_err(|_| "not_found")?;
-    // Das gilt für jeden Server auf dem Weg, auch für die Sprung-Server.
+    // This applies to every server along the way, the jump hosts included.
     let trusted = |host: &str, port: u16, shown: &glowport_net::HostKey| state.session().directory().is_ok_and(|d| d.judge_host_key(host, port, &shown.openssh) == Verdict::Trusted);
     match glowport_net::execute(&connect, command, trusted).await {
         Ok(output) => keys::install_outcome(&output.stdout).ok_or("unsupported"),
@@ -298,8 +298,8 @@ async fn deploy_to(app: &AppHandle, host_id: &str, command: &str) -> Result<Inst
     }
 }
 
-/// Kopiert den öffentlichen Schlüssel nacheinander auf die Hosts und meldet jedes Ergebnis über `results`.
-/// Mit `adopt` melden sich die Hosts, bei denen es geklappt hat, künftig mit diesem Schlüssel an.
+/// Copies the public key to the hosts one after another and reports every result through `results`.
+/// With `adopt` the hosts where it worked sign in with this key from now on.
 #[tauri::command]
 pub async fn key_deploy(app: AppHandle, id: String, hosts: Vec<String>, adopt: bool, results: Channel<Deployed>) -> CmdResult<()> {
     let public = app.state::<AppState>().session().directory()?.key_public(&id)?;
@@ -327,15 +327,15 @@ pub async fn key_deploy(app: AppHandle, id: String, hosts: Vec<String>, adopt: b
 #[derive(Serialize)]
 pub struct AgentKeyView {
     comment: String,
-    /// Art und Länge zum Anzeigen, etwa „Ed25519“.
+    /// Kind and length for display, e.g. “Ed25519”.
     kind: String,
     fingerprint: String,
 }
 
-/// Ein SSH-Agent auf diesem Rechner und die Schlüssel, die er anbietet.
+/// An SSH agent on this machine and the keys it offers.
 #[derive(Serialize)]
 pub struct AgentView {
-    /// `openssh` (Windows, 1Password, Bitwarden) oder `pageant`.
+    /// `openssh` (Windows, 1Password, Bitwarden) or `pageant`.
     kind: &'static str,
     running: bool,
     keys: Vec<AgentKeyView>,
@@ -357,7 +357,7 @@ pub async fn agent_list() -> Vec<AgentView> {
         .collect()
 }
 
-/// Vertraut einer Zertifizierungsstelle für Server. `key` ist ihr öffentlicher Schlüssel als Zeile im OpenSSH-Format.
+/// Trusts a certificate authority for servers. `key` is its public key as a line in OpenSSH format.
 #[tauri::command]
 pub fn authority_add(state: State<'_, AppState>, name: String, pattern: String, key: String) -> CmdResult<Changed> {
     let info = keys::inspect_public(&key)?;
@@ -446,7 +446,7 @@ mod tests {
         assert_eq!(code(generate(&state, Generate { name: "x".into(), kind: KeyKind::Rsa, bits: 1024 })), "key_size");
         assert_eq!(code(generate(&state, Generate { name: " ".into(), kind: KeyKind::Ed25519, bits: 256 })), "invalid");
 
-        // Importieren: erst ansehen, dann mit Passphrase übernehmen.
+        // Importing: look first, then take over with passphrase.
         let locked = inspect(ENCRYPTED, None).unwrap();
         assert_eq!(serde_json::to_value(&locked).unwrap(), json!({ "kind": "ed25519", "bits": 256, "fingerprint": FINGERPRINT, "encrypted": true, "format": "openssh", "comment": "" }));
         assert_eq!(code(inspect("Hallo", None)), "key_unreadable");
@@ -458,7 +458,7 @@ mod tests {
         assert_eq!((keys[0]["name"].as_str(), keys[0]["fingerprint"].as_str(), keys[0]["origin"].as_str()), (Some("alt"), Some(FINGERPRINT), Some("imported")));
         assert_eq!(keys.as_array().unwrap().len(), 2);
 
-        // Im Tresor liegt der importierte Schlüssel ohne Passphrase, der Export kann eine neue setzen.
+        // In the vault the imported key is stored without passphrase, the export can set a new one.
         let id = keys[0]["id"].as_str().unwrap().to_string();
         let (name, private) = state.session().directory().unwrap().key_private(&id).unwrap();
         assert!(!keys::inspect(private.expose(), None).unwrap().encrypted);

@@ -1,9 +1,9 @@
-//! Verwaltung in der Seitenleiste einer Sitzung: Docker, Dienste, Prozesse (`docs/verwaltung.md`).
+//! Management in a session's sidebar: Docker, services, processes (`docs/management.md`).
 //!
-//! Die Befehle und das Lesen ihrer Ausgabe kommen aus `glowport_net::manage`; hier laufen sie auf der Verbindung
-//! der Sitzung, und hier steht die Reihenfolge der Rechte: erst als der angemeldete Benutzer, dann mit `sudo -n`.
-//! Will `sudo` ein Passwort, geht der Befehl an die Oberfläche zurück, die ihn ins Terminal schreibt. Glowport
-//! fragt kein sudo-Passwort ab.
+//! The commands and reading their output come from `glowport_net::manage`; here they run on the session's
+//! connection, and here is the order of permissions: first as the signed-in user, then with `sudo -n`.
+//! If `sudo` wants a password, the command goes back to the interface, which writes it into the terminal. Glowport
+//! does not ask for a sudo password.
 
 use glowport_net::manage::{self, docker, processes, services, As, Verdict};
 use serde::{Deserialize, Serialize};
@@ -12,7 +12,7 @@ use tauri::AppHandle;
 use crate::app::{CmdError, CmdResult};
 use crate::files::{self, Place};
 
-/// Führt einen Befehl auf der Verbindung der Sitzung aus: ob er gelang und was er ausgab.
+/// Runs a command on the session's connection: whether it succeeded and what it printed.
 async fn run(app: &AppHandle, session: u64, command: &str) -> CmdResult<(bool, String)> {
     let output = files::run_at(app, &Place::Session { id: session }, command).await?;
     Ok((output.exit_status == Some(0), String::from_utf8_lossy(&output.stdout).into_owned()))
@@ -32,7 +32,7 @@ pub struct AbilitiesView {
     sudo: bool,
 }
 
-/// Was es auf dem Server einer Sitzung zu verwalten gibt.
+/// What there is to manage on a session's server.
 #[tauri::command]
 pub async fn manage_probe(app: AppHandle, session: u64) -> CmdResult<AbilitiesView> {
     let (_, text) = run(&app, session, manage::PROBE).await?;
@@ -40,7 +40,7 @@ pub async fn manage_probe(app: AppHandle, session: u64) -> CmdResult<AbilitiesVi
     Ok(AbilitiesView { root: found.root, docker: found.docker, services: found.services, processes: found.processes, sudo: found.sudo })
 }
 
-/// Eine Liste, oder warum es sie nicht gibt (`Listed` in `types.ts`).
+/// A list, or why there is none (`Listed` in `types.ts`).
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(tag = "state", rename_all = "camelCase")]
 pub enum Listed<T> {

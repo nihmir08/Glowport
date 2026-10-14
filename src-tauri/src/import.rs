@@ -1,8 +1,8 @@
-//! Import und Export.
+//! Import and export.
 //!
-//! Findet, was andere Programme auf diesem PC an Verbindungen gespeichert haben, lässt `glowport-import` es lesen,
-//! zeigt der Oberfläche einen Entwurf und schreibt die Auswahl in den Tresor. Passwörter und private Schlüssel
-//! einer Quelle bleiben hier: Die Oberfläche sieht nur, dass es sie gibt.
+//! Finds what other programs on this PC have saved as connections, lets `glowport-import` read it,
+//! shows the interface a draft and writes the selection into the vault. Passwords and private keys
+//! of a source stay here: the interface only sees that they exist.
 
 use std::{
     collections::HashMap,
@@ -23,10 +23,10 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::app::{AppState, Changed, CmdError, CmdResult};
 
-/// Größer ist keine Datei, aus der sich Verbindungen lesen lassen; alles darüber ist etwas anderes.
+/// No file connections can be read from is larger; anything above is something else.
 const MAX_FILE: u64 = 16 * 1024 * 1024;
 const MAX_KEY_FILE: u64 = 64 * 1024;
-/// So viele Dateien nimmt ein Sitzungsordner (Xshell, SecureCRT) höchstens auf.
+/// A session folder (Xshell, SecureCRT) takes at most this many files.
 const MAX_SESSION_FILES: usize = 5000;
 
 impl From<ImportError> for CmdError {
@@ -43,17 +43,17 @@ fn unreadable(error: impl ToString) -> CmdError {
     CmdError::new("import_unreadable", error.to_string())
 }
 
-/// Was aus einem Schlüssel der Quelle geworden ist, nachdem seine Datei gelesen wurde.
+/// What became of a source's key after its file was read.
 enum KeyState {
-    /// Lässt sich in den Tresor legen.
+    /// Can be put into the vault.
     Ready(Box<Material>),
-    /// Braucht eine Passphrase; bleibt als Schlüsseldatei eingetragen.
+    /// Needs a passphrase; stays entered as a key file.
     Encrypted { kind: Option<Kind>, bits: Option<u32> },
     Missing,
     Unreadable,
 }
 
-/// Ein gelesener Entwurf, bis er übernommen oder verworfen wird.
+/// A draft that was read, until it is taken over or discarded.
 struct Entry {
     source: Source,
     origin: String,
@@ -67,7 +67,7 @@ struct Held {
     entries: HashMap<u64, Entry>,
 }
 
-/// Die Entwürfe laufender Importe. Sie gehören dem Programm, nicht einem Fenster.
+/// The drafts of running imports. They belong to the program, not to a window.
 #[derive(Default)]
 pub struct Imports(Mutex<Held>);
 
@@ -77,7 +77,7 @@ impl Imports {
     }
 }
 
-// ---------- Wo die Quellen liegen ----------
+// ---------- Where the sources are ----------
 
 fn env_dir(name: &str) -> Option<PathBuf> {
     std::env::var_os(name).map(PathBuf::from).filter(|p| !p.as_os_str().is_empty())
@@ -94,7 +94,7 @@ fn read_bytes(path: &Path, max: u64) -> CmdResult<Vec<u8>> {
     fs::read(path).map_err(unreadable)
 }
 
-/// Alle Dateien mit einer Endung unterhalb eines Ordners, jede mit ihrem Pfad darunter und ihrem Text.
+/// All files with an extension below a folder, each with its path below it and its text.
 fn session_files(root: &Path, extension: &str) -> Vec<(String, String)> {
     let mut found = Vec::new();
     let mut pending = vec![root.to_path_buf()];
@@ -119,7 +119,7 @@ mod registry {
     use glowport_import::{Entries, Section};
     use winreg::{enums::HKEY_CURRENT_USER, types::FromRegValue, RegKey};
 
-    /// Die Werte eines Schlüssels unter `HKEY_CURRENT_USER`: Texte und Zahlen, Zahlen als Dezimaltext.
+    /// The values of a key under `HKEY_CURRENT_USER`: texts and numbers, numbers as decimal text.
     pub fn values(path: &str) -> Option<Entries> {
         let key = RegKey::predef(HKEY_CURRENT_USER).open_subkey(path).ok()?;
         Some(
@@ -133,7 +133,7 @@ mod registry {
         )
     }
 
-    /// Alle Schlüssel direkt unterhalb von `path`, jeder mit seinen Werten.
+    /// All keys directly below `path`, each with its values.
     pub fn sections(path: &str) -> Vec<Section> {
         let Ok(key) = RegKey::predef(HKEY_CURRENT_USER).open_subkey(path) else { return Vec::new() };
         key.enum_keys().flatten().filter_map(|name| Some((name.clone(), values(&format!("{path}\\{name}"))?))).collect()
@@ -151,8 +151,8 @@ mod registry {
     }
 }
 
-/// Löst `Include` einer OpenSSH-Konfiguration auf: Pfade gelten ab dem Ordner der Datei, `*` und `?` im Dateinamen
-/// stehen für mehrere Dateien.
+/// Resolves `Include` of an OpenSSH configuration: paths apply from the file's folder, `*` and `?` in the file name
+/// stand for several files.
 fn includes(base: &Path, home: &str, pattern: &str) -> Vec<String> {
     let expanded = reader::text::expand_home(pattern, home);
     let path = if Path::new(&expanded).is_absolute() { PathBuf::from(expanded) } else { base.join(expanded) };
@@ -173,7 +173,7 @@ fn ssh_config(path: &Path) -> CmdResult<Draft> {
     Ok(reader::sshconfig::parse(&text, &home, &|pattern| includes(&base, &home, pattern)))
 }
 
-/// Wo eine Quelle auf diesem PC liegt, wenn es sie gibt. Leerer Pfad: in der Registry.
+/// Where a source lies on this PC, if it exists. Empty path: in the registry.
 fn location(source: Source) -> Option<PathBuf> {
     let home = env_dir("USERPROFILE")?;
     let roaming = env_dir("APPDATA");
@@ -196,7 +196,7 @@ fn location(source: Source) -> Option<PathBuf> {
         Source::FileZilla => file(roaming.map(|r| r.join("FileZilla").join("sitemanager.xml"))),
         Source::SecureCrt => dir(roaming.map(|r| r.join("VanDyke").join("Config").join("Sessions"))),
         Source::Xshell => {
-            // Der Ordner trägt die Version im Namen: `Documents\NetSarang Computer\8\Xshell\Sessions`.
+            // The folder carries the version in its name: `Documents\NetSarang Computer\8\Xshell\Sessions`.
             let base = home.join("Documents").join("NetSarang Computer");
             let mut versions: Vec<PathBuf> = fs::read_dir(base).into_iter().flatten().flatten().map(|e| e.path().join("Xshell").join("Sessions")).filter(|p| p.is_dir()).collect();
             versions.sort();
@@ -211,7 +211,7 @@ fn location(source: Source) -> Option<PathBuf> {
     }
 }
 
-/// Liest eine Quelle von ihrem Ort auf diesem PC.
+/// Reads a source from its place on this PC.
 fn load(source: Source) -> CmdResult<(String, Draft)> {
     let place = location(source).ok_or_else(|| CmdError::new("not_found", "Quelle nicht gefunden"))?;
     let origin = place.display().to_string();
@@ -220,7 +220,7 @@ fn load(source: Source) -> CmdResult<(String, Draft)> {
         Source::SshConfig => ssh_config(&place)?,
         Source::Putty => {
             let mut draft = reader::putty::from_sections(&registry::sections(reader::putty::KEY));
-            // Dazu die Server-Schlüssel, die PuTTY sich gemerkt hat.
+            // Plus the server keys PuTTY remembered.
             if let Some(keys) = registry::values(reader::putty::HOST_KEYS) {
                 let known = reader::putty::host_keys(&keys);
                 draft.known_hosts = known.known_hosts;
@@ -239,12 +239,12 @@ fn load(source: Source) -> CmdResult<(String, Draft)> {
     Ok((origin, draft))
 }
 
-/// Liest eine Datei, die der Nutzer gewählt oder ins Fenster gezogen hat. Ohne `source` entscheidet der Inhalt.
+/// Reads a file the user chose or dragged into the window. Without `source` the content decides.
 fn load_file(path: &Path, source: Option<Source>) -> CmdResult<(Source, Draft)> {
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let bytes = read_bytes(path, MAX_FILE)?;
     let detected = reader::detect(&name, &bytes);
-    // Der Inhalt entscheidet, wenn er eindeutig ist; die gewählte Kachel nur, wo er nichts verrät.
+    // The content decides if it is unambiguous; the chosen tile only where it reveals nothing.
     let source = match (source, detected) {
         (_, Some(found)) => found,
         (Some(chosen), None) => chosen,
@@ -254,10 +254,10 @@ fn load_file(path: &Path, source: Option<Source>) -> CmdResult<(Source, Draft)> 
     Ok((source, draft))
 }
 
-// ---------- Schlüssel der Quelle ----------
+// ---------- The source's keys ----------
 
-/// Liest die Schlüssel eines Entwurfs. Pfade ohne Laufwerk gelten ab `base` (bei einer Tabelle der Ordner der Datei;
-/// freie Termius-Exporter legen die Schlüssel daneben in `ssh_keys`).
+/// Reads a draft's keys. Paths without a drive apply from `base` (for a table the file's folder;
+/// free Termius exporters put the keys next to it in `ssh_keys`).
 fn resolve_keys(draft: &mut Draft, base: Option<&Path>) -> Vec<KeyState> {
     let mut states = Vec::with_capacity(draft.keys.len());
     for key in &mut draft.keys {
@@ -274,7 +274,7 @@ fn resolve_keys(draft: &mut Draft, base: Option<&Path>) -> Vec<KeyState> {
                     continue;
                 };
                 let text = fs::metadata(&found).ok().filter(|m| m.len() <= MAX_KEY_FILE).and_then(|_| fs::read(&found).ok()).and_then(|bytes| String::from_utf8(bytes).ok());
-                // Von hier an gilt der Ort, an dem die Datei wirklich liegt.
+                // From here on the place where the file really lies applies.
                 key.source = KeySource::File(found.display().to_string());
                 text
             }
@@ -301,7 +301,7 @@ fn core_kind(kind: Kind) -> KeyKind {
     }
 }
 
-// ---------- Was die Oberfläche sieht ----------
+// ---------- What the interface sees ----------
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -333,7 +333,7 @@ struct HostView {
     reference: String,
     name: String,
     address: String,
-    /// `ssh`, `telnet`, `serial` oder `ftp`.
+    /// `ssh`, `telnet`, `serial` or `ftp`.
     protocol: &'static str,
     group: Option<String>,
     user: Option<String>,
@@ -417,7 +417,7 @@ pub struct DraftView {
     skipped: Vec<SkippedView>,
 }
 
-/// Der Host im Tresor, der dasselbe Ziel hat: gleiche Adresse, gleicher Port, und kein anderer Benutzer.
+/// The host in the vault with the same destination: same address, same port, and no other user.
 fn twin(directory: &Directory, host: &DraftHost) -> Option<String> {
     let snapshot = directory.snapshot();
     snapshot
@@ -428,7 +428,7 @@ fn twin(directory: &Directory, host: &DraftHost) -> Option<String> {
                 (Some(a), Some(b)) => a == b,
                 _ => true,
             };
-            // Der übliche Port hängt am Protokoll; eine serielle Leitung hat keinen.
+            // The usual port depends on the protocol; a serial line has none.
             let usual = match host.protocol {
                 Protocol::Telnet => 23,
                 Protocol::Ftp => host.ftp.as_ref().map_or(model::DEFAULT_FTP_PORT, |ftp| ftp.default_port()),
@@ -533,7 +533,7 @@ fn view(token: u64, entry: &Entry, directory: &Directory) -> DraftView {
     }
 }
 
-// ---------- Übernehmen ----------
+// ---------- Taking over ----------
 
 #[derive(Deserialize)]
 #[serde(untagged)]
@@ -551,7 +551,7 @@ pub struct Options {
     snippets: Vec<String>,
     known_hosts: Vec<String>,
     into: Option<Into>,
-    /// `skip`, `update` oder `add`.
+    /// `skip`, `update` or `add`.
     existing: String,
     keys_to_vault: bool,
     passwords: bool,
@@ -578,18 +578,18 @@ pub struct Failed {
     reason: String,
 }
 
-/// Wohin der Schlüssel eines Hosts zeigt, nachdem die Schlüssel verarbeitet sind.
+/// Where a host's key points after the keys have been processed.
 enum KeyTarget {
     Vault(String),
     File(String),
 }
 
-/// Stellen aus Verweisen wie `h3`, soweit sie den richtigen Buchstaben tragen.
+/// Positions from references like `h3`, as far as they carry the right letter.
 fn picked(references: &[String], letter: char) -> Vec<usize> {
     references.iter().filter_map(|r| r.strip_prefix(letter)?.parse().ok()).collect()
 }
 
-/// Grund einer Ablehnung als Text, wie ihn die Oberfläche für `err.invalid.…` kennt.
+/// Reason for a rejection as text, as the interface knows it for `err.invalid.…`.
 fn reason_of(error: &DirError) -> Option<String> {
     match error {
         DirError::Invalid(reason) => serde_json::to_value(reason).ok().and_then(|v| v.as_str().map(str::to_string)),
@@ -597,8 +597,8 @@ fn reason_of(error: &DirError) -> Option<String> {
     }
 }
 
-/// Vererbbare Werte der Quelle in der Form des Tresors. Was der Tresor ablehnen würde, bleibt weg, statt den
-/// ganzen Host scheitern zu lassen.
+/// Inheritable values of the source in the vault's form. Whatever the vault would reject is left out instead of
+/// letting the whole host fail.
 fn fields(values: &Values, keys: &HashMap<usize, KeyTarget>) -> Fields {
     let token = |text: &String| !text.is_empty() && !text.starts_with('-') && !text.chars().any(|c| c.is_whitespace() || c.is_control());
     let mut out = Fields {
@@ -637,7 +637,7 @@ fn fields(values: &Values, keys: &HashMap<usize, KeyTarget>) -> Fields {
     out
 }
 
-/// Legt neuere Werte über vorhandene: Was der Import nennt, gilt; alles andere bleibt, wie es war.
+/// Lays newer values over existing ones: what the import names applies; everything else stays as it was.
 fn overlay(mut base: Fields, new: Fields) -> Fields {
     macro_rules! take {
         ($($field:ident),*) => { $( if new.$field.is_some() { base.$field = new.$field; } )* };
@@ -646,25 +646,25 @@ fn overlay(mut base: Fields, new: Fields) -> Fields {
     base
 }
 
-/// Die Gruppen eines Entwurfs auf dem Weg in den Tresor: Sie entstehen erst, wenn ein Host sie braucht.
+/// A draft's groups on their way into the vault: they are only created when a host needs them.
 struct Groups<'a> {
     draft: &'a Draft,
-    /// Wohin kommt, was in der Quelle auf der obersten Ebene liegt.
+    /// Where what lies on the top level in the source goes.
     root: Option<String>,
     ids: HashMap<usize, Option<String>>,
-    /// Neu angelegte Gruppen, deren Vorgaben noch ihren Sprung-Server brauchen.
+    /// Newly created groups whose defaults still need their jump host.
     jumps: Vec<(String, usize)>,
     keys: &'a HashMap<usize, KeyTarget>,
 }
 
 impl Groups<'_> {
-    /// Kennung der Gruppe im Tresor. Eine gleichnamige an derselben Stelle wird benutzt statt verdoppelt.
+    /// ID of the group in the vault. One with the same name in the same place is used instead of doubled.
     fn id_for(&mut self, at: Option<usize>, dir: &mut Directory, report: &mut Report) -> Result<Option<String>, DirError> {
         let Some(at) = at.filter(|at| *at < self.draft.groups.len()) else { return Ok(self.root.clone()) };
         if let Some(known) = self.ids.get(&at) {
             return Ok(known.clone());
         }
-        // Vorläufig eintragen: Zeigt eine Gruppe über Umwege auf sich selbst, endet die Suche hier.
+        // Enter provisionally: if a group points to itself in a roundabout way, the search ends here.
         self.ids.insert(at, self.root.clone());
         let source = &self.draft.groups[at];
         let parent = self.id_for(source.parent, dir, report)?;
@@ -673,7 +673,7 @@ impl Groups<'_> {
             Some(id) => id,
             None => {
                 let made = dir.save_group(GroupInput { id: None, name: source.name.clone(), parent: parent.clone(), color: source.color.clone(), defs: fields(&source.defs, self.keys), proxy_password: None });
-                // Lehnt der Tresor die Vorgaben ab, entsteht die Gruppe ohne sie.
+                // If the vault rejects the defaults, the group is created without them.
                 let id = match made {
                     Err(DirError::Invalid(_)) => dir.save_group(GroupInput { id: None, name: source.name.clone(), parent, color: None, defs: Fields::default(), proxy_password: None })?,
                     other => other?,
@@ -690,8 +690,8 @@ impl Groups<'_> {
     }
 }
 
-/// Schreibt die Auswahl in den Tresor, als eine Änderung: Geht dabei der Tresor selbst kaputt, bleibt nichts halb
-/// zurück. Einzelne Einträge, die der Tresor ablehnt, stehen danach im Bericht, und der Rest kommt trotzdem an.
+/// Writes the selection into the vault as one change: if the vault itself breaks on the way, nothing is left
+/// half-done. Single entries the vault rejects then appear in the report, and the rest arrives anyway.
 fn apply(directory: &mut Directory, entry: &Entry, options: &Options) -> CmdResult<Report> {
     let draft = &entry.draft;
     let chosen_hosts = picked(&options.hosts, 'h');
@@ -716,7 +716,7 @@ fn apply(directory: &mut Directory, entry: &Entry, options: &Options) -> CmdResu
             None => Err(error),
         };
 
-        // 1. Schlüssel: in den Tresor, wenn sie lesbar sind und es gewünscht ist; sonst bleibt der Pfad.
+        // 1. Keys: into the vault if they are readable and that is wanted; otherwise the path stays.
         let mut key_targets: HashMap<usize, KeyTarget> = HashMap::new();
         for at in chosen_keys.iter().copied().filter(|at| *at < draft.keys.len()) {
             let key = &draft.keys[at];
@@ -729,7 +729,7 @@ fn apply(directory: &mut Directory, entry: &Entry, options: &Options) -> CmdResu
                     let known = dir.snapshot().keys.into_iter().find(|k| k.fingerprint == material.fingerprint).map(|k| k.id);
                     match (known, file) {
                         (Some(id), _) => drop(key_targets.insert(at, KeyTarget::Vault(id))),
-                        // Ein Schlüssel, der nur in der Quelle steht, hat keine Datei, auf die sich verweisen ließe.
+                        // A key that only exists in the source has no file that could be referred to.
                         (None, file) if options.keys_to_vault || file.is_none() => {
                             let name = key.name.trim_end_matches(".ppk").trim_end_matches(".pem").to_string();
                             let added = dir.add_key(NewKey {
@@ -767,7 +767,7 @@ fn apply(directory: &mut Directory, entry: &Entry, options: &Options) -> CmdResu
             }
         }
 
-        // 2. Gruppen: nur, soweit ein gewählter Host darin liegt. Gleichnamige an derselben Stelle werden benutzt.
+        // 2. Groups: only as far as a chosen host lives in them. Ones with the same name in the same place are used.
         let mut root: Option<String> = None;
         let will_add = chosen_hosts.iter().any(|at| !twins.contains_key(at) || options.existing == "add");
         match &options.into {
@@ -786,7 +786,7 @@ fn apply(directory: &mut Directory, entry: &Entry, options: &Options) -> CmdResu
         }
         let mut groups = Groups { draft, root, ids: HashMap::new(), jumps: Vec::new(), keys: &key_targets };
 
-        // 3. Hosts, zuerst ohne Sprung-Server: Der darf im Entwurf weiter hinten stehen.
+        // 3. Hosts, first without jump hosts: those may come later in the draft.
         let mut host_ids: HashMap<usize, String> = HashMap::new();
         let mut written: Vec<usize> = Vec::new();
         for at in chosen_hosts.iter().copied().filter(|at| *at < draft.hosts.len()) {
@@ -800,7 +800,7 @@ fn apply(directory: &mut Directory, entry: &Entry, options: &Options) -> CmdResu
                     HostInput { id: Some(known.id), name: known.name, address: known.address, protocol: None, serial: None, ftp: None, group: known.group, color: known.color, os: known.os, own: overlay(known.own, own), password: password.map(Some), proxy_password: proxy_password.map(Some) }
                 }
                 (Some(id), existing) if existing != "add" => {
-                    // Ausgelassen; Sprünge und Port-Regeln anderer Einträge zeigen auf den vorhandenen Host.
+                    // Skipped; jumps and port rules of other entries point to the existing host.
                     host_ids.insert(at, id.clone());
                     report.skipped += 1;
                     continue;
@@ -811,7 +811,7 @@ fn apply(directory: &mut Directory, entry: &Entry, options: &Options) -> CmdResu
                 }
             };
             let updating = input.id.is_some();
-            // Lehnt der Tresor Feinheiten ab (eine Farbe, ein Zeichensatz), kommt der Host mit dem Nötigsten an.
+            // If the vault rejects details (a color, a charset), the host arrives with the essentials.
             let plain = HostInput {
                 id: input.id.clone(),
                 name: input.name.clone(),
@@ -844,7 +844,7 @@ fn apply(directory: &mut Directory, entry: &Entry, options: &Options) -> CmdResu
             }
         }
 
-        // 4. Sprung-Server eintragen, jetzt wo jeder Host seine Kennung hat.
+        // 4. Enter jump hosts, now that every host has its ID.
         for at in written {
             let (Jump::Host(jump), Some(id)) = (draft.hosts[at].own.jump, host_ids.get(&at)) else { continue };
             let Some(target) = host_ids.get(&jump).filter(|target| *target != id).cloned() else { continue };
@@ -858,7 +858,7 @@ fn apply(directory: &mut Directory, entry: &Entry, options: &Options) -> CmdResu
             let Some(target) = host_ids.get(&jump).cloned() else { continue };
             let Some(known) = dir.snapshot().groups.into_iter().find(|g| g.id == group) else { continue };
             let defs = Fields { jump: Some(target), ..known.defs };
-            // Scheitert das (etwa weil der Host selbst in der Gruppe liegt und es einen Kreis gäbe), bleibt die Gruppe ohne Sprung.
+            // If that fails (e.g. because the host itself lives in the group and there would be a cycle), the group stays without a jump.
             let _ = dir.save_group(GroupInput { id: Some(known.id), name: known.name, parent: known.parent, color: known.color, defs, proxy_password: None });
         }
 
@@ -910,7 +910,7 @@ fn apply(directory: &mut Directory, entry: &Entry, options: &Options) -> CmdResu
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportRequest {
-    /// `glowport`, `sshconfig` oder `csv`.
+    /// `glowport`, `sshconfig` or `csv`.
     format: String,
     group: Option<String>,
     snippets: bool,
@@ -918,10 +918,10 @@ pub struct ExportRequest {
     known_hosts: bool,
 }
 
-/// Was exportiert wird, in der Form des eigenen Formats; die anderen Formate entstehen daraus.
+/// What is exported, in the form of the own format; the other formats are made from it.
 fn collect(directory: &Directory, request: &ExportRequest, app_version: &str, now: i64) -> format::Export {
     let snapshot = directory.snapshot();
-    // Mit einer Gruppe als Umfang zählen sie und alles darunter.
+    // With a group as scope, it and everything below it count.
     let mut inside: Vec<String> = request.group.iter().cloned().collect();
     let mut index = 0;
     while index < inside.len() {
@@ -931,7 +931,7 @@ fn collect(directory: &Directory, request: &ExportRequest, app_version: &str, no
         index += 1;
     }
     let in_scope = |group: &Option<String>| request.group.is_none() || group.as_ref().is_some_and(|g| inside.contains(g));
-    // Identitäten und Schlüssel bleiben im Tresor. Der Benutzer einer Identität steht dafür als Benutzer da.
+    // Identities and keys stay in the vault. An identity's user appears as the user instead.
     let clean = |mut fields: Fields| {
         if fields.user.is_none() {
             fields.user = fields.identity.as_deref().filter(|id| !id.is_empty()).and_then(|id| directory.identity_user(id));
@@ -950,7 +950,7 @@ fn collect(directory: &Directory, request: &ExportRequest, app_version: &str, no
             address: h.address.clone(),
             protocol: Some(h.protocol.clone()).filter(|protocol| protocol != "ssh"),
             serial: h.serial,
-            // Dass die Warnung vor der offenen Verbindung abbestellt ist, gilt für dieses Gerät und wandert nicht mit.
+            // That the warning about the plain connection is switched off applies to this device and does not travel along.
             ftp: h.ftp.clone().map(|ftp| model::Ftp { plain_ok: false, ..ftp }),
             group: h.group.clone(),
             color: h.color.clone(),
@@ -990,7 +990,7 @@ fn collect(directory: &Directory, request: &ExportRequest, app_version: &str, no
     }
 }
 
-/// Wirksame Werte eines Hosts: seine eigenen, sonst die der nächsten Gruppe, die etwas festlegt.
+/// A host's effective values: its own, otherwise those of the nearest group that sets something.
 fn effective(export: &format::Export, host: &format::Host) -> Fields {
     let mut out = host.own.clone();
     let mut group = host.group.as_deref();
@@ -1013,7 +1013,7 @@ fn group_path(export: &format::Export, group: Option<&str>) -> Vec<String> {
     path
 }
 
-/// Name eines Hosts für `Host` in der OpenSSH-Konfiguration: ohne Leerzeichen und Platzhalter, und einmalig.
+/// A host's name for `Host` in the OpenSSH configuration: without spaces and wildcards, and unique.
 fn alias(name: &str, taken: &mut Vec<String>) -> String {
     let base: String = name.trim().chars().map(|c| if c.is_whitespace() || matches!(c, '*' | '?' | '!' | '#' | '"' | ',') { '-' } else { c }).collect();
     let base = if base.is_empty() { "host".to_string() } else { base };
@@ -1030,7 +1030,7 @@ fn alias(name: &str, taken: &mut Vec<String>) -> String {
 fn ssh_config_text(export: &format::Export) -> String {
     let mut taken = Vec::new();
     let aliases: HashMap<&str, String> = export.hosts.iter().map(|h| (h.id.as_str(), alias(&h.name, &mut taken))).collect();
-    // Eine OpenSSH-Konfiguration kennt nur SSH: Telnet und serielle Leitungen bleiben weg.
+    // An OpenSSH configuration only knows SSH: Telnet and serial lines are left out.
     let mut hosts: Vec<&format::Host> = export.hosts.iter().filter(|h| h.protocol.is_none()).collect();
     hosts.sort_by_key(|h| (group_path(export, h.group.as_deref()), h.name.to_lowercase()));
     let mut out = String::from("# Geschrieben von Glowport. Passwörter und Schlüssel aus dem Tresor stehen nicht darin.\n");
@@ -1091,15 +1091,15 @@ fn ssh_config_text(export: &format::Export) -> String {
 
 fn csv_text(export: &format::Export) -> String {
     let cell = |text: &str| if text.contains([',', '"', '\n', ';']) { format!("\"{}\"", text.replace('"', "\"\"")) } else { text.to_string() };
-    // Die Spalten, wie Termius sie für seinen Import beschreibt; so nimmt auch Termius die Datei an.
+    // The columns as Termius describes them for its import; that way Termius accepts the file too.
     let mut out = String::from("\u{feff}Groups,Label,Tags,Hostname/IP,Protocol,Port,Username,Password,SSH_KEY\r\n");
     for host in &export.hosts {
         let own = effective(export, host);
-        // Port und Benutzer erbt nur ein SSH-Host. Bei einer seriellen Leitung steht in der Spalte des Ports die Baudrate.
+        // Only an SSH host inherits port and user. For a serial line the port column holds the baud rate.
         let (protocol, port, user) = match host.protocol.as_deref() {
             Some("serial") => ("serial", host.serial.map(|line| line.baud.to_string()).unwrap_or_default(), String::new()),
             Some("telnet") => ("telnet", host.own.port.unwrap_or(23).to_string(), host.own.user.clone().unwrap_or_default()),
-            // `ftp` heißt in der Tabelle unverschlüsselt, `ftps` verschlüsselt; der Port sagt, auf welche Art.
+            // `ftp` in the table means unencrypted, `ftps` encrypted; the port says which kind.
             Some("ftp") => {
                 let ftp = host.ftp.clone().unwrap_or(model::Ftp { security: model::FtpSecurity::Explicit, anonymous: false, dir: None, plain_ok: false });
                 let kind = if ftp.security == model::FtpSecurity::None { "ftp" } else { "ftps" };
@@ -1138,7 +1138,7 @@ fn hold(imports: &Imports, state: &AppState, source: Source, origin: String, mut
     held.next += 1;
     let token = held.next;
     let shown = view(token, &entry, directory);
-    // Ein Entwurf je Fenster reicht; ältere, die niemand mehr ansieht, fallen weg.
+    // One draft per window is enough; older ones nobody looks at any more are dropped.
     if held.entries.len() >= 4 {
         let oldest = held.entries.keys().min().copied();
         if let Some(oldest) = oldest {
@@ -1149,7 +1149,7 @@ fn hold(imports: &Imports, state: &AppState, source: Source, origin: String, mut
     Ok(shown)
 }
 
-/// Sieht nach, welche Programme auf diesem PC Verbindungen gespeichert haben, und zählt sie.
+/// Checks which programs on this PC have saved connections and counts them.
 #[tauri::command(async)]
 pub fn import_scan() -> Vec<Found> {
     Source::ALL
@@ -1157,7 +1157,7 @@ pub fn import_scan() -> Vec<Found> {
         .filter_map(|source| {
             let place = location(source)?;
             let count = load(source).ok().map(|(_, draft)| if source == Source::KnownHosts { draft.known_hosts.len() } else { draft.hosts.len() });
-            // Ein Programm ohne eine einzige Verbindung, die sich übernehmen ließe, ist keine Quelle.
+            // A program without a single connection that could be taken over is not a source.
             (count != Some(0)).then(|| Found { source: source.id(), place: place.display().to_string(), count })
         })
         .collect()
@@ -1175,7 +1175,7 @@ fn read_path(imports: &Imports, state: &AppState, path: &Path, source: Option<So
     hold(imports, state, source, path.display().to_string(), draft, path.parent())
 }
 
-/// Lässt den Nutzer eine Datei wählen und liest sie. `None`, wenn der Dialog abgebrochen wurde.
+/// Lets the user choose a file and reads it. `None` if the dialog was cancelled.
 #[tauri::command(async)]
 pub fn import_pick(app: AppHandle, imports: State<'_, Imports>, state: State<'_, AppState>, source: Option<String>) -> CmdResult<Option<DraftView>> {
     let source = source.as_deref().and_then(Source::from_id);
@@ -1208,11 +1208,11 @@ pub fn import_discard(imports: State<'_, Imports>, token: u64) {
     imports.held().entries.remove(&token);
 }
 
-/// Fragt nach dem Speicherort und schreibt den Export. `None`, wenn der Dialog abgebrochen wurde.
+/// Asks for the location and writes the export. `None` if the dialog was cancelled.
 #[tauri::command(async)]
 pub fn export_data(app: AppHandle, state: State<'_, AppState>, request: ExportRequest, file_name: String) -> CmdResult<Option<String>> {
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64);
-    // Erst der Inhalt, dann der Dialog: So steht fest, was geschrieben wird, bevor der Nutzer einen Ort wählt.
+    // First the content, then the dialog: that way it is settled what gets written before the user chooses a place.
     let text = export_text(state.session().directory()?, &request, env!("CARGO_PKG_VERSION"), now)?;
     let Some(chosen) = app.dialog().file().set_file_name(file_name).blocking_save_file() else { return Ok(None) };
     let path = chosen.into_path().map_err(|e| CmdError::new("internal", e.to_string()))?;
@@ -1245,7 +1245,7 @@ mod tests {
         }
     }
 
-    /// Sieht nach, was auf diesem PC liegt, und nennt nur Zahlen: keine Namen, keine Adressen, keine Geheimnisse.
+    /// Checks what is on this PC and only names numbers: no names, no addresses, no secrets.
     /// `cargo test -p glowport scans_this_pc -- --ignored --nocapture`
     #[test]
     #[ignore = "liest die echten Quellen dieses PCs"]
@@ -1310,7 +1310,7 @@ mod tests {
         assert!(snapshot.forwards.iter().any(|f| f.kind == ForwardKind::Dynamic && f.host == host("bastion").id && f.bind_port == 1080));
         assert!(snapshot.forwards.iter().any(|f| f.kind == ForwardKind::Local && f.host == host("web").id && f.dest_port == 80));
 
-        // Zweiter Lauf: Alles ist schon da und wird ausgelassen, auch die Regeln; nichts kommt doppelt.
+        // Second run: everything is already there and is skipped, the rules too; nothing comes twice.
         let again = held_entry(Source::SshConfig, reader::sshconfig::parse(CONFIG, "C:\\Users\\ich", &|_| Vec::new()));
         let shown = view(1, &again, session.directory().unwrap());
         assert!(shown.hosts.iter().all(|h| h.existing.is_some()));
@@ -1318,7 +1318,7 @@ mod tests {
         assert_eq!((report.hosts, report.groups, report.forwards, report.skipped), (0, 0, 0, 5));
         assert_eq!(session.directory().unwrap().snapshot().hosts.len(), 3);
 
-        // „Aktualisieren“ legt die Werte der Quelle über den vorhandenen Host und lässt den Rest stehen.
+        // “Update” lays the source's values over the existing host and leaves the rest in place.
         let changed = "Host web\n  HostName 10.20.0.11\n  User deploy\n  Port 2222\n  ServerAliveInterval 45\n";
         let update = held_entry(Source::SshConfig, reader::sshconfig::parse(changed, "", &|_| Vec::new()));
         let mut choice = options(&update);
@@ -1337,7 +1337,7 @@ mod tests {
         let mut session = state.session();
         session.create("richtig-lang").unwrap();
 
-        // Eine Tabelle mit Gruppen und Passwörtern; ein Schlüssel als Text in der Zelle.
+        // A table with groups and passwords; a key as text in the cell.
         let key = keys::generate(Kind::Ed25519, 256).unwrap();
         let csv = format!("Groups,Label,Hostname/IP,Port,Username,Password,SSH_KEY\nKunden/Meier,web,web.meier.example,22,admin,geheim,\nKunden/Meier,db,db.meier.example,5022,admin,,\"{}\"\nKunden,böser,-oProxyCommand=x,22,root,,\n", key.private.to_string().replace('\n', "\\n"));
         let entry = held_entry(Source::Csv, reader::csv::parse(&csv).unwrap());
@@ -1359,14 +1359,14 @@ mod tests {
         assert_eq!(snapshot.groups.iter().find(|g| Some(&g.id) == meier.parent.as_ref()).unwrap().name, "Kunden");
         assert_eq!(directory.connect_info(&web.id).unwrap().password.unwrap().expose(), "geheim");
 
-        // Ohne „Passwörter übernehmen“ bleibt das Passwort zurück.
+        // Without “take over passwords” the password stays behind.
         let entry = held_entry(Source::Csv, reader::csv::parse("name,address,password\nnas,192.168.1.20,pw\n").unwrap());
         let mut choice = options(&entry);
         choice.passwords = false;
         apply(session.directory().unwrap(), &entry, &choice).unwrap();
         assert!(!session.directory().unwrap().snapshot().hosts.iter().find(|h| h.name == "nas").unwrap().has_password);
 
-        // Bekannte Hosts: neu, schon vorhanden, und ein zweiter Schlüssel für dieselbe Adresse.
+        // Known hosts: new, already present, and a second key for the same address.
         let text = "web.meier.example ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG8xl5W2c2FrEsznplCeG1VfI9zSm9CciIj3drnCX2xq\n";
         let entry = held_entry(Source::KnownHosts, reader::knownhosts::parse(text));
         assert_eq!(apply(session.directory().unwrap(), &entry, &options(&entry)).unwrap().known_hosts, 1);
@@ -1395,7 +1395,7 @@ mod tests {
         assert_eq!((back.hosts.len(), back.groups.len(), back.forwards.len()), (3, 1, 2));
         assert!(matches!(back.hosts.iter().find(|h| h.name == "web").unwrap().own.jump, Jump::Host(_)));
 
-        // Als OpenSSH-Konfiguration geschrieben und wieder gelesen, kommt dasselbe heraus.
+        // Written as an OpenSSH configuration and read again, the same comes out.
         let config = export_text(directory, &request("sshconfig"), "0.7.0", 1).unwrap();
         assert!(config.contains("# ---- Produktiv Web ----") && config.contains("ProxyJump bastion") && config.contains("LocalForward 127.0.0.1:8080 127.0.0.1:80"));
         let back = reader::sshconfig::parse(&config, "", &|_| Vec::new());
@@ -1408,7 +1408,7 @@ mod tests {
         assert_eq!((back.hosts.len(), back.groups[0].name.as_str()), (3, "Produktiv Web"));
         assert_eq!(back.hosts.iter().find(|h| h.name == "web").unwrap().own.port, Some(2222));
 
-        // Ein Export aus Glowport lässt sich in einen leeren Tresor einlesen und ergibt denselben Aufbau.
+        // An export from Glowport can be read into an empty vault and gives the same structure.
         let other = Temp::new("import-export-ziel");
         let target_state = other.state();
         let mut target = target_state.session();
@@ -1440,21 +1440,21 @@ mod tests {
         assert_eq!((by_name("webspace").protocol.as_str(), ftp("webspace"), by_name("webspace").own.port, by_name("webspace").has_password), ("ftp", Some((model::FtpSecurity::Explicit, false)), None, true));
         assert_eq!((ftp("scanner"), by_name("scanner").own.port, by_name("scanner").own.user.as_deref()), (Some((model::FtpSecurity::None, false)), Some(2121), Some("scan")));
         assert_eq!((ftp("spiegel"), by_name("spiegel").own.port, by_name("spiegel").own.user.as_deref()), (Some((model::FtpSecurity::Implicit, true)), None, None));
-        // Das Passwort kam mit und gilt beim Verbinden.
+        // The password came along and applies when connecting.
         let info = directory.ftp_info(&by_name("webspace").id).unwrap();
         assert_eq!((info.user.as_str(), info.password.as_ref().map(Secret::expose), info.port), ("web1", Some("geheim"), 21));
 
-        // Noch einmal dieselbe Tabelle: Alles gilt als schon vorhanden. Der SSH-Host unter derselben Adresse ist ein anderer.
+        // The same table once more: everything counts as already present. The SSH host at the same address is a different one.
         let again = held_entry(Source::Csv, reader::csv::parse(table).unwrap());
         let twins: Vec<_> = again.draft.hosts.iter().map(|host| twin(directory, host)).collect();
         assert!(twins.iter().all(Option::is_some));
         assert_ne!(twins[0], twins[3], "gleiche Adresse und gleicher Benutzer, anderes Protokoll");
-        // Derselbe Server auf einem anderen Port ist ein anderer Host.
+        // The same server on another port is another host.
         let other = reader::csv::parse("Label,Hostname/IP,Protocol,Port,Username\nwebspace-2,ftp.example.org,ftps,2121,web1\n").unwrap();
         assert!(twin(directory, &other.hosts[0]).is_none());
 
         let request = |format: &str| ExportRequest { format: format.into(), group: None, snippets: false, forwards: false, known_hosts: false };
-        // Das eigene Format trägt die Verschlüsselung und liest sie wieder; die abbestellte Warnung wandert nicht mit.
+        // The own format carries the encryption and reads it again; the switched-off warning does not travel along.
         let scanner = by_name("scanner").id.clone();
         session.directory().unwrap().set_ftp_choice(&scanner, true, false).unwrap();
         let directory = session.directory().unwrap();
@@ -1464,10 +1464,10 @@ mod tests {
         assert_eq!((read("webspace").protocol, read("web").protocol), (Protocol::Ftp, Protocol::Ssh));
         assert_eq!(read("scanner").ftp, Some(model::Ftp { security: model::FtpSecurity::None, anonymous: false, dir: None, plain_ok: false }));
         assert_eq!(read("spiegel").ftp.as_ref().map(|ftp| (ftp.security, ftp.anonymous)), Some((model::FtpSecurity::Implicit, true)));
-        // Eine OpenSSH-Konfiguration kennt nur SSH.
+        // An OpenSSH configuration only knows SSH.
         let config = export_text(directory, &request("sshconfig"), "0.10.0", 1).unwrap();
         assert!(config.contains("Host web") && !config.contains("webspace") && !config.contains("scanner"), "{config}");
-        // Die Tabelle nennt `ftp` für unverschlüsselt und `ftps` sonst, mit dem Port, der gilt.
+        // The table names `ftp` for unencrypted and `ftps` otherwise, with the port that applies.
         let csv = export_text(directory, &request("csv"), "0.10.0", 1).unwrap();
         assert!(csv.contains("Web,webspace,,ftp.example.org,ftps,21,web1") && csv.contains("Web,scanner,,10.0.0.60,ftp,2121,scan") && csv.contains("Web,spiegel,,mirror.example.org,ftps,990,"), "{csv}");
         let back = reader::csv::parse(&csv).unwrap();
@@ -1494,23 +1494,23 @@ mod tests {
         assert_eq!((console.protocol.as_str(), console.address.as_str(), console.serial.map(|line| (line.baud, line.data_bits, line.stop_bits))), ("serial", "COM4", Some((115_200, 8, 1))));
         assert_eq!(by_name("web").protocol, "ssh");
 
-        // Noch einmal dieselbe Tabelle: Alles gilt als schon vorhanden. Ein SSH-Host unter der Adresse des Switches wäre es nicht.
+        // The same table once more: everything counts as already present. An SSH host at the switch's address would not.
         let again = held_entry(Source::Csv, reader::csv::parse(table).unwrap());
         assert!(again.draft.hosts.iter().all(|host| twin(directory, host).is_some()));
         let other = reader::csv::parse("Label,Hostname/IP,Protocol\nswitch-ssh,192.168.1.250,ssh\n").unwrap();
         assert!(twin(directory, &other.hosts[0]).is_none(), "gleiche Adresse, anderes Protokoll");
 
         let request = |format: &str| ExportRequest { format: format.into(), group: None, snippets: false, forwards: false, known_hosts: false };
-        // Das eigene Format trägt Protokoll und Leitung und liest sie wieder.
+        // The own format carries protocol and line and reads them again.
         let json = export_text(directory, &request("glowport"), "0.8.0", 1).unwrap();
         let back = format::parse(&json).unwrap();
         let read = |name: &str| back.hosts.iter().find(|h| h.name == name).unwrap();
         assert_eq!((read("switch").protocol, read("konsole").protocol, read("web").protocol), (Protocol::Telnet, Protocol::Serial, Protocol::Ssh));
         assert_eq!(read("konsole").serial.map(|line| line.baud), Some(115_200));
-        // Eine OpenSSH-Konfiguration kennt nur SSH.
+        // An OpenSSH configuration only knows SSH.
         let config = export_text(directory, &request("sshconfig"), "0.8.0", 1).unwrap();
         assert!(config.contains("Host web") && !config.contains("switch") && !config.contains("COM4"), "{config}");
-        // Die Tabelle nennt das Protokoll; bei der seriellen Leitung steht die Baudrate in der Spalte des Ports.
+        // The table names the protocol; for the serial line the baud rate is in the port column.
         let csv = export_text(directory, &request("csv"), "0.8.0", 1).unwrap();
         assert!(csv.contains("Netz,switch,,192.168.1.250,telnet,23,admin") && csv.contains("Netz,konsole,,COM4,serial,115200,") && csv.contains("Netz,web,,10.0.0.5,ssh,2222,deploy"), "{csv}");
         let back = reader::csv::parse(&csv).unwrap();

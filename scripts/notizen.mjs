@@ -1,5 +1,5 @@
-// Gibt den Abschnitt einer Version aus CHANGELOG.md aus: der Text des Releases und des Update-Dialogs.
-// Aufruf: node scripts/notizen.mjs <Version>
+// Prints a version's section from CHANGELOG.md: the text of the release and of the update dialog.
+// Run: node scripts/release-notes.mjs <version>
 import { readFileSync } from 'node:fs';
 
 const version = process.argv[2];

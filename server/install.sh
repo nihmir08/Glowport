@@ -1,14 +1,14 @@
 #!/bin/sh
-# Richtet den Glowport Sync-Server als Dienst ein (Weg A in docs/sync-server.md).
-# Als root in dem Ordner ausführen, in dem `glowport-sync` und `glowport-sync.service` liegen:
+# Sets up the Glowport sync server as a service (option A in docs/sync-server.md).
+# Run as root in the folder containing `glowport-sync` and `glowport-sync.service`:
 #
 #   sh install.sh
 #
-# Läuft der Webserver auf einem anderen Rechner oder Container, seine innere Adresse mitgeben:
+# If the web server runs on another machine or container, pass its internal address:
 #
 #   PROXY=10.0.0.10 sh install.sh
 #
-# Ein weiterer Aufruf tauscht nur das Programm aus und startet neu. Daten und Einstellungen bleiben.
+# Running it again only replaces the program and restarts. Data and settings stay.
 set -eu
 
 cd "$(dirname "$0")"
@@ -26,7 +26,7 @@ if [ -f "$unit" ]; then
 else
     install -m 644 glowport-sync.service "$unit"
     if [ -n "${PROXY:-}" ]; then
-        # Der Webserver kommt von außen: auf allen Adressen hören, den Absender aber nur ihm glauben.
+        # The web server comes from outside: listen on all addresses, but only believe it about the sender.
         sed -i -e "s|^Environment=GLOWPORT_SYNC_LISTEN=.*|Environment=GLOWPORT_SYNC_LISTEN=0.0.0.0:8787|" \
                -e "s|^Environment=GLOWPORT_SYNC_TRUST_PROXY=.*|Environment=GLOWPORT_SYNC_TRUST_PROXY=$PROXY|" "$unit"
     fi
@@ -48,6 +48,6 @@ if ! systemctl is-active --quiet glowport-sync; then
     exit 1
 fi
 
-# Nur die Ausgabe dieses Starts: Ein Einrichtungscode von früher gilt nicht mehr.
+# Only this start's output: a setup code from earlier is no longer valid.
 echo "Der Dienst läuft:"
 journalctl "_SYSTEMD_INVOCATION_ID=$(systemctl show -p InvocationID --value glowport-sync)" --no-pager -o cat

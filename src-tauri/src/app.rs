@@ -1,7 +1,7 @@
-//! Brücke zwischen Oberfläche und Kern für Tresor, Hosts und Gruppen.
+//! Bridge between interface and core for vault, hosts and groups.
 //!
-//! Hier liegt nur der Zustand „kein Tresor / gesperrt / offen“ samt Auto-Sperre. Alle Regeln stehen in `glowport-core`.
-//! Die Abläufe sind Methoden von `Session`, damit sie sich ohne Programmfenster testen lassen; die Befehle reichen nur durch.
+//! Only the state “no vault / locked / open” and the auto-lock live here. All rules are in `glowport-core`.
+//! The flows are methods of `Session` so they can be tested without a program window; the commands only pass through.
 
 use std::{
     path::{Path, PathBuf},
@@ -22,16 +22,16 @@ use zeroize::Zeroizing;
 use crate::keystore::{KeyStore, ProtectedFile};
 
 const MIN_PASSWORD_CHARS: usize = 8;
-/// Solange kein Abgleich eingerichtet ist, braucht niemand alte Grabsteine.
+/// As long as no sync is set up, nobody needs old tombstones.
 const TOMBSTONE_MAX_AGE_MS: i64 = 90 * 24 * 60 * 60 * 1000;
 
-// Von diesem Zustand gibt es im ganzen Programm genau einen; seine Größe spielt keine Rolle.
+// There is exactly one of this state in the whole program; its size does not matter.
 #[allow(clippy::large_enum_variant)]
 enum Phase {
     Missing,
     Locked(Vault),
     Open(Directory),
-    /// Die Datei ließ sich nicht öffnen (beschädigt oder aus einer neueren Version).
+    /// The file could not be opened (damaged or from a newer version).
     Broken(CmdError),
 }
 
@@ -39,19 +39,19 @@ pub struct Session {
     path: PathBuf,
     phase: Phase,
     kdf: KdfParams,
-    /// Hält, falls eingeschaltet, den Schlüssel für das Entsperren beim Start ohne Master-Passwort.
+    /// If switched on, holds the key for unlocking at startup without the master password.
     keystore: Box<dyn KeyStore>,
-    /// Noch nicht versucht, beim Start ohne Master-Passwort zu öffnen.
+    /// Not yet tried to open without the master password at startup.
     start_pending: bool,
     last_activity: Instant,
     auto_lock: Option<Duration>,
-    /// Wird gerufen, wenn sich Zustand oder Inhalt des Tresors geändert haben, damit alle Fenster nachziehen.
+    /// Called when the vault's state or content changed, so all windows follow.
     notify: Option<Box<dyn Fn() + Send>>,
 }
 
 pub struct AppState(Mutex<Session>);
 
-/// Fehler, wie ihn die Oberfläche bekommt: ein fester Code zum Übersetzen, dazu der Text für Protokolle.
+/// Error as the interface gets it: a fixed code to translate, plus the text for logs.
 #[derive(Debug, Clone, Serialize)]
 pub struct CmdError {
     code: &'static str,
@@ -69,7 +69,7 @@ impl CmdError {
         self.code
     }
 
-    /// Abgelehnte Eingabe mit dem Grund als Text, für Prüfungen außerhalb des Kerns.
+    /// Rejected input with the reason as text, for checks outside the core.
     pub(crate) fn invalid(reason: &'static str) -> Self {
         Self::new(reason, format!("Eingabe abgelehnt: {reason}"))
     }
@@ -108,18 +108,18 @@ pub(crate) type CmdResult<T> = Result<T, CmdError>;
 
 #[derive(Serialize)]
 pub struct Status {
-    /// `missing`, `locked`, `open` oder `broken`.
+    /// `missing`, `locked`, `open` or `broken`.
     state: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     data: Option<Snapshot>,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<CmdError>,
-    /// Ob der Tresor beim Start ohne Master-Passwort geöffnet wird.
+    /// Whether the vault is opened at startup without the master password.
     #[serde(rename = "startUnlock")]
     start_unlock: bool,
 }
 
-/// Antwort auf eine Änderung: der neue Stand und, falls etwas angelegt wurde, dessen Kennung.
+/// Answer to a change: the new state and, if something was created, its ID.
 #[derive(Serialize)]
 pub struct Changed {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -127,8 +127,8 @@ pub struct Changed {
     data: Snapshot,
 }
 
-/// Was [`Session::wipe`] neben dem Tresor löscht: das Rücklaufprotokoll von SQLite, die Zwischenstände beim
-/// Einspielen und Umstellen und die Sicherungen, die beim Anmelden mit einem Konto entstanden sind.
+/// What [`Session::wipe`] deletes besides the vault: SQLite's rollback journal, the intermediate files of
+/// restoring and converting, and the backups created when signing in with an account.
 fn wipe_targets(path: &Path) -> Vec<PathBuf> {
     let mut targets = vec![path.to_path_buf(), Vault::migration_copy(path), path.with_extension("db.alt"), path.with_extension("db.neu")];
     let mut journal = path.as_os_str().to_os_string();
@@ -164,9 +164,9 @@ impl Session {
         }
     }
 
-    /// Zustand für den Programmstart. Beim ersten Aufruf wird, falls eingeschaltet, ohne Master-Passwort geöffnet.
-    /// Das geschieht hier und nicht beim Anlegen der Sitzung, damit das Lesen der Ablage (Datei, DPAPI) den Aufbau
-    /// des Fensters nicht aufhält. Der Befehl dazu läuft mit `async`, also abseits des Fenster-Threads.
+    /// State for program start. On the first call, the vault is opened without the master password if that is switched on.
+    /// That happens here and not when creating the session, so reading the stored key (file, DPAPI) does not hold up
+    /// building the window. The command for it runs with `async`, i.e. off the window thread.
     fn initial_status(&mut self) -> Status {
         if std::mem::take(&mut self.start_pending) {
             self.start_unlock();
@@ -174,9 +174,9 @@ impl Session {
         self.status()
     }
 
-    /// Öffnet den Tresor beim Start mit dem hinterlegten Schlüssel, falls der Nutzer das eingeschaltet hat.
-    /// Passt der Schlüssel nicht (anderer Tresor, andere Windows-Anmeldung), wird er verworfen und das
-    /// Master-Passwort verlangt.
+    /// Opens the vault at startup with the stored key, if the user switched that on.
+    /// If the key does not fit (another vault, another Windows sign-in), it is discarded and the
+    /// master password is requested.
     fn start_unlock(&mut self) {
         let Phase::Locked(vault) = &mut self.phase else { return };
         let Some(key) = vault.device_id().ok().and_then(|context| self.keystore.load(&context)) else { return };
@@ -187,11 +187,11 @@ impl Session {
         if let Phase::Locked(vault) = std::mem::replace(&mut self.phase, Phase::Missing) {
             self.phase = Self::opened(vault);
         }
-        // Wie nach dem Entsperren von Hand: Die Fenster ziehen nach, und der Abgleich läuft an.
+        // As after unlocking by hand: the windows follow, and syncing starts.
         self.notify();
     }
 
-    /// Liest einen frisch entsperrten Tresor ein.
+    /// Reads a freshly unlocked vault.
     fn opened(mut vault: Vault) -> Phase {
         let _ = vault.purge_tombstones(TOMBSTONE_MAX_AGE_MS);
         match Directory::load(vault) {
@@ -200,7 +200,7 @@ impl Session {
         }
     }
 
-    /// Schaltet das Entsperren beim Start ohne Master-Passwort ein oder aus.
+    /// Switches unlocking at startup without the master password on or off.
     fn set_start_unlock(&mut self, enabled: bool) -> CmdResult<Status> {
         let internal = |e: std::io::Error| CmdError::new("internal", e.to_string());
         if enabled {
@@ -213,7 +213,7 @@ impl Session {
         Ok(self.status())
     }
 
-    /// Bestimmt den Zustand aus der Datei: fehlt, lässt sich öffnen (gesperrt) oder ist unbrauchbar.
+    /// Determines the state from the file: missing, can be opened (locked) or unusable.
     fn probe(path: &Path) -> Phase {
         if !Vault::exists(path) {
             return Phase::Missing;
@@ -234,7 +234,7 @@ impl Session {
         Status { state, data, error, start_unlock: self.keystore.is_set() }
     }
 
-    /// Zugriff auf die Einträge. Zählt als Eingabe für die Auto-Sperre.
+    /// Access to the entries. Counts as input for the auto-lock.
     pub(crate) fn directory(&mut self) -> CmdResult<&mut Directory> {
         self.last_activity = Instant::now();
         match &mut self.phase {
@@ -256,7 +256,7 @@ impl Session {
     }
 
     fn unlock(&mut self, password: &str) -> CmdResult<Status> {
-        // Den Tresor kurz herausnehmen, weil das Öffnen ihn in einen anderen Zustand überführt.
+        // Take the vault out briefly, because opening moves it into another state.
         let mut vault = match std::mem::replace(&mut self.phase, Phase::Missing) {
             Phase::Locked(vault) => vault,
             other => {
@@ -289,11 +289,11 @@ impl Session {
         }
     }
 
-    /// Löscht den Tresor dieses PCs samt allem, was zu ihm gehört: Kopien aus Umstellung, Einspielen und Anmelden,
-    /// die Ablage für den Start ohne Master-Passwort. Geht offen, gesperrt und unbrauchbar; danach fehlt der Tresor.
-    /// Einstellungen, Hintergrundbild, Mitschnitte und Protokolle bleiben.
+    /// Deletes this PC's vault with everything that belongs to it: copies from converting, restoring and signing in,
+    /// the stored key for starting without the master password. Works open, locked and unusable; afterwards the vault is missing.
+    /// Settings, background image, recordings and logs stay.
     pub(crate) fn wipe(&mut self) -> CmdResult<()> {
-        // Die Datei ist geschlossen, bevor sie verschwindet.
+        // The file is closed before it disappears.
         self.phase = Phase::Missing;
         let mut failed = Vec::new();
         if let Err(error) = self.keystore.clear() {
@@ -313,19 +313,19 @@ impl Session {
         }
     }
 
-    /// Macht eine Sicherung zum Tresor dieses PCs. Geht nur, solange es hier noch keinen gibt: Ein vorhandener
-    /// Tresor wird nie überschrieben. Danach ist der Tresor gesperrt und verlangt das Master-Passwort der Sicherung.
+    /// Makes a backup this PC's vault. Only works while there is none here yet: an existing
+    /// vault is never overwritten. Afterwards the vault is locked and asks for the backup's master password.
     pub(crate) fn restore(&mut self, backup: &Path) -> CmdResult<Status> {
         if !matches!(self.phase, Phase::Missing) {
             return Err(VaultError::AlreadyExists.into());
         }
-        // Erst prüfen, dann an ihren Platz: Eine Datei, die kein Tresor ist, landet gar nicht erst dort.
+        // Check first, then put it in place: a file that is not a vault never ends up there.
         let staged = self.path.with_extension("db.neu");
         if let Some(dir) = self.path.parent() {
             std::fs::create_dir_all(dir).map_err(|e| CmdError::new("internal", e.to_string()))?;
         }
         std::fs::copy(backup, &staged).map_err(|e| CmdError::new("restore_invalid", e.to_string()))?;
-        // Eine Sicherung aus einer älteren Version stellt das Öffnen um; die Kopie davor ist hier die Sicherung selbst.
+        // A backup from an older version is converted when opened; the copy before that is the backup itself here.
         let opened = Vault::open(&staged).is_ok();
         let _ = std::fs::remove_file(Vault::migration_copy(&staged));
         if !opened {
@@ -360,21 +360,21 @@ impl Session {
         self.kdf
     }
 
-    /// Für den Abgleich: Arbeit am offenen Tresor, die nicht als Eingabe für die Auto-Sperre zählt. Hat sich der
-    /// Tresor dabei geändert, liest das Verzeichnis neu ein. `None`: Der Tresor ist nicht offen.
+    /// For syncing: work on the open vault that does not count as input for the auto-lock. If the
+    /// vault changed in the process, the directory reads it again. `None`: the vault is not open.
     pub(crate) fn background<T>(&mut self, work: impl FnOnce(&mut Vault) -> T) -> Option<(T, bool)> {
         let Phase::Open(directory) = &mut self.phase else { return None };
         let before = directory.vault().writes();
         let result = work(directory.vault_mut());
         let changed = directory.vault().writes() != before;
         if changed {
-            // Scheitert das Einlesen, zeigt die Oberfläche den alten Stand; der Tresor selbst ist unberührt.
+            // If reading fails, the interface shows the old state; the vault itself is untouched.
             let _ = directory.refresh();
         }
         Some((result, changed))
     }
 
-    /// Das Verzeichnis, ohne dass der Zugriff als Eingabe für die Auto-Sperre zählt.
+    /// The directory, without the access counting as input for the auto-lock.
     pub(crate) fn directory_quiet(&mut self) -> Option<&mut Directory> {
         match &mut self.phase {
             Phase::Open(directory) => Some(directory),
@@ -382,7 +382,7 @@ impl Session {
         }
     }
 
-    /// Erster Start, „Mit Konto anmelden“: Der Tresor ist eben aus einem Konto entstanden und schon offen.
+    /// First start, “Sign in with an account”: the vault was just created from an account and is already open.
     pub(crate) fn adopt_opened(&mut self, vault: Vault) -> CmdResult<Status> {
         if !matches!(self.phase, Phase::Missing) {
             return Err(VaultError::AlreadyExists.into());
@@ -393,10 +393,10 @@ impl Session {
         Ok(self.status())
     }
 
-    /// Ersetzt den Tresor dieses Geräts durch den eines Kontos (`staged`: die dafür frisch angelegte Datei).
-    /// Vorher entsteht eine Sicherung des bisherigen daneben. Mit `keep` kommen dessen Einträge in das Konto.
-    /// Danach gilt das Master-Passwort des Kontos, und der Start ohne Master-Passwort ist aus. Liefert den
-    /// Pfad der Sicherung.
+    /// Replaces this device's vault with an account's (`staged`: the file freshly created for it).
+    /// A backup of the previous one is created next to it first. With `keep` its entries go into the account.
+    /// Afterwards the account's master password applies, and starting without the master password is off. Returns the
+    /// backup's path.
     pub(crate) fn replace_with_account(&mut self, staged: &Path, password: &str, keep: bool, stamp: &str) -> CmdResult<PathBuf> {
         let internal = |e: std::io::Error| CmdError::new("internal", e.to_string());
         let old = match std::mem::replace(&mut self.phase, Phase::Missing) {
@@ -420,7 +420,7 @@ impl Session {
             self.phase = Self::opened(old);
             return Err(error);
         }
-        // Beide Dateien sind geschlossen, bevor sie die Plätze tauschen.
+        // Both files are closed before they swap places.
         drop(old);
         let parked = self.path.with_extension("db.alt");
         let _ = std::fs::remove_file(&parked);
@@ -431,7 +431,7 @@ impl Session {
             return Err(internal(error));
         }
         let _ = std::fs::remove_file(&parked);
-        // Der hinterlegte Schlüssel gehörte zum alten Tresor.
+        // The stored key belonged to the old vault.
         let _ = self.keystore.clear();
         let mut vault = Vault::open(&self.path)?;
         vault.unlock(password)?;
@@ -454,29 +454,29 @@ impl AppState {
         Self(Mutex::new(Session::new(path, KdfParams::DEFAULT, Box::new(keystore))))
     }
 
-    /// Meldet Änderungen am Tresor. Die Fenster holen sich darauf den neuen Stand; so bleiben alle gleich.
+    /// Reports changes to the vault. The windows then fetch the new state; that keeps all of them the same.
     pub fn watch(&self, notify: impl Fn() + Send + 'static) {
         self.session().notify = Some(Box::new(notify));
     }
 
-    /// Ein Absturz in einem anderen Befehl soll das Programm nicht dauerhaft blockieren.
+    /// A crash in another command should not block the program permanently.
     pub(crate) fn session(&self) -> MutexGuard<'_, Session> {
         self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
-/// Schickt der Oberfläche den aktuellen Stand, wenn sich der Tresor ohne ihr Zutun geändert hat
-/// (Host-Schlüssel gespeichert, Betriebssystem erkannt, Passwort nach dem Anmelden übernommen).
+/// Sends the interface the current state when the vault changed without its doing
+/// (host key saved, operating system detected, password taken over after signing in).
 pub(crate) fn emit_snapshot(app: &AppHandle) {
     if let Ok(directory) = app.state::<AppState>().session().directory() {
-        // Als JSON-Wert, weil ein Ereignis seine Nutzlast kopieren können muss.
+        // As a JSON value, because an event must be able to copy its payload.
         if let Ok(snapshot) = serde_json::to_value(directory.snapshot()) {
             let _ = app.emit("vault-changed", snapshot);
         }
     }
 }
 
-/// Wie [`emit_snapshot`], für Änderungen durch den Abgleich: Sie zählen nicht als Eingabe für die Auto-Sperre.
+/// Like [`emit_snapshot`], for changes by sync: they do not count as input for the auto-lock.
 pub(crate) fn emit_snapshot_quiet(app: &AppHandle) {
     let snapshot = app.state::<AppState>().session().directory_quiet().map(|directory| serde_json::to_value(directory.snapshot()));
     if let Some(Ok(snapshot)) = snapshot {
@@ -484,7 +484,7 @@ pub(crate) fn emit_snapshot_quiet(app: &AppHandle) {
     }
 }
 
-/// Sperrt den Tresor, wenn länger als eingestellt nichts eingegeben wurde, und sagt es der Oberfläche.
+/// Locks the vault when nothing was typed for longer than set, and tells the interface.
 pub fn spawn_auto_lock(app: AppHandle) {
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_secs(5));
@@ -522,10 +522,10 @@ pub fn vault_lock(app: AppHandle, state: State<'_, AppState>) -> Status {
     session.status()
 }
 
-/// Fragt nach dem Speicherort und schreibt eine Sicherung. `None`, wenn der Dialog abgebrochen wurde.
+/// Asks for the location and writes a backup. `None` if the dialog was cancelled.
 #[tauri::command(async)]
 pub fn vault_backup(app: AppHandle, state: State<'_, AppState>, file_name: String) -> CmdResult<Option<String>> {
-    // Der Dialog blockiert; währenddessen bleibt der Zustand für andere Befehle und die Auto-Sperre frei.
+    // The dialog blocks; meanwhile the state stays free for other commands and the auto-lock.
     let Some(chosen) = app.dialog().file().set_file_name(file_name).add_filter("Glowport", &["gpvault"]).blocking_save_file() else {
         return Ok(None);
     };
@@ -534,7 +534,7 @@ pub fn vault_backup(app: AppHandle, state: State<'_, AppState>, file_name: Strin
     Ok(Some(path.display().to_string()))
 }
 
-/// Lässt den Nutzer eine Sicherung wählen und spielt sie ein. `None`, wenn der Dialog abgebrochen wurde.
+/// Lets the user choose a backup and restores it. `None` if the dialog was cancelled.
 #[tauri::command(async)]
 pub fn vault_restore(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Option<Status>> {
     let Some(chosen) = app.dialog().file().add_filter("Glowport", &["gpvault", "db"]).blocking_pick_file() else {
@@ -556,14 +556,14 @@ pub fn vault_set_auto_lock(state: State<'_, AppState>, minutes: u32) {
     session.last_activity = Instant::now();
 }
 
-/// Die Oberfläche meldet Eingaben, damit die Auto-Sperre nicht mitten in der Arbeit zuschlägt.
+/// The interface reports input so the auto-lock does not strike in the middle of work.
 #[tauri::command]
 pub fn vault_touch(state: State<'_, AppState>) {
     state.session().last_activity = Instant::now();
 }
 
-/// `vault`: nur beim Anlegen der Tresor, in den der Eintrag kommt. Ohne Angabe ist es der Tresor seiner Gruppe,
-/// sonst der persönliche.
+/// `vault`: only when creating, the vault the entry goes into. Without it, its group's vault,
+/// otherwise the personal one.
 #[tauri::command]
 pub fn host_save(app: AppHandle, state: State<'_, AppState>, host: HostInput, vault: Option<String>) -> CmdResult<Changed> {
     let mut session = state.session();
@@ -572,7 +572,7 @@ pub fn host_save(app: AppHandle, state: State<'_, AppState>, host: HostInput, va
     session.changed(Some(id))
 }
 
-/// Verschiebt einen Host in einen anderen Tresor. `carry`: Identität und Schlüssel kommen als Kopie mit.
+/// Moves a host into another vault. `carry`: identity and key come along as copies.
 #[tauri::command]
 pub fn host_move(state: State<'_, AppState>, id: String, vault: String, carry: bool) -> CmdResult<Changed> {
     let mut session = state.session();
@@ -609,7 +609,7 @@ pub fn group_delete(state: State<'_, AppState>, id: String, with_contents: bool)
     session.changed(None)
 }
 
-/// Lässt den Nutzer eine Schlüsseldatei wählen. `None`, wenn der Dialog abgebrochen wurde.
+/// Lets the user choose a key file. `None` if the dialog was cancelled.
 #[tauri::command(async)]
 pub fn pick_key_file(app: AppHandle) -> Option<String> {
     app.dialog().file().blocking_pick_file().and_then(|chosen| chosen.into_path().ok()).map(|path| path.display().to_string())
@@ -656,7 +656,7 @@ pub(crate) mod tests {
         fn session(&self) -> Session {
             Session::new(self.0.clone(), FAST, Box::new(MemoryStore::default()))
         }
-        /// Zustand, wie ihn die Befehle sehen, mit schneller Schlüsselableitung und ohne Ablage auf der Platte.
+        /// State as the commands see it, with fast key derivation and without storage on disk.
         pub(crate) fn state(&self) -> AppState {
             AppState(Mutex::new(self.session()))
         }
@@ -679,19 +679,19 @@ pub(crate) mod tests {
         session.create("richtig-lang").unwrap();
         session.directory().unwrap().save_host(serde_json::from_value(json!({ "name": "web", "address": "10.0.0.1" })).unwrap()).unwrap();
         session.directory().unwrap().vault().backup(&backup.0).unwrap();
-        // Ein vorhandener Tresor wird nie überschrieben.
+        // An existing vault is never overwritten.
         assert_eq!(session.restore(&backup.0).err().unwrap().code(), "exists");
 
         let target = Temp::new("restore-ziel");
         let mut fresh = target.session();
-        // Was keine Sicherung ist, landet gar nicht erst an der Stelle des Tresors.
+        // What is not a backup never ends up in the vault's place.
         let junk = Temp::new("restore-unsinn");
         std::fs::write(&junk.0, b"kein Tresor").unwrap();
         assert_eq!(fresh.restore(&junk.0).err().unwrap().code(), "restore_invalid");
         assert!(!target.0.exists());
         assert_eq!(fresh.status().state, "missing");
 
-        // Die Sicherung wird zum Tresor: gesperrt, und sie öffnet sich mit ihrem eigenen Master-Passwort.
+        // The backup becomes the vault: locked, and it opens with its own master password.
         assert_eq!(fresh.restore(&backup.0).unwrap().state, "locked");
         assert_eq!(fresh.unlock("falsch-und-lang").err().unwrap().code(), "wrong_password");
         let opened = fresh.unlock("richtig-lang").unwrap();
@@ -712,7 +712,7 @@ pub(crate) mod tests {
         assert_eq!(code(session.directory().map(drop)), "locked");
 
         let created = as_json(&session.create("lang genug").unwrap());
-        // Ein neuer Tresor ist leer bis auf sich selbst: der persönliche Tresor, in dem alles Weitere liegt.
+        // A new vault is empty except for itself: the personal vault in which everything else lives.
         let personal = json!({ "id": created["data"]["vaults"][0]["id"], "kind": "personal", "name": "", "role": "owner", "members": [], "rolledBack": false, "orphaned": false });
         assert!(created["data"]["seq"].as_u64().is_some_and(|seq| seq > 0), "jeder Stand trägt seine laufende Nummer");
         let empty = json!({ "seq": created["data"]["seq"], "groups": [], "hosts": [], "damaged": 0, "knownHosts": [], "keys": [], "identities": [], "authorities": [], "workspaces": [], "forwards": [], "snippets": [], "proxmox": [], "vaults": [personal], "homes": {} });
@@ -726,7 +726,7 @@ pub(crate) mod tests {
         assert_eq!(as_json(&session.unlock("lang genug").unwrap())["state"], "open");
         assert_eq!(as_json(&session.unlock("egal").unwrap())["state"], "open", "offener Tresor bleibt offen");
 
-        // Ein neuer Programmstart findet die Datei und verlangt das Passwort.
+        // A new program start finds the file and asks for the password.
         drop(session);
         let mut session = temp.session();
         assert_eq!(as_json(&session.status())["state"], "locked");
@@ -740,7 +740,7 @@ pub(crate) mod tests {
         session.unlock("neues passwort").unwrap();
     }
 
-    /// Genau die Formen, die die Oberfläche schickt und erwartet (siehe src/lib/types.ts).
+    /// Exactly the shapes the interface sends and expects (see src/lib/types.ts).
     #[test]
     fn messages_match_what_the_interface_sends_and_expects() {
         let temp = Temp::new("shapes");
@@ -768,7 +768,7 @@ pub(crate) mod tests {
         assert_eq!(changed["data"]["groups"][0], json!({ "id": group_id, "name": "Produktiv", "parent": null, "color": "#FF5D6C", "defs": { "user": "deploy", "port": 2200 }, "hasProxyPassword": false }));
         assert!(!changed.to_string().contains("geheim"), "das Passwort darf den Kern nicht verlassen");
 
-        // Ein Arbeitsbereich, wie ihn die Oberfläche aus einem Tab baut, und die Meldung an die anderen Fenster.
+        // A workspace as the interface builds it from a tab, and the message to the other windows.
         let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let counter = calls.clone();
         session.notify = Some(Box::new(move || {
@@ -790,7 +790,7 @@ pub(crate) mod tests {
         assert_eq!(as_json(&CmdError::from(VaultError::WrongPassword)), json!({ "code": "wrong_password", "message": "Falsches Master-Passwort" }));
     }
 
-    /// Ablage, die mehrere Programmstarts überdauert, so wie die echte Datei.
+    /// Storage that outlasts several program starts, like the real file.
     struct Shared(Arc<MemoryStore>);
     impl KeyStore for Shared {
         fn load(&self, context: &[u8]) -> Option<Key> {
@@ -819,20 +819,20 @@ pub(crate) mod tests {
         assert_eq!(as_json(&session.set_start_unlock(true).unwrap())["startUnlock"], true);
         drop(session);
 
-        // Nächster Start: ohne Passwort offen.
+        // Next start: open without a password.
         let mut session = launch();
         assert_eq!(as_json(&session.initial_status())["state"], "open");
-        // Sperren bleibt sperren: Danach hilft nur das Master-Passwort.
+        // Locked stays locked: after that only the master password helps.
         session.lock();
         assert_eq!(as_json(&session.status())["state"], "locked");
         assert_eq!(code(session.unlock("falsch")), "wrong_password");
         session.unlock("lang genug").unwrap();
-        // Ein neues Master-Passwort lässt den hinterlegten Schlüssel gültig.
+        // A new master password leaves the stored key valid.
         session.change_password("lang genug", "neues passwort").unwrap();
         drop(session);
         assert_eq!(as_json(&launch().initial_status())["state"], "open");
 
-        // Ausschalten entfernt den Schlüssel; der nächste Start verlangt wieder das Passwort.
+        // Switching off removes the key; the next start asks for the password again.
         let mut session = launch();
         session.initial_status();
         assert_eq!(as_json(&session.set_start_unlock(false).unwrap())["startUnlock"], false);
@@ -856,7 +856,7 @@ pub(crate) mod tests {
             std::fs::write(file, b"x").unwrap();
         }
 
-        // Gesperrt, also ohne Master-Passwort: Gerade dann muss es gehen.
+        // Locked, i.e. without the master password: exactly then it must work.
         session.lock();
         session.wipe().unwrap();
         assert_eq!(as_json(&session.status()), json!({ "state": "missing", "startUnlock": false }));
@@ -867,7 +867,7 @@ pub(crate) mod tests {
         for file in &kept {
             assert!(file.exists(), "{} fehlt", file.display());
         }
-        // Danach geht es weiter wie beim ersten Start.
+        // After that it continues as at the first start.
         session.create("ein neues").unwrap();
         drop(session);
         let _ = std::fs::remove_dir_all(&dir);
@@ -883,7 +883,7 @@ pub(crate) mod tests {
         let context = session.directory().unwrap().vault().device_id().unwrap();
         drop(session);
 
-        // Jemand hinterlegt einen Schlüssel, der nicht zu diesem Tresor gehört.
+        // Someone stores a key that does not belong to this vault.
         store.store(&context, &random_key()).unwrap();
         let mut session = Session::new(temp.0.clone(), FAST, Box::new(Shared(store.clone())));
         assert_eq!(as_json(&session.initial_status()), json!({ "state": "locked", "startUnlock": false }));

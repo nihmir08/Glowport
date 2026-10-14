@@ -1,6 +1,6 @@
-// Schreibt THIRD-PARTY-LICENSES.md: die Lizenzen aller fremden Bausteine, die in Glowport stecken.
-// Rust über `cargo about` (Einstellungen in about.toml, Vorlage about.hbs), die Oberfläche aus node_modules.
-// Aufruf im Projektordner: node scripts/lizenzen.mjs (braucht `cargo install cargo-about --features cli`).
+// Writes THIRD-PARTY-LICENSES.md: the licenses of all third-party components built into Glowport.
+// Rust via `cargo about` (settings in about.toml, template about.hbs), the interface from node_modules.
+// Run in the project folder: node scripts/licenses.mjs (needs `cargo install cargo-about --features cli`).
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -12,7 +12,7 @@ execFileSync('cargo', ['about', 'generate', '-m', 'src-tauri/Cargo.toml', 'about
 const rust = readFileSync(rustFile, 'utf8').trim();
 rmSync(temp, { recursive: true, force: true });
 
-// Was die Oberfläche mitbringt: alle Pakete im Lockfile außer denen nur für die Entwicklung.
+// What the interface brings along: all packages in the lockfile except those only for development.
 const lock = JSON.parse(readFileSync('package-lock.json', 'utf8'));
 const groups = new Map();
 for (const [path, meta] of Object.entries(lock.packages)) {
@@ -24,7 +24,7 @@ for (const [path, meta] of Object.entries(lock.packages)) {
   const text = file ? readFileSync(join(dir, file), 'utf8').trim() : '';
   const name = manifest.name;
   const url = `https://www.npmjs.com/package/${name}`;
-  // Gleicher Text, eine Gruppe: So steht jede Lizenz nur einmal da.
+  // Same text, one group: that way every license appears only once.
   const key = `${license}\n${text}`;
   if (!groups.has(key)) groups.set(key, { license, text, used: [] });
   groups.get(key).used.push(`- [${name} ${manifest.version}](${url})`);
