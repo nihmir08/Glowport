@@ -53,11 +53,11 @@ impl Driver {
 }
 
 fn connect(address: std::net::SocketAddr, mosh: Mosh) -> Connect {
-    Connect { host: address.ip().to_string(), port: address.port(), user: "tester".into(), password: Some(Secret::new("richtig".into())), mosh: Some(mosh), ..Connect::default() }
+    Connect { host: address.ip().to_string(), port: address.port(), user: "tester".into(), password: Some(Secret::new("right".into())), mosh: Some(mosh), ..Connect::default() }
 }
 
 fn with_password() -> Options {
-    Options { password: Some(("tester".into(), "richtig".into())), ..Options::default() }
+    Options { password: Some(("tester".into(), "right".into())), ..Options::default() }
 }
 
 /// Empty folder as the test server's home: then commands really run through `sh`, and there is no mosh there.

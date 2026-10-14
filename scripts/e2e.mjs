@@ -367,7 +367,7 @@ try {
   // 4. Change password, lock, wrong and right password.
   const lock = await run(page, `
     const weak = await fails(invoke('vault_change_password',{old:'${PW1}',new:'kurz'}));
-    const wrong = await fails(invoke('vault_change_password',{old:'falsch',new:'${PW2}'}));
+    const wrong = await fails(invoke('vault_change_password',{old:'wrong',new:'${PW2}'}));
     await invoke('vault_change_password',{old:'${PW1}',new:'${PW2}'});
     q('.tb-ic').click(); await until(()=>q('.lock-card'));
     const hidden = !q('.host') && !q('.nav');
@@ -400,9 +400,9 @@ try {
     qa('.dlg .btn').find(b=>b.textContent.includes('Vertrauen')).click();
     const field = await until(()=>q('.dlg input[type=password]'));
     const passwordText = q('.dlg')?.textContent ?? '';
-    type(field,'falsch'); await wait(80); q('.dlg button[type=submit]').click();
+    type(field,'wrong'); await wait(80); q('.dlg button[type=submit]').click();
     const retry = await until(()=>q('.dlg .errline')?.textContent);
-    type(q('.dlg input[type=password]'),'richtig'); q('.dlg input[type=checkbox]').click(); await wait(80);
+    type(q('.dlg input[type=password]'),'right'); q('.dlg input[type=checkbox]').click(); await wait(80);
     q('.dlg button[type=submit]').click();
     const connected = await until(()=>q('.sview:not(.off) .live.connected'), 15000);
     await wait(1200);
@@ -470,7 +470,7 @@ try {
     pal.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
     const field = await until(()=>q('.dlg input[type=password]'));
     const dialog = q('.dlg')?.textContent ?? ''; const canSave = !!q('.dlg input[type=checkbox]');
-    type(field,'richtig'); await wait(80); q('.dlg button[type=submit]').click();
+    type(field,'right'); await wait(80); q('.dlg button[type=submit]').click();
     const connected = await until(()=>q('.sview:not(.off) .live.connected'), 15000);
     q('.wc .cl').click(); const warn = await until(()=>q('.dlg')); const warnText = warn?.textContent ?? '';
     byText('.dlg .btn','Abbrechen').click(); await wait(300);
@@ -611,7 +611,7 @@ try {
     const field = await until(()=>q('.dlg input[type=password]'), 15000);
     const dialog = q('.dlg')?.textContent ?? '';
     const box = q('.dlg input[type=checkbox]'); const preset = box?.checked;
-    type(field,'falsch'); await wait(80); q('.dlg button[type=submit]').click();
+    type(field,'wrong'); await wait(80); q('.dlg button[type=submit]').click();
     const retry = await until(()=>q('.dlg .errline')?.textContent);
     type(q('.dlg input[type=password]'),'datei-passphrase'); q('.dlg input[type=checkbox]').click(); await wait(80);
     q('.dlg button[type=submit]').click();
@@ -652,7 +652,7 @@ try {
     byText('.detail .btn','Verbinden').click();
     const field = await until(()=>q('.dlg input[type=password]'), 15000);
     const dialog = q('.dlg')?.textContent ?? '';
-    type(field,'richtig'); q('.dlg input[type=checkbox]').click(); await wait(80);
+    type(field,'right'); q('.dlg input[type=checkbox]').click(); await wait(80);
     q('.dlg button[type=submit]').click();
     const connected = await until(()=>q('.sview:not(.off) .live.connected'), 15000);
     await wait(1200);
@@ -681,7 +681,7 @@ try {
     const info = await invoke('key_inspect', { text });
     const garbage = await fails(invoke('key_inspect', { text: 'Hallo' }));
     const none = await fails(invoke('key_import', { key: { name: 'e2e-import', text } }));
-    const wrong = await fails(invoke('key_import', { key: { name: 'e2e-import', text, passphrase: 'falsch' } }));
+    const wrong = await fails(invoke('key_import', { key: { name: 'e2e-import', text, passphrase: 'wrong' } }));
     const done = await invoke('key_import', { key: { name: 'e2e-import', text, passphrase: 'geheim' } });
     return { info, garbage: garbage?.code, none: none?.code, wrong: wrong?.code, key: done.data.keys.find(k => k.id === done.id) };
   `);
@@ -729,7 +729,7 @@ try {
   ok('server with a certificate from the trusted authority: connection without a key prompt', certifiedHost.connected && !certifiedHost.asked && certifiedHost.known === 0);
 
 
-  // 4f. Meilenstein 4 – geteilte Terminals, Multi-Exec, Umordnen, Tab umbenennen.
+  // 4f. Milestone 4 – split terminals, multi-exec, rearranging, renaming a tab.
   const mid = `const mid = el => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, l: r.left, t: r.top, w: r.width, h: r.height }; };`;
   // Move a host into a group by dragging and back out through the breadcrumbs.
   const carry = async (from, to) => {
@@ -841,7 +841,7 @@ try {
   const logFile = recording.done[0]?.file ?? '';
   const onDisk = existsSync(logFile) ? readFileSync(logFile, 'utf8') : '';
   ok('recording runs per pane and cannot be deleted meanwhile', recording.running.length === 1 && recording.running[0].endedAt === null && recording.running[0].name === 'testserver' && recording.busy === 'log_running');
-  ok('recording is stored as text without control characters in a file in the data folder', logFile.startsWith(logDir) && recording.text.includes('echo mitgeschnitten') && !recording.text.includes('\x1b') && onDisk.startsWith('# Glowport-Mitschnitt') && onDisk.includes(`tester@127.0.0.1:${port}`) && recording.done[0].endedAt >= recording.done[0].startedAt && recording.outside === 'not_found', JSON.stringify(recording.text.slice(0, 60)));
+  ok('recording is stored as text without control characters in a file in the data folder', logFile.startsWith(logDir) && recording.text.includes('echo mitgeschnitten') && !recording.text.includes('\x1b') && onDisk.startsWith('# Glowport recording') && onDisk.includes(`tester@127.0.0.1:${port}`) && recording.done[0].endedAt >= recording.done[0].startedAt && recording.outside === 'not_found', JSON.stringify(recording.text.slice(0, 60)));
   const logPage = await run(page, `
     q('.tabs .tab.home').click(); await wait(200);
     qa('.nv')[6].click(); const row = await until(()=>byText('.pick-row','testserver'));
@@ -1093,9 +1093,9 @@ try {
     await pick(made.id);
     const field = await until(()=>q('.dlg input[type=password]'), 15000);
     const title = q('.dlg h2')?.textContent;
-    type(field,'falsch'); await wait(80); q('.dlg button[type=submit]').click();
+    type(field,'wrong'); await wait(80); q('.dlg button[type=submit]').click();
     const retry = await until(()=>q('.dlg .errline')?.textContent, 8000);
-    type(q('.dlg input[type=password]'),'richtig'); q('.dlg input[type=checkbox]').click(); await wait(80); q('.dlg button[type=submit]').click();
+    type(q('.dlg input[type=password]'),'right'); q('.dlg input[type=checkbox]').click(); await wait(80); q('.dlg button[type=submit]').click();
     const label = await until(()=>qa('.fcol')[1].querySelector('.flist')?.getAttribute('aria-label') === '/home/tester', 15000);
     await wait(500);
     const saved = (await invoke('vault_status')).data.hosts.find(h => h.id === made.id).hasPassword;
@@ -1234,7 +1234,7 @@ try {
     // Zweiter Anlauf, diesmal mit Passwort.
     row('E2E Rückfrage').querySelector('.swt').click();
     await until(()=>q('.dlg input[type=password]'), 15000);
-    type(q('.dlg input[type=password]'), 'richtig'); await wait(80); q('.dlg button[type=submit]').click();
+    type(q('.dlg input[type=password]'), 'right'); await wait(80); q('.dlg button[type=submit]').click();
     const on = await phase(id2, 'running');
     return { asked: !!first, title, during, off: !!off, switchOff, sessions, on: !!on, host: made.id, id: id2, after: await invoke('session_count') };
   `);
@@ -1470,7 +1470,7 @@ try {
   await sleep(400);
   ok('Ctrl+K goes to the session in the terminal without opening search; Ctrl+Shift+K opens search there', !paletteAfterK && afterK.at(-1)?.trim() === 'Q' && /\$$/.test(afterK.at(-2) ?? '') && paletteAfterShiftK, JSON.stringify([paletteAfterK, afterK.slice(-3), paletteAfterShiftK]));
 
-  // Makro: aufzeichnen, benennen, abspielen.
+  // Macro: record, name, play.
   await run(page, `q('.side .side-f .btn').click(); await until(()=>q('.side .macrobox.rec')); q('.pane:not(.off) .xterm-helper-textarea').focus();`);
   await typeLine(page, 'size');
   await sleep(500);
@@ -1915,7 +1915,7 @@ try {
 
   // FTPS: unknown certificate before signing in, then the start folder.
   const ftps = await run(page, `${FTP_TOOLS}
-    await invoke('host_save', { host: { name: 'm11-ftps', address: '127.0.0.1', protocol: 'ftp', group: null, color: null, os: null, own: { user: 'tester', port: ${ftp.tls}, term: 'xterm' }, ftp: { security: 'explicit', anonymous: false, dir: '/htdocs' }, password: 'richtig' } });
+    await invoke('host_save', { host: { name: 'm11-ftps', address: '127.0.0.1', protocol: 'ftp', group: null, color: null, os: null, own: { user: 'tester', port: ${ftp.tls}, term: 'xterm' }, ftp: { security: 'explicit', anonymous: false, dir: '/htdocs' }, password: 'right' } });
     const id = (await invoke('vault_status')).data.hosts.find(h=>h.name==='m11-ftps').id;
     await wait(300);
     const saved = await hostOf(id);
@@ -1989,9 +1989,9 @@ try {
     press('Trotzdem verbinden');
     const field = await need(()=>q('.dlg input[type=password]'), 'password prompt');
     const remembered = (await hostOf(id)).ftp;
-    type(field,'falsch'); await wait(80); q('.dlg button[type=submit]').click();
+    type(field,'wrong'); await wait(80); q('.dlg button[type=submit]').click();
     const retry = await need(()=>q('.dlg .errline')?.textContent, 'second password prompt');
-    type(q('.dlg input[type=password]'),'richtig'); q('.dlg input[type=checkbox]').click(); await wait(80);
+    type(q('.dlg input[type=password]'),'right'); q('.dlg input[type=checkbox]').click(); await wait(80);
     q('.dlg button[type=submit]').click();
     await need(()=>byText('.fcol .chip','unverschlüsselt') && right().textContent.includes('htdocs'), 'folder unencrypted');
     await wait(300);
@@ -2041,7 +2041,7 @@ try {
       const password = async () => {
         const field = await need(()=>q('.dlg input[type=password]'), 'password prompt');
         const canSave = !!q('.dlg input[type=checkbox]');
-        type(field,'richtig'); await wait(80); q('.dlg button[type=submit]').click();
+        type(field,'right'); await wait(80); q('.dlg button[type=submit]').click();
         return canSave;
       };
       const chosen = () => right().querySelector('select').selectedOptions[0]?.textContent.trim();
@@ -2050,7 +2050,7 @@ try {
       // Ein Passwort in der Adresse wird nicht angenommen.
       window.dispatchEvent(new KeyboardEvent('keydown',{key:'k',ctrlKey:true,bubbles:true}));
       const pal = await need(()=>q('.pal input'), 'Suche');
-      type(pal, 'ftp://tester:richtig@127.0.0.1:${ftp.plain}'); await wait(300);
+      type(pal, 'ftp://tester:right@127.0.0.1:${ftp.plain}'); await wait(300);
       const withPassword = qa('.pal .pi').length;
       pal.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true})); await wait(200);
 
@@ -2098,7 +2098,7 @@ try {
 
   // A host set up plain although its server can do TLS: the prompt offers to switch it.
   const secure = await run(page, `${FTP_TOOLS}
-    await invoke('host_save', { host: { name: 'm11-umstellen', address: '127.0.0.1', protocol: 'ftp', group: null, color: null, os: null, own: { user: 'tester', port: ${ftp.tls} }, ftp: { security: 'none', anonymous: false }, password: 'richtig' } });
+    await invoke('host_save', { host: { name: 'm11-umstellen', address: '127.0.0.1', protocol: 'ftp', group: null, color: null, os: null, own: { user: 'tester', port: ${ftp.tls} }, ftp: { security: 'none', anonymous: false }, password: 'right' } });
     const id = (await invoke('vault_status')).data.hosts.find(h=>h.name==='m11-umstellen').id;
     await wait(300);
     await openFiles('m11-umstellen');
@@ -2286,7 +2286,7 @@ try {
     const missing = q('.dlg .warnbox')?.textContent.replace(/\\s+/g,' ').trim();
     const asksAgain = !!q('.pve-finger');
     button('Abbrechen', q('.dlg')).click(); await wait(200);
-    const bad = await fails(invoke('proxmox_probe', { input: { name: 'x', address: '${pve.address}', tokenId: '${PVE_TOKEN}', secret: 'falsch', fingerprint: '${pve.fingerprint}' } }));
+    const bad = await fails(invoke('proxmox_probe', { input: { name: 'x', address: '${pve.address}', tokenId: '${PVE_TOKEN}', secret: 'wrong', fingerprint: '${pve.fingerprint}' } }));
     const shape = await fails(invoke('proxmox_save', { input: { name: 'x', address: 'http://pve.example.de', tokenId: '${PVE_TOKEN}', secret: 'x' } }));
     const token = await fails(invoke('proxmox_save', { input: { name: 'x', address: '${pve.address}', tokenId: 'no-shape', secret: 'x' } }));
     return { wrong, proven, missing, asksAgain, bad: bad?.code, shape: shape?.code, token: [token?.code, token?.reason].join(':') };
@@ -2444,7 +2444,7 @@ try {
   app.kill();
   await sleep(1200);
   const bytes = readFileSync(vaultFile);
-  ok('the vault file contains no plaintext', !['web-01', 'Produktiv', 'deploy', 'server-passwort-geheim', '10.0.10.11', 'testserver', 'richtig', 'ssh-ed25519', 'e2e-import', 'PRIVATE KEY', 'E2E-PVE', PVE_TOKEN, PVE_SECRET, pve.fingerprint].some((t) => bytes.includes(t)), `${bytes.length} bytes`);
+  ok('the vault file contains no plaintext', !['web-01', 'Produktiv', 'deploy', 'server-passwort-geheim', '10.0.10.11', 'testserver', 'right', 'ssh-ed25519', 'e2e-import', 'PRIVATE KEY', 'E2E-PVE', PVE_TOKEN, PVE_SECRET, pve.fingerprint].some((t) => bytes.includes(t)), `${bytes.length} bytes`);
   app = launch();
   page = await connect();
   const auto = await run(page, `
@@ -2454,7 +2454,7 @@ try {
     q('.tb-ic').click(); await until(()=>q('.lock-card'));
     const afterLock = (await invoke('vault_status')).state;
     const refused = await fails(invoke('host_delete',{id:'00000000000000000000000000000000'}));
-    type(q('.lock-card input'),'falsch'); await wait(80); q('.lock-card button[type=submit]').click();
+    type(q('.lock-card input'),'wrong'); await wait(80); q('.lock-card button[type=submit]').click();
     const msg = await until(()=>q('.lock-card .errline')?.textContent);
     type(q('.lock-card input'),'${PW2}'); await wait(80); q('.lock-card button[type=submit]').click(); await until(()=>q('.nav'));
     const off = await invoke('vault_set_start_unlock',{enabled:false});

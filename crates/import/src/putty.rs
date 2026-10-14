@@ -246,7 +246,7 @@ mod tests {
 "ProxyMethod"=dword:00000003
 "ProxyHost"="proxy.firma.example"
 "ProxyPort"=dword:00000c38
-"ProxyUsername"="ich"
+"ProxyUsername"="me"
 "ProxyPassword"="geheim"
 
 [HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\Sessions\router]
@@ -270,7 +270,7 @@ mod tests {
 
         let git = &draft.hosts[1];
         assert_eq!((git.own.user.as_deref(), git.own.port), (Some("git"), Some(2222)));
-        assert_eq!(git.own.proxy.as_deref(), Some("http://ich@proxy.firma.example:3128"));
+        assert_eq!(git.own.proxy.as_deref(), Some("http://me@proxy.firma.example:3128"));
         assert_eq!(git.proxy_password.as_ref().map(|p| p.expose()), Some("geheim"));
 
         let rules: Vec<_> = draft.forwards.iter().map(|f| (f.kind, f.bind_address.as_str(), f.bind_port, f.dest_host.as_str(), f.dest_port)).collect();

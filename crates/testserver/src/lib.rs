@@ -144,7 +144,7 @@ struct Connection {
     files: Option<sftp::Files>,
     /// Opened channels, until it is clear what they are needed for.
     pending: HashMap<ChannelId, Channel<Msg>>,
-    /// Bisher getippte Zeile je Shell.
+    /// Line typed so far per shell.
     shells: HashMap<ChannelId, Vec<u8>>,
     sizes: HashMap<ChannelId, (u32, u32)>,
     /// Environment variables the client set for a shell.

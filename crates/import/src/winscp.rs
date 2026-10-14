@@ -183,7 +183,7 @@ mod tests {
         assert_eq!(reveal("A3", "x"), None);
         // Old form without marker: the first number is the length right away.
         let old: String = [3u8, 0, b'a', b'b', b'c'].iter().map(|b| format!("{:02X}", !(b ^ MAGIC))).collect();
-        assert_eq!(reveal(&old, "egal").as_deref(), Some("abc"));
+        assert_eq!(reveal(&old, "whatever").as_deref(), Some("abc"));
     }
 
     #[test]

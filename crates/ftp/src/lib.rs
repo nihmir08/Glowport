@@ -60,7 +60,7 @@ pub enum Security {
 pub struct Connect {
     pub host: String,
     pub port: u16,
-    /// Leer meldet anonym an.
+    /// Empty signs in anonymously.
     pub user: String,
     pub password: String,
     pub security: Security,

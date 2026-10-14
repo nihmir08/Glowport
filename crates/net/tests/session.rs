@@ -114,7 +114,7 @@ impl Driver {
 }
 
 fn with_password() -> Options {
-    Options { password: Some(("tester".into(), "richtig".into())), ..Options::default() }
+    Options { password: Some(("tester".into(), "right".into())), ..Options::default() }
 }
 
 fn connect(address: std::net::SocketAddr, password: Option<&str>) -> Connect {
@@ -145,7 +145,7 @@ impl Drop for KeyFile {
 #[tokio::test(flavor = "multi_thread")]
 async fn password_login_gives_a_working_shell() {
     let running = server::start(with_password(), server::key(1)).await.unwrap();
-    let mut driver = Driver::new(connect(running.address, Some("richtig")));
+    let mut driver = Driver::new(connect(running.address, Some("right")));
     driver.prompt().await;
     assert_eq!(driver.phases, [Phase::Connecting, Phase::Authenticating, Phase::Connected]);
     assert!(driver.output.contains("Welcome to the test server"));
@@ -174,7 +174,7 @@ async fn same_server_shows_the_same_host_key_and_another_a_different_one() {
     let second = server::start(with_password(), server::key(2)).await.unwrap();
     let mut fingerprints = Vec::new();
     for address in [first.address, first.address, second.address] {
-        let mut driver = Driver::new(connect(address, Some("richtig")));
+        let mut driver = Driver::new(connect(address, Some("right")));
         driver.prompt().await;
         fingerprints.push(driver.host_key.clone().unwrap().fingerprint);
         driver.send(Command::Close);
@@ -187,7 +187,7 @@ async fn same_server_shows_the_same_host_key_and_another_a_different_one() {
 #[tokio::test(flavor = "multi_thread")]
 async fn rejected_host_key_stops_before_any_password_is_sent() {
     let running = server::start(with_password(), server::key(1)).await.unwrap();
-    let mut driver = Driver::new(connect(running.address, Some("richtig")));
+    let mut driver = Driver::new(connect(running.address, Some("right")));
     driver.accept_host_key = false;
     assert_eq!(driver.end().await, End::HostKeyRejected);
     assert_eq!(driver.phases, [Phase::Connecting], "signing in must not even begin");
@@ -197,11 +197,11 @@ async fn rejected_host_key_stops_before_any_password_is_sent() {
 async fn wrong_saved_password_leads_to_prompts() {
     let running = server::start(with_password(), server::key(1)).await.unwrap();
     let mut driver = Driver::new(connect(running.address, Some("veraltet")));
-    driver.answers = [Some("vertippt"), Some("richtig")].into();
+    driver.answers = [Some("vertippt"), Some("right")].into();
     driver.prompt().await;
     assert_eq!(driver.notices, ["saved_password_rejected"]);
     assert_eq!(driver.asked, [(SecretKind::Password, 1), (SecretKind::Password, 2)]);
-    assert_eq!(driver.accepted_password.as_ref().map(|p| p.as_str()), Some("richtig"), "the working password is reported for saving");
+    assert_eq!(driver.accepted_password.as_ref().map(|p| p.as_str()), Some("right"), "the working password is reported for saving");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -225,7 +225,7 @@ async fn too_many_wrong_passwords_fail_and_cancel_ends_quietly() {
     let running = server::start(with_password(), server::key(1)).await.unwrap();
 
     let mut driver = Driver::new(connect(running.address, None));
-    driver.answers = [Some("eins"), Some("zwei"), Some("drei")].into();
+    driver.answers = [Some("one"), Some("two"), Some("three")].into();
     assert_eq!(driver.end().await, End::AuthFailed);
     assert_eq!(driver.asked.len(), 3);
     assert!(driver.accepted_password.is_none());
@@ -244,20 +244,20 @@ async fn key_file_logs_in_and_asks_for_its_passphrase() {
 
     // Wrong passphrase, then the right one: sign-in via the key, without password.
     let mut driver = Driver::new(with_key(None));
-    driver.answers = [Some("falsch"), Some(PASSPHRASE)].into();
+    driver.answers = [Some("wrong"), Some(PASSPHRASE)].into();
     driver.prompt().await;
     let file_name = file.0.display().to_string();
     assert_eq!(driver.asked, [(SecretKind::Passphrase { file: file_name.clone() }, 1), (SecretKind::Passphrase { file: file_name }, 2)]);
     assert!(driver.accepted_password.is_none());
 
     // Three wrong passphrases: the key drops out, the saved password rescues the sign-in.
-    let mut driver = Driver::new(with_key(Some("richtig")));
+    let mut driver = Driver::new(with_key(Some("right")));
     driver.answers = [Some("a"), Some("b"), Some("c")].into();
     driver.prompt().await;
     assert_eq!(driver.notices, ["key_unreadable"]);
 
     // Cancelling the passphrase cancels connecting.
-    let mut driver = Driver::new(with_key(Some("richtig")));
+    let mut driver = Driver::new(with_key(Some("right")));
     driver.answers = [None].into();
     assert_eq!(driver.end().await, End::User);
 }
@@ -267,13 +267,13 @@ async fn unusable_or_unauthorised_key_falls_back_to_the_password() {
     let running = server::start(Options { authorized_keys: vec![server::key(9).public_key().clone()], ..with_password() }, server::key(1)).await.unwrap();
 
     let garbage = KeyFile::new("broken", "this is not a key");
-    let mut driver = Driver::new(Connect { key_file: Some(garbage.0.clone()), ..connect(running.address, Some("richtig")) });
+    let mut driver = Driver::new(Connect { key_file: Some(garbage.0.clone()), ..connect(running.address, Some("right")) });
     driver.prompt().await;
     assert_eq!(driver.notices, ["key_unreadable"]);
 
     // A valid key the server does not know.
     let stranger = KeyFile::new("fremd", ENCRYPTED_KEY);
-    let mut driver = Driver::new(Connect { key_file: Some(stranger.0.clone()), ..connect(running.address, Some("richtig")) });
+    let mut driver = Driver::new(Connect { key_file: Some(stranger.0.clone()), ..connect(running.address, Some("right")) });
     driver.answers = [Some(PASSPHRASE)].into();
     driver.prompt().await;
     assert_eq!(driver.notices, ["key_rejected"]);
@@ -290,7 +290,7 @@ async fn key_from_the_vault_logs_in_without_any_question() {
 
     // A key the server does not know: a notice, then the saved password rescues the sign-in.
     let stranger = keys::generate(keys::Kind::Ecdsa, 256).unwrap();
-    let mut driver = Driver::new(Connect { key: Some(stranger.private), ..connect(running.address, Some("richtig")) });
+    let mut driver = Driver::new(Connect { key: Some(stranger.private), ..connect(running.address, Some("right")) });
     driver.prompt().await;
     assert_eq!(driver.notices, ["key_rejected"]);
 
@@ -300,7 +300,7 @@ async fn key_from_the_vault_logs_in_without_any_question() {
     driver.prompt().await;
     assert!(driver.asked.is_empty(), "the file's passphrase is not needed");
 
-    let mut driver = Driver::new(Connect { key: Some(Secret::new("kaputt".into())), ..connect(running.address, Some("richtig")) });
+    let mut driver = Driver::new(Connect { key: Some(Secret::new("kaputt".into())), ..connect(running.address, Some("right")) });
     driver.prompt().await;
     assert_eq!(driver.notices, ["key_unreadable"]);
 }
@@ -333,19 +333,19 @@ async fn public_key_is_installed_over_ssh_and_logs_in_afterwards() {
     let command = keys::install_command(&key.public, "arbeit").unwrap();
 
     // The server does not know the key yet.
-    let mut driver = Driver::new(Connect { key: Some(key.private.clone()), ..connect(running.address, Some("richtig")) });
+    let mut driver = Driver::new(Connect { key: Some(key.private.clone()), ..connect(running.address, Some("right")) });
     driver.prompt().await;
     assert_eq!(driver.notices, ["key_rejected"]);
 
     // Without a stored password a prompt would be needed: that fails at once instead of waiting.
     assert_eq!(execute(&connect(running.address, None), &command, |_, _, _| true).await.unwrap_err(), End::AuthFailed);
     // Nothing is sent to a server whose key is not known.
-    assert_eq!(execute(&connect(running.address, Some("richtig")), &command, |_, _, _| false).await.unwrap_err(), End::HostKeyRejected);
+    assert_eq!(execute(&connect(running.address, Some("right")), &command, |_, _, _| false).await.unwrap_err(), End::HostKeyRejected);
     assert!(!home.0.join(".ssh").exists());
 
-    let first = execute(&connect(running.address, Some("richtig")), &command, |host, port, shown| host == "127.0.0.1" && port == running.address.port() && shown.algorithm == "ssh-ed25519").await.unwrap();
+    let first = execute(&connect(running.address, Some("right")), &command, |host, port, shown| host == "127.0.0.1" && port == running.address.port() && shown.algorithm == "ssh-ed25519").await.unwrap();
     assert_eq!((keys::install_outcome(&first.stdout), first.exit_status), (Some(keys::Installed::Added), Some(0)));
-    let second = execute(&connect(running.address, Some("richtig")), &command, |_, _, _| true).await.unwrap();
+    let second = execute(&connect(running.address, Some("right")), &command, |_, _, _| true).await.unwrap();
     assert_eq!(keys::install_outcome(&second.stdout), Some(keys::Installed::Present));
 
     // Now the key alone gets in.
@@ -357,13 +357,13 @@ async fn public_key_is_installed_over_ssh_and_logs_in_afterwards() {
 #[tokio::test(flavor = "multi_thread")]
 async fn jump_servers_are_chained_each_with_its_own_login() {
     let hop = |password: &str| Options { password: Some(("tester".into(), password.into())), forwarding: true, ..Options::default() };
-    let first = server::start(hop("eins"), server::key(1)).await.unwrap();
-    let second = server::start(hop("zwei"), server::key(2)).await.unwrap();
+    let first = server::start(hop("one"), server::key(1)).await.unwrap();
+    let second = server::start(hop("two"), server::key(2)).await.unwrap();
     let target = server::start(with_password(), server::key(3)).await.unwrap();
     let via = |address, password, tag: &str, jump: Option<Connect>| Connect { tag: Some(tag.into()), jump: jump.map(Box::new), ..connect(address, password) };
 
     // Two hops: each shows its key, each signs in with its own password, the shell runs on the destination.
-    let chain = via(target.address, Some("richtig"), "ziel", Some(via(second.address, Some("zwei"), "b", Some(via(first.address, Some("eins"), "a", None)))));
+    let chain = via(target.address, Some("right"), "ziel", Some(via(second.address, Some("two"), "b", Some(via(first.address, Some("one"), "a", None)))));
     let mut driver = Driver::new(chain);
     driver.prompt().await;
     assert_eq!(driver.host_keys.iter().map(|(_, port, _)| *port).collect::<Vec<_>>(), [first.address.port(), second.address.port(), target.address.port()]);
@@ -373,25 +373,25 @@ async fn jump_servers_are_chained_each_with_its_own_login() {
     assert_eq!(driver.end().await, End::Remote { exit_status: Some(0) });
 
     // If a hop lacks its password, exactly that hop is asked.
-    let mut driver = Driver::new(via(target.address, Some("richtig"), "ziel", Some(via(first.address, None, "a", None))));
-    driver.answers = [Some("eins")].into();
+    let mut driver = Driver::new(via(target.address, Some("right"), "ziel", Some(via(first.address, None, "a", None))));
+    driver.answers = [Some("one")].into();
     driver.prompt().await;
     assert_eq!(driver.stations, [Station { label: format!("tester@127.0.0.1:{}", first.address.port()), tag: Some("a".into()) }]);
 
     // If a hop's key is not trusted, the connection does not come about; the destination is never asked.
-    let mut driver = Driver::new(via(target.address, Some("richtig"), "ziel", Some(via(first.address, Some("eins"), "a", None))));
+    let mut driver = Driver::new(via(target.address, Some("right"), "ziel", Some(via(first.address, Some("one"), "a", None))));
     driver.distrust = vec![first.address.port()];
     assert_eq!(driver.end().await, End::HostKeyRejected);
     assert_eq!(driver.host_keys.len(), 1);
 
     // A hop that does not forward, or a destination that cannot be reached from it.
     let closed = server::start(with_password(), server::key(4)).await.unwrap();
-    let mut driver = Driver::new(via(target.address, Some("richtig"), "ziel", Some(via(closed.address, Some("richtig"), "closed", None))));
+    let mut driver = Driver::new(via(target.address, Some("right"), "ziel", Some(via(closed.address, Some("right"), "closed", None))));
     assert!(matches!(driver.end().await, End::ConnectFailed(_)));
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let nowhere = listener.local_addr().unwrap();
     drop(listener);
-    let mut driver = Driver::new(via(nowhere, Some("richtig"), "ziel", Some(via(first.address, Some("eins"), "a", None))));
+    let mut driver = Driver::new(via(nowhere, Some("right"), "ziel", Some(via(first.address, Some("one"), "a", None))));
     assert!(matches!(driver.end().await, End::ConnectFailed(_)));
 }
 
@@ -399,7 +399,7 @@ async fn jump_servers_are_chained_each_with_its_own_login() {
 async fn start_command_and_environment_reach_the_shell() {
     let running = server::start(with_password(), server::key(1)).await.unwrap();
     let env = vec![("LANG".to_string(), "de_DE.UTF-8".to_string()), ("STUFE".to_string(), "test".to_string())];
-    let mut driver = Driver::new(Connect { startcmd: Some("  env  ".into()), env, ..connect(running.address, Some("richtig")) });
+    let mut driver = Driver::new(Connect { startcmd: Some("  env  ".into()), env, ..connect(running.address, Some("right")) });
     // The greeting ends with the prompt, after which Glowport types the startup command.
     assert_eq!(driver.until(|d| d.output.contains("STUFE=test") && d.output.ends_with(PROMPT)).await, None);
     assert!(driver.output.contains("LANG=de_DE.UTF-8"), "{}", driver.output);
@@ -456,7 +456,7 @@ async fn agent_keys_log_in_and_the_agent_can_be_forwarded() {
     assert!(driver.output.contains(&known.public_key().fingerprint(Default::default()).to_string()), "{}", driver.output);
 
     // There is no forwarding without an agent, even if it is switched on.
-    let mut driver = Driver::new(Connect { agent_forward: true, ..connect(running.address, Some("richtig")) });
+    let mut driver = Driver::new(Connect { agent_forward: true, ..connect(running.address, Some("right")) });
     driver.prompt().await;
     driver.typed("agent");
     driver.prompt().await;
@@ -465,7 +465,7 @@ async fn agent_keys_log_in_and_the_agent_can_be_forwarded() {
     // If no agent runs, it quietly continues with the other ways.
     let nowhere = glowport_net::Agents { openssh: Some(format!(r"\\.\pipe\glowport-test-{}-missing", std::process::id())), pageant: false };
     assert!(glowport_net::agent::list(&nowhere).await.iter().all(|a| !a.running));
-    let mut driver = Driver::new(Connect { agent: Some(nowhere), ..connect(running.address, Some("richtig")) });
+    let mut driver = Driver::new(Connect { agent: Some(nowhere), ..connect(running.address, Some("right")) });
     driver.prompt().await;
     assert!(driver.notices.is_empty());
 }
@@ -473,10 +473,10 @@ async fn agent_keys_log_in_and_the_agent_can_be_forwarded() {
 #[tokio::test(flavor = "multi_thread")]
 async fn old_devices_need_the_legacy_setting() {
     let old = server::start(Options { legacy_only: true, ..with_password() }, server::key(1)).await.unwrap();
-    let mut driver = Driver::new(connect(old.address, Some("richtig")));
+    let mut driver = Driver::new(connect(old.address, Some("right")));
     assert!(matches!(driver.end().await, End::ConnectFailed(_)), "without the setting there is no common algorithm");
 
-    let mut driver = Driver::new(Connect { legacy: true, term: "vt100".into(), ..connect(old.address, Some("richtig")) });
+    let mut driver = Driver::new(Connect { legacy: true, term: "vt100".into(), ..connect(old.address, Some("right")) });
     driver.prompt().await;
     driver.typed("term");
     driver.prompt().await;
@@ -484,7 +484,7 @@ async fn old_devices_need_the_legacy_setting() {
 
     // The setting does no harm with a current server.
     let modern = server::start(with_password(), server::key(2)).await.unwrap();
-    let mut driver = Driver::new(Connect { legacy: true, keepalive: Duration::ZERO, ..connect(modern.address, Some("richtig")) });
+    let mut driver = Driver::new(Connect { legacy: true, keepalive: Duration::ZERO, ..connect(modern.address, Some("right")) });
     driver.prompt().await;
     driver.typed("term");
     driver.prompt().await;
@@ -570,7 +570,7 @@ async fn connections_go_through_http_and_socks_proxies() {
         let (proxy, seen) = start_proxy(kind).await;
         let proxy = if kind == "http" { Proxy::Http { host: "127.0.0.1".into(), port: proxy.port(), login: None } } else { Proxy::Socks5 { host: "127.0.0.1".into(), port: proxy.port(), login: None } };
         // The name goes to the proxy unresolved.
-        let mut driver = Driver::new(Connect { host: "localhost".into(), proxy: Some(proxy), ..connect(running.address, Some("richtig")) });
+        let mut driver = Driver::new(Connect { host: "localhost".into(), proxy: Some(proxy), ..connect(running.address, Some("right")) });
         driver.prompt().await;
         assert_eq!(*seen.lock().unwrap(), [format!("localhost:{}", running.address.port())], "{kind}");
         driver.typed("exit");
@@ -579,13 +579,13 @@ async fn connections_go_through_http_and_socks_proxies() {
 
     // If the proxy refuses or does not exist, the connection does not come about.
     let (proxy, _) = start_proxy("http").await;
-    let mut driver = Driver::new(Connect { host: "verboten.test".into(), proxy: Some(Proxy::Http { host: "127.0.0.1".into(), port: proxy.port(), login: None }), ..connect(running.address, Some("richtig")) });
+    let mut driver = Driver::new(Connect { host: "verboten.test".into(), proxy: Some(Proxy::Http { host: "127.0.0.1".into(), port: proxy.port(), login: None }), ..connect(running.address, Some("right")) });
     let End::ConnectFailed(reason) = driver.end().await else { panic!("Ablehnung erwartet") };
     assert!(reason.contains("403"), "{reason}");
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let gone = listener.local_addr().unwrap().port();
     drop(listener);
-    let mut driver = Driver::new(Connect { proxy: Some(Proxy::Socks5 { host: "127.0.0.1".into(), port: gone, login: None }), ..connect(running.address, Some("richtig")) });
+    let mut driver = Driver::new(Connect { proxy: Some(Proxy::Socks5 { host: "127.0.0.1".into(), port: gone, login: None }), ..connect(running.address, Some("right")) });
     assert!(matches!(driver.end().await, End::ConnectFailed(_)));
 
     // Proxies that require authentication: in with the right details, not without or with wrong ones.
@@ -593,10 +593,10 @@ async fn connections_go_through_http_and_socks_proxies() {
     for kind in ["http-auth", "socks5-auth"] {
         let (address, _) = start_proxy(kind).await;
         let proxy = |login: Option<Login>| if kind == "http-auth" { Proxy::Http { host: "127.0.0.1".into(), port: address.port(), login } } else { Proxy::Socks5 { host: "127.0.0.1".into(), port: address.port(), login } };
-        let mut driver = Driver::new(Connect { proxy: Some(proxy(login("geheim"))), ..connect(running.address, Some("richtig")) });
+        let mut driver = Driver::new(Connect { proxy: Some(proxy(login("geheim"))), ..connect(running.address, Some("right")) });
         driver.prompt().await;
-        for wrong in [login("falsch"), None] {
-            let mut driver = Driver::new(Connect { proxy: Some(proxy(wrong)), ..connect(running.address, Some("richtig")) });
+        for wrong in [login("wrong"), None] {
+            let mut driver = Driver::new(Connect { proxy: Some(proxy(wrong)), ..connect(running.address, Some("right")) });
             assert!(matches!(driver.end().await, End::ConnectFailed(_)), "{kind}");
         }
     }
@@ -633,7 +633,7 @@ async fn certificates_log_in_where_only_the_authority_is_trusted() {
     // Expired, for another user or from a foreign authority: refused, the password rescues the sign-in.
     let stranger = server::key(21);
     for bad in [certificate(&ca, &key, "tester", now - 7200..now - 3600), certificate(&ca, &key, "root", now - 60..now + 3600), certificate(&stranger, &key, "tester", now - 60..now + 3600)] {
-        let mut driver = Driver::new(with(&bad, Some("richtig")));
+        let mut driver = Driver::new(with(&bad, Some("right")));
         driver.prompt().await;
         assert_eq!(driver.notices, ["certificate_rejected", "key_rejected"]);
     }
@@ -659,12 +659,12 @@ async fn servers_certified_by_a_trusted_authority_need_no_question() {
 
     // Valid certificate from the trusted authority for this address: no prompt about the key.
     let good = server::start(Options { host_certificate: Some(issue(&ca, "127.0.0.1", now - 60..now + 3600)), ..with_password() }, host_key.clone()).await.unwrap();
-    let mut driver = Driver::new(Connect { authorities: trusted.clone(), ..connect(good.address, Some("richtig")) });
+    let mut driver = Driver::new(Connect { authorities: trusted.clone(), ..connect(good.address, Some("right")) });
     driver.prompt().await;
     assert!(driver.host_keys.is_empty(), "the certificate was enough");
 
     // Whoever trusts no authority is shown the bare key as always.
-    let mut driver = Driver::new(connect(good.address, Some("richtig")));
+    let mut driver = Driver::new(connect(good.address, Some("right")));
     driver.prompt().await;
     assert_eq!(driver.host_keys.len(), 1);
 
@@ -672,12 +672,12 @@ async fn servers_certified_by_a_trusted_authority_need_no_question() {
     let stranger = server::key(31);
     for bad in [issue(&ca, "anderswo.test", now - 60..now + 3600), issue(&ca, "127.0.0.1", now - 7200..now - 3600), issue(&stranger, "127.0.0.1", now - 60..now + 3600)] {
         let running = server::start(Options { host_certificate: Some(bad), ..with_password() }, host_key.clone()).await.unwrap();
-        let mut driver = Driver::new(Connect { authorities: trusted.clone(), ..connect(running.address, Some("richtig")) });
+        let mut driver = Driver::new(Connect { authorities: trusted.clone(), ..connect(running.address, Some("right")) });
         driver.prompt().await;
         assert_eq!(driver.host_keys.len(), 1);
         assert_eq!(driver.host_keys[0].2, host_key.public_key().fingerprint(Default::default()).to_string());
 
-        let mut driver = Driver::new(Connect { authorities: trusted.clone(), ..connect(running.address, Some("richtig")) });
+        let mut driver = Driver::new(Connect { authorities: trusted.clone(), ..connect(running.address, Some("right")) });
         driver.accept_host_key = false;
         assert_eq!(driver.end().await, End::HostKeyRejected);
     }
@@ -689,7 +689,7 @@ async fn unreachable_server_fails_to_connect() {
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let address = listener.local_addr().unwrap();
     drop(listener);
-    let mut driver = Driver::new(connect(address, Some("richtig")));
+    let mut driver = Driver::new(connect(address, Some("right")));
     assert!(matches!(driver.end().await, End::ConnectFailed(_)));
     assert_eq!(driver.phases, [Phase::Connecting]);
 }
@@ -697,7 +697,7 @@ async fn unreachable_server_fails_to_connect() {
 #[tokio::test(flavor = "multi_thread")]
 async fn dropped_connection_is_reported_as_lost() {
     let running = server::start(with_password(), server::key(1)).await.unwrap();
-    let mut driver = Driver::new(connect(running.address, Some("richtig")));
+    let mut driver = Driver::new(connect(running.address, Some("right")));
     driver.prompt().await;
     driver.typed("drop");
     assert!(matches!(driver.end().await, End::ConnectionLost(_)));
@@ -711,11 +711,11 @@ async fn closing_works_at_any_time() {
     let mut driver = Driver::new(connect(running.address, None));
     assert_eq!(driver.until(|d| d.phases.contains(&Phase::Authenticating)).await, None);
     driver.send(Command::Close);
-    driver.answers = [Some("richtig")].into();
+    driver.answers = [Some("right")].into();
     assert_eq!(driver.end().await, End::User);
 
     // In the middle of the session.
-    let mut driver = Driver::new(connect(running.address, Some("richtig")));
+    let mut driver = Driver::new(connect(running.address, Some("right")));
     driver.prompt().await;
     driver.send(Command::Close);
     assert_eq!(driver.end().await, End::User);
@@ -724,7 +724,7 @@ async fn closing_works_at_any_time() {
 #[tokio::test(flavor = "multi_thread")]
 async fn pausing_holds_output_back_until_resumed() {
     let running = server::start(with_password(), server::key(1)).await.unwrap();
-    let mut driver = Driver::new(connect(running.address, Some("richtig")));
+    let mut driver = Driver::new(connect(running.address, Some("right")));
     driver.prompt().await;
 
     driver.send(Command::Pause(true));
@@ -740,14 +740,14 @@ async fn pausing_holds_output_back_until_resumed() {
 async fn banner_and_operating_system_are_reported() {
     let options = Options { banner: Some("Authorised personnel only\u{7}\n".into()), exec_output: Some("Linux\nID=ubuntu\nID_LIKE=debian\n".into()), ..with_password() };
     let running = server::start(options, server::key(1)).await.unwrap();
-    let mut driver = Driver::new(Connect { detect_os: true, ..connect(running.address, Some("richtig")) });
+    let mut driver = Driver::new(Connect { detect_os: true, ..connect(running.address, Some("right")) });
     assert_eq!(driver.until(|d| d.os.is_some()).await, None);
     assert_eq!(driver.os.as_deref(), Some("Ub"));
     assert_eq!(driver.banner.as_deref(), Some("Authorised personnel only\n"), "control characters are removed");
 
     // A server that refuses the query does not disturb the session.
     let plain = server::start(with_password(), server::key(1)).await.unwrap();
-    let mut driver = Driver::new(Connect { detect_os: true, ..connect(plain.address, Some("richtig")) });
+    let mut driver = Driver::new(Connect { detect_os: true, ..connect(plain.address, Some("right")) });
     driver.prompt().await;
     driver.typed("size");
     driver.prompt().await;

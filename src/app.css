@@ -1,4 +1,4 @@
-/* Glowport – Design-System „Neon Glass“. Vorlage: Entwurf A. */
+/* Glowport – design system “Neon Glass”. Template: draft A. */
 
 :root {
   --font-ui: 'Inter Variable', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
@@ -157,7 +157,7 @@ textarea {
     radial-gradient(820px 620px at 104% 112%, rgba(255, 46, 99, 0.12), transparent 60%), rgba(243, 240, 236, 0.66);
 }
 
-/* ===== Fenster ===== */
+/* ===== Window ===== */
 .win {
   height: 100%;
   display: grid;
@@ -483,7 +483,7 @@ kbd {
   font-weight: 600;
 }
 
-/* ===== Bausteine ===== */
+/* ===== Building blocks ===== */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -1425,7 +1425,7 @@ div.tab {
   }
 }
 
-/* ===== Geteilte Terminals ===== */
+/* ===== Split terminals ===== */
 /* The panes of all tabs lie in one area; each knows its place in percent. */
 .panes {
   flex: 1;
@@ -1792,7 +1792,7 @@ div.tab {
   color: var(--text);
 }
 
-/* Mitschnitte */
+/* Recordings */
 .pick-row {
   width: 100%;
   text-align: left;
@@ -1864,7 +1864,7 @@ div.tab {
   white-space: nowrap;
 }
 
-/* Einstellungen: Farbschemata, Vorschau, Regler */
+/* Settings: color schemes, preview, sliders */
 .row.block {
   flex-wrap: wrap;
 }
@@ -1976,7 +1976,7 @@ div.tab {
   font-weight: 500;
 }
 
-/* Leerer Zustand */
+/* Empty state */
 .empty {
   flex: 1;
   display: flex;
@@ -2246,7 +2246,7 @@ div.tab {
   font-size: 12.5px;
 }
 
-/* Meldungen */
+/* Messages */
 .toasts {
   position: fixed;
   right: 16px;
@@ -2324,7 +2324,7 @@ div.tab {
   }
 }
 
-/* ===== Dateien ===== */
+/* ===== Files ===== */
 :root[data-mode='dark'] {
   --code-comment: #6f7391;
   --code-keyword: #ff7ab2;
@@ -3611,7 +3611,7 @@ div.tab {
   color: var(--accent-fg);
 }
 
-/* ===== Port-Regeln ===== */
+/* ===== Port rules ===== */
 .ri.fwd-i {
   background: var(--card-h);
   color: var(--text-3);
@@ -4460,7 +4460,7 @@ button.chip.pickchip:hover {
   color: var(--err);
 }
 
-/* Sync einrichten */
+/* Set up sync */
 .setup-wrap {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 430px);

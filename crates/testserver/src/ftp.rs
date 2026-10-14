@@ -12,7 +12,7 @@ use sha2::{Digest, Sha256};
 use unftp_core::auth::{AuthenticationError, Authenticator, Credentials, Principal};
 
 pub const USER: &str = "tester";
-pub const PASSWORD: &str = "richtig";
+pub const PASSWORD: &str = "right";
 
 /// Every sign-in the server saw: user, and whether the password was right.
 pub type Logins = Arc<Mutex<Vec<(String, bool)>>>;

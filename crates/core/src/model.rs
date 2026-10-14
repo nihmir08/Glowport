@@ -249,7 +249,7 @@ pub enum FtpSecurity {
     None,
 }
 
-/// Einstellungen eines FTP-Hosts.
+/// An FTP host's settings.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Ftp {
@@ -693,7 +693,7 @@ pub struct MacroStep {
 // A macro contains everything that was typed, possibly a password: the keys appear in no output.
 impl fmt::Debug for MacroStep {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "MacroStep {{ wait: {}, keys: <{} Zeichen> }}", self.wait, self.keys.chars().count())
+        write!(f, "MacroStep {{ wait: {}, keys: <{} characters> }}", self.wait, self.keys.chars().count())
     }
 }
 
@@ -977,8 +977,8 @@ mod tests {
     #[test]
     fn host_patterns_match_like_known_hosts() {
         assert!(pattern_matches("*", "irgendwo.test"));
-        assert!(pattern_matches("*.firma.test", "Web-01.Firma.TEST"));
-        assert!(!pattern_matches("*.firma.test", "firma.test"));
+        assert!(pattern_matches("*.company.test", "Web-01.Company.TEST"));
+        assert!(!pattern_matches("*.company.test", "company.test"));
         assert!(pattern_matches("web-0?, 10.0.*", "web-01") && pattern_matches("web-0?, 10.0.*", "10.0.20.21"));
         assert!(!pattern_matches("web-0?", "web-012") && !pattern_matches("", "x") && !pattern_matches("10.0.*", "110.0.1.1"));
         assert!(pattern_matches("**a*", "bbab"));
@@ -987,15 +987,15 @@ mod tests {
     #[test]
     fn proxies_are_parsed_and_logins_refused() {
         let proxy = |text: &str| parse_proxy(text).filter(|p| p.user.is_none()).map(|p| (p.kind, p.host, p.port));
-        let with_user = parse_proxy("socks5://ich@proxy.firma.test:1081").unwrap();
-        assert_eq!((with_user.user.as_deref(), with_user.host.as_str(), with_user.port), (Some("ich"), "proxy.firma.test", 1081));
-        assert_eq!(parse_proxy("http://ich@[::1]").unwrap().user.as_deref(), Some("ich"));
+        let with_user = parse_proxy("socks5://me@proxy.company.test:1081").unwrap();
+        assert_eq!((with_user.user.as_deref(), with_user.host.as_str(), with_user.port), (Some("me"), "proxy.company.test", 1081));
+        assert_eq!(parse_proxy("http://me@[::1]").unwrap().user.as_deref(), Some("me"));
         assert_eq!(proxy("socks5://127.0.0.1:9050"), Some((ProxyKind::Socks5, "127.0.0.1".into(), 9050)));
-        assert_eq!(proxy(" HTTP://proxy.firma.test/ "), Some((ProxyKind::Http, "proxy.firma.test".into(), 8080)));
+        assert_eq!(proxy(" HTTP://proxy.company.test/"), Some((ProxyKind::Http, "proxy.company.test".into(), 8080)));
         assert_eq!(proxy("socks5h://tor"), Some((ProxyKind::Socks5, "tor".into(), 1080)));
         assert_eq!(proxy("http://[::1]:3128"), Some((ProxyKind::Http, "::1".into(), 3128)));
         assert_eq!(proxy("socks5://[fe80::1]"), Some((ProxyKind::Socks5, "fe80::1".into(), 1080)));
-        for broken in ["proxy:8080", "ftp://x:1", "http://", "http://x:0", "http://x:99999", "http://ich:geheim@x:1", "http://@x:1", "http://x/pfad", "socks5://-x", "http://a b:1"] {
+        for broken in ["proxy:8080", "ftp://x:1", "http://", "http://x:0", "http://x:99999", "http://me:secret@x:1", "http://@x:1", "http://x/path", "socks5://-x", "http://a b:1"] {
             assert_eq!(parse_proxy(broken), None, "{broken}");
         }
     }
@@ -1029,7 +1029,7 @@ mod tests {
         assert_eq!((auth.user, auth.key), (Some("deploy"), None));
 
         // A deleted identity no longer has an effect; the individual fields apply again.
-        let gone = Fields { identity: Some("weg".into()), ..Fields::default() };
+        let gone = Fields { identity: Some("gone".into()), ..Fields::default() };
         let auth = resolve_auth(&[&user_www, &gone], find);
         assert_eq!((auth.identity, auth.user), (None, Some("www")));
 

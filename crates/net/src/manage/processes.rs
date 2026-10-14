@@ -33,11 +33,11 @@ pub struct Process {
     pub name: String,
     /// The whole command with arguments.
     pub command: String,
-    /// Arbeitsspeicher in Bytes.
+    /// Memory in bytes.
     pub memory: u64,
     /// Seconds it has been running.
     pub elapsed: u64,
-    /// Verbrauchte Rechenzeit seit seinem Start, in Ticks (siehe [`Sample::ticks_per_second`]).
+    /// CPU time used since its start, in ticks (see [`Sample::ticks_per_second`]).
     pub ticks: u64,
     /// A kernel thread, not a program.
     pub kernel: bool,

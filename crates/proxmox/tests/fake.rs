@@ -34,11 +34,11 @@ async fn the_secret_only_travels_over_a_confirmed_certificate() {
     assert_eq!(world.lock().unwrap().tokens, [format!("PVEAPIToken={TOKEN}={SECRET}")]);
 
     // A wrong secret, an incomplete token, an address that is none, a server that does not exist.
-    assert_eq!(Client::new(&address, TOKEN, "falsch", Some(fingerprint)).unwrap().version().await, Err(PveError::Token));
+    assert_eq!(Client::new(&address, TOKEN, "wrong", Some(fingerprint)).unwrap().version().await, Err(PveError::Token));
     for (token, secret) in [("glowport", SECRET), ("glowport@pve", SECRET), ("@pve!test", SECRET), (TOKEN, ""), (TOKEN, "with space"), (TOKEN, "line\r\nX-Header: 1")] {
         assert!(matches!(Client::new(&address, token, secret, None), Err(PveError::Token)), "{token} {secret:?}");
     }
-    for bad in ["http://localhost:8006", "localhost:8006", "https://", "https://pve.example.de/pfad", "https://a b"] {
+    for bad in ["http://localhost:8006", "localhost:8006", "https://", "https://pve.example.com/path", "https://a b"] {
         assert!(matches!(Client::new(bad, TOKEN, SECRET, None), Err(PveError::Address)), "{bad}");
         assert_eq!(look(bad).await, Err(PveError::Address));
     }

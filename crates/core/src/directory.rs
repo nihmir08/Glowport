@@ -78,7 +78,7 @@ pub enum Invalid {
 pub enum DirError {
     #[error(transparent)]
     Vault(#[from] VaultError),
-    #[error("Eingabe abgelehnt: {0:?}")]
+    #[error("Input rejected: {0:?}")]
     Invalid(Invalid),
     #[error("Entry not found")]
     NotFound,
@@ -2260,7 +2260,7 @@ mod tests {
             Self(path)
         }
         fn directory(&self) -> Directory {
-            Directory::load(Vault::create(&self.0, "richtig", FAST).unwrap()).unwrap()
+            Directory::load(Vault::create(&self.0, "right", FAST).unwrap()).unwrap()
         }
     }
     impl Drop for Temp {
@@ -2327,7 +2327,7 @@ mod tests {
 
         // A group's parent and a host's group were deleted on another device.
         let orphan = raw(&mut dir, None, serde_json::json!({"t": "group", "v": 1, "name": "Waise", "parent": "00".repeat(16)}));
-        let lost = raw(&mut dir, None, serde_json::json!({"t": "host", "v": 1, "name": "verloren", "address": "10.0.0.9", "group": "00".repeat(16)}));
+        let lost = raw(&mut dir, None, serde_json::json!({"t": "host", "v": 1, "name": "lost", "address": "10.0.0.9", "group": "00".repeat(16)}));
         let snapshot = dir.snapshot();
         assert_eq!(snapshot.groups.iter().find(|g| g.id == orphan).unwrap().parent, None);
         assert_eq!(snapshot.hosts.iter().find(|h| h.id == lost).unwrap().group, None);
@@ -2335,7 +2335,7 @@ mod tests {
 
         // Two devices assigned the same hotkey: it applies to the snippet with the smaller ID.
         let snippet = |name: &str| serde_json::json!({"t": "snippet", "v": 1, "name": name, "kind": "command", "command": "uptime", "hotkey": "Alt+1"});
-        let (one, two) = (raw(&mut dir, None, snippet("eins")), raw(&mut dir, None, snippet("zwei")));
+        let (one, two) = (raw(&mut dir, None, snippet("one")), raw(&mut dir, None, snippet("two")));
         let snapshot = dir.snapshot();
         let hotkey = |id: &str| snapshot.snippets.iter().find(|s| s.id == id).unwrap().hotkey.clone();
         let (first, second) = if one < two { (&one, &two) } else { (&two, &one) };
@@ -2346,7 +2346,7 @@ mod tests {
     fn hosts_and_groups_persist_and_inherit() {
         let temp = Temp::new("inherit");
         let mut dir = temp.directory();
-        let prod = dir.save_group(GroupInput { defs: Fields { user: Some("deploy".into()), ..Fields::default() }, ..group("Produktiv", None) }).unwrap();
+        let prod = dir.save_group(GroupInput { defs: Fields { user: Some("deploy".into()), ..Fields::default() }, ..group("Production", None) }).unwrap();
         let web = dir.save_group(GroupInput { defs: Fields { port: Some(2200), ..Fields::default() }, ..group("Web", Some(&prod)) }).unwrap();
         let id = dir.save_host(host("web-01", Some(&web))).unwrap();
 
@@ -2357,10 +2357,10 @@ mod tests {
         // After locking and opening again everything is back.
         let mut vault = dir.into_vault();
         vault.lock();
-        vault.unlock("richtig").unwrap();
+        vault.unlock("right").unwrap();
         let dir = Directory::load(vault).unwrap();
         let snapshot = dir.snapshot();
-        assert_eq!(snapshot.groups.iter().map(|g| g.name.as_str()).collect::<Vec<_>>(), ["Produktiv", "Web"]);
+        assert_eq!(snapshot.groups.iter().map(|g| g.name.as_str()).collect::<Vec<_>>(), ["Production", "Web"]);
         assert_eq!((snapshot.hosts[0].name.as_str(), snapshot.hosts[0].group.as_deref(), snapshot.damaged), ("web-01", Some(web.as_str()), 0));
     }
 
@@ -2435,10 +2435,10 @@ mod tests {
         let temp = Temp::new("delgroup");
         let mut dir = temp.directory();
         let top = dir.save_group(group("Top", None)).unwrap();
-        let mid = dir.save_group(group("Mitte", Some(&top))).unwrap();
-        let low = dir.save_group(group("Unten", Some(&mid))).unwrap();
-        let in_mid = dir.save_host(host("in-mitte", Some(&mid))).unwrap();
-        let in_low = dir.save_host(host("in-unten", Some(&low))).unwrap();
+        let mid = dir.save_group(group("Middle", Some(&top))).unwrap();
+        let low = dir.save_group(group("Bottom", Some(&mid))).unwrap();
+        let in_mid = dir.save_host(host("in-middle", Some(&mid))).unwrap();
+        let in_low = dir.save_host(host("in-bottom", Some(&low))).unwrap();
         let outside = dir.save_host(HostInput { own: Fields { jump: Some(in_low.clone()), ..Fields::default() }, ..host("draussen", None) }).unwrap();
 
         // Dissolve: the content moves up one level.
@@ -2463,9 +2463,9 @@ mod tests {
         let bastion = dir.save_host(HostInput { password: Some(Some(Secret::new("pw".into()))), ..host("bastion", None) }).unwrap();
         let grp = dir.save_group(GroupInput { defs: Fields { jump: Some(bastion.clone()), ..Fields::default() }, ..group("G", None) }).unwrap();
 
-        let copy = dir.duplicate_host(&bastion, "bastion (Kopie)").unwrap();
+        let copy = dir.duplicate_host(&bastion, "bastion (copy)").unwrap();
         assert_ne!(copy, bastion);
-        assert_eq!((dir.hosts[&copy].name.as_str(), dir.hosts[&copy].password.is_some()), ("bastion (Kopie)", true));
+        assert_eq!((dir.hosts[&copy].name.as_str(), dir.hosts[&copy].password.is_some()), ("bastion (copy)", true));
 
         dir.delete_host(&bastion).unwrap();
         assert_eq!(dir.groups[&grp].defs.jump, None, "the group's reference is removed");
@@ -2481,9 +2481,9 @@ mod tests {
         let (key_a, key_b) = ("ssh-ed25519 AAAAschluesselA", "ssh-ed25519 AAAAschluesselB");
         assert_eq!(dir.judge_host_key("Server.Example", 22, key_a), Verdict::Unknown);
 
-        dir.trust_host_key("Server.Example", 22, "ssh-ed25519", "SHA256:aaa", &format!("{key_a} kommentar")).unwrap();
+        dir.trust_host_key("Server.Example", 22, "ssh-ed25519", "SHA256:aaa", &format!("{key_a} comment")).unwrap();
         assert_eq!(dir.judge_host_key("server.example", 22, key_a), Verdict::Trusted, "the address's case does not matter");
-        assert_eq!(dir.judge_host_key("server.example", 22, &format!("{key_a} anderer-kommentar")), Verdict::Trusted);
+        assert_eq!(dir.judge_host_key("server.example", 22, &format!("{key_a} other-comment")), Verdict::Trusted);
         assert_eq!(dir.judge_host_key("server.example", 2222, key_a), Verdict::Unknown, "another port is another service");
         assert_eq!(dir.judge_host_key("server.example", 22, key_b), Verdict::Changed { known: vec!["SHA256:aaa".into()] });
 
@@ -2499,7 +2499,7 @@ mod tests {
         // Survives locking and unlocking; deleting makes the server unknown again.
         let mut vault = dir.into_vault();
         vault.lock();
-        vault.unlock("richtig").unwrap();
+        vault.unlock("right").unwrap();
         let mut dir = Directory::load(vault).unwrap();
         assert_eq!(dir.judge_host_key("server.example", 22, key_b), Verdict::Trusted);
         let id = dir.snapshot().known_hosts[0].id.clone();
@@ -2529,7 +2529,7 @@ mod tests {
         let info = dir.connect_info(&laptop).unwrap();
         assert_eq!(info.mosh, Some(MoshInfo { predict: "always".into(), port: Some("60001:60010".into()), server: Some("~/.local/bin/mosh-server".into()) }));
         assert_eq!(dir.connect_info(&plain).unwrap().mosh, None);
-        let lone = dir.save_host(host("allein", None)).unwrap();
+        let lone = dir.save_host(host("alone", None)).unwrap();
         assert_eq!(dir.connect_info(&lone).unwrap().mosh, None, "no Mosh without a setting");
     }
 
@@ -2538,7 +2538,7 @@ mod tests {
         let temp = Temp::new("connectinfo");
         let mut dir = temp.directory();
         let defs = Fields { user: Some("deploy".into()), port: Some(2200), key_file: Some("  C:\\Keys\\deploy  ".into()), ..Fields::default() };
-        let group_id = dir.save_group(GroupInput { defs, ..group("Produktiv", None) }).unwrap();
+        let group_id = dir.save_group(GroupInput { defs, ..group("Production", None) }).unwrap();
         let id = dir.save_host(HostInput { address: "10.0.10.11".into(), ..host("web-01", Some(&group_id)) }).unwrap();
 
         let info = dir.connect_info(&id).unwrap();
@@ -2549,7 +2549,7 @@ mod tests {
 
         // Fine-tuning and proxy: checked when saving, inherited like everything else, can be switched off on the host.
         let fine = |fields: Fields| HostInput { own: fields, ..host("x", None) };
-        assert_eq!(reason(dir.save_host(fine(Fields { proxy: Some("ich:pw@proxy".into()), ..Fields::default() }))), Invalid::ProxyInvalid);
+        assert_eq!(reason(dir.save_host(fine(Fields { proxy: Some("me:pw@proxy".into()), ..Fields::default() }))), Invalid::ProxyInvalid);
         assert_eq!(reason(dir.save_host(fine(Fields { keepalive: Some(4000), ..Fields::default() }))), Invalid::KeepaliveInvalid);
         assert_eq!(reason(dir.save_host(fine(Fields { timeout: Some(0), ..Fields::default() }))), Invalid::TimeoutInvalid);
         assert_eq!(reason(dir.save_host(fine(Fields { term: Some("xterm; rm".into()), ..Fields::default() }))), Invalid::TermInvalid);
@@ -2565,12 +2565,12 @@ mod tests {
 
         // Proxy with sign-in: the user is in the address, the password is stored as a secret where the proxy is defined.
         let secret = |text: &str| Some(Some(Secret::new(text.into())));
-        let with_login = Fields { proxy: Some("http://ich@proxy.firma.test:3128".into()), ..Fields::default() };
-        dir.save_group(GroupInput { id: Some(switches.clone()), defs: with_login.clone(), proxy_password: secret("gruppen-pw"), ..group("Switches", None) }).unwrap();
+        let with_login = Fields { proxy: Some("http://me@proxy.company.test:3128".into()), ..Fields::default() };
+        dir.save_group(GroupInput { id: Some(switches.clone()), defs: with_login.clone(), proxy_password: secret("group-pw"), ..group("Switches", None) }).unwrap();
         let info = dir.connect_info(&other).unwrap();
-        assert_eq!((info.proxy.as_ref().and_then(|p| p.user.as_deref()), info.proxy_password.as_ref().map(Secret::expose)), (Some("ich"), Some("gruppen-pw")));
+        assert_eq!((info.proxy.as_ref().and_then(|p| p.user.as_deref()), info.proxy_password.as_ref().map(Secret::expose)), (Some("me"), Some("group-pw")));
         assert!(dir.connect_info(&switch).unwrap().proxy_password.is_none(), "no password without a proxy either");
-        let own_proxy = Fields { proxy: Some("socks5://anders@10.0.0.9".into()), ..Fields::default() };
+        let own_proxy = Fields { proxy: Some("socks5://other@10.0.0.9".into()), ..Fields::default() };
         dir.save_host(HostInput { id: Some(other.clone()), own: own_proxy.clone(), proxy_password: secret("host-pw"), ..host("sw-02", Some(&switches)) }).unwrap();
         assert_eq!(dir.connect_info(&other).unwrap().proxy_password.as_ref().map(Secret::expose), Some("host-pw"), "its own proxy brings its own password");
         let snapshot = dir.snapshot();
@@ -2586,18 +2586,18 @@ mod tests {
         dir.delete_group(&switches, true).unwrap();
 
         // Jump host, startup command and environment come from group and host; the jump host has its own details.
-        let bastion = dir.save_host(HostInput { address: "203.0.113.10".into(), own: Fields { jump: Some(String::new()), user: Some("sprung".into()), ..Fields::default() }, ..host("bastion", Some(&group_id)) }).unwrap();
+        let bastion = dir.save_host(HostInput { address: "203.0.113.10".into(), own: Fields { jump: Some(String::new()), user: Some("jump".into()), ..Fields::default() }, ..host("bastion", Some(&group_id)) }).unwrap();
         let defs = Fields { user: Some("deploy".into()), port: Some(2200), jump: Some(bastion.clone()), env: Some(" STUFE=prod ".into()), agent: Some(true), agent_forward: Some(true), ..Fields::default() };
-        dir.save_group(GroupInput { id: Some(group_id.clone()), defs, ..group("Produktiv", None) }).unwrap();
+        dir.save_group(GroupInput { id: Some(group_id.clone()), defs, ..group("Production", None) }).unwrap();
         dir.save_host(HostInput { id: Some(id.clone()), address: "10.0.10.11".into(), own: Fields { startcmd: Some("cd /srv".into()), agent_forward: Some(false), ..Fields::default() }, ..host("web-01", Some(&group_id)) }).unwrap();
         let info = dir.connect_info(&id).unwrap();
         assert_eq!((info.agent, info.agent_forward), (true, false), "agent from the group, forwarding switched off on the host");
         assert_eq!((info.jump.as_deref(), info.startcmd.as_deref()), (Some(bastion.as_str()), Some("cd /srv")));
         assert_eq!(info.env, [("STUFE".to_string(), "prod".to_string())]);
         let hop = dir.connect_info(&bastion).unwrap();
-        assert_eq!((hop.user.as_str(), hop.jump.as_deref()), ("sprung", None), "“explicitly none” on the jump host itself");
+        assert_eq!((hop.user.as_str(), hop.jump.as_deref()), ("jump", None), "“explicitly none” on the jump host itself");
         assert_eq!(reason(dir.save_host(HostInput { own: Fields { env: Some("kaputt".into()), ..Fields::default() }, ..host("x", None) })), Invalid::EnvInvalid);
-        dir.save_group(GroupInput { id: Some(group_id.clone()), defs: Fields { user: Some("deploy".into()), port: Some(2200), key_file: Some("  C:\\Keys\\deploy  ".into()), ..Fields::default() }, ..group("Produktiv", None) }).unwrap();
+        dir.save_group(GroupInput { id: Some(group_id.clone()), defs: Fields { user: Some("deploy".into()), port: Some(2200), key_file: Some("  C:\\Keys\\deploy  ".into()), ..Fields::default() }, ..group("Production", None) }).unwrap();
         let info = dir.connect_info(&id).unwrap();
         assert_eq!(info.key_file.as_deref(), Some("C:\\Keys\\deploy"), "whitespace around the path is removed");
         assert!(info.password.is_none());
@@ -2654,7 +2654,7 @@ mod tests {
         let added_at = dir.snapshot().keys[1].added_at;
         let mut vault = dir.into_vault();
         vault.lock();
-        vault.unlock("richtig").unwrap();
+        vault.unlock("right").unwrap();
         let dir = Directory::load(vault).unwrap();
         assert_eq!((dir.snapshot().keys[1].name.as_str(), dir.snapshot().keys[1].added_at), ("arbeit-2026", added_at));
     }
@@ -2687,24 +2687,24 @@ mod tests {
         let temp = Temp::new("auth");
         let mut dir = temp.directory();
         let work = dir.add_key(key("arbeit")).unwrap();
-        let other = dir.add_key(key("anderer")).unwrap();
-        let deploy = dir.save_identity(IdentityInput { password: Some(Some(Secret::new("id-passwort".into()))), ..identity("Deploy", "deploy", Some(&work)) }).unwrap();
+        let other = dir.add_key(key("other")).unwrap();
+        let deploy = dir.save_identity(IdentityInput { password: Some(Some(Secret::new("id-password".into()))), ..identity("Deploy", "deploy", Some(&work)) }).unwrap();
         let missing = Some("00000000000000000000000000000000".to_string());
         assert_eq!(reason(dir.save_group(GroupInput { defs: Fields { identity: missing.clone(), ..Fields::default() }, ..group("G", None) })), Invalid::IdentityMissing);
         assert_eq!(reason(dir.save_host(HostInput { own: Fields { key: missing, ..Fields::default() }, ..host("h", None) })), Invalid::KeyMissing);
 
-        let prod = dir.save_group(GroupInput { defs: Fields { identity: Some(deploy.clone()), ..Fields::default() }, ..group("Produktiv", None) }).unwrap();
+        let prod = dir.save_group(GroupInput { defs: Fields { identity: Some(deploy.clone()), ..Fields::default() }, ..group("Production", None) }).unwrap();
         let plain = dir.save_host(host("web-01", Some(&prod))).unwrap();
         let info = dir.connect_info(&plain).unwrap();
-        assert_eq!((info.user.as_str(), info.password.as_ref().map(Secret::expose)), ("deploy", Some("id-passwort")));
+        assert_eq!((info.user.as_str(), info.password.as_ref().map(Secret::expose)), ("deploy", Some("id-password")));
         assert_eq!(info.key.as_ref().map(Secret::expose), Some("-----BEGIN OPENSSH PRIVATE KEY-----arbeit"));
 
         // Values set individually on the host take precedence, including its own password.
         let own = Fields { user: Some("admin".into()), key: Some(other.clone()), ..Fields::default() };
-        let special = dir.save_host(HostInput { own, password: Some(Some(Secret::new("host-passwort".into()))), ..host("db-01", Some(&prod)) }).unwrap();
+        let special = dir.save_host(HostInput { own, password: Some(Some(Secret::new("host-password".into()))), ..host("db-01", Some(&prod)) }).unwrap();
         let info = dir.connect_info(&special).unwrap();
-        assert_eq!((info.user.as_str(), info.password.as_ref().map(Secret::expose)), ("admin", Some("host-passwort")));
-        assert_eq!(info.key.as_ref().map(Secret::expose), Some("-----BEGIN OPENSSH PRIVATE KEY-----anderer"));
+        assert_eq!((info.user.as_str(), info.password.as_ref().map(Secret::expose)), ("admin", Some("host-password")));
+        assert_eq!(info.key.as_ref().map(Secret::expose), Some("-----BEGIN OPENSSH PRIVATE KEY-----other"));
 
         // “Explicitly no identity” on the host: default user, no key, no password.
         let bare = dir.save_host(HostInput { own: Fields { identity: Some(String::new()), ..Fields::default() }, ..host("old", Some(&prod)) }).unwrap();
@@ -2750,23 +2750,23 @@ mod tests {
     fn authorities_apply_to_the_hosts_their_pattern_names() {
         let temp = Temp::new("authorities");
         let mut dir = temp.directory();
-        let ca = |name: &str, pattern: &str| NewAuthority { name: name.into(), pattern: pattern.into(), label: "Ed25519".into(), fingerprint: format!("SHA256:{name}"), public: format!("ssh-ed25519 AAAA{name} kommentar") };
+        let ca = |name: &str, pattern: &str| NewAuthority { name: name.into(), pattern: pattern.into(), label: "Ed25519".into(), fingerprint: format!("SHA256:{name}"), public: format!("ssh-ed25519 AAAA{name} comment") };
         assert_eq!(reason(dir.add_authority(ca("", "*"))), Invalid::NameRequired);
-        assert_eq!(reason(dir.add_authority(ca("Firma", "  "))), Invalid::PatternInvalid);
-        assert_eq!(reason(dir.add_authority(ca("Firma", "$(rm)"))), Invalid::PatternInvalid);
-        let company = dir.add_authority(ca("Firma", " *.firma.test, 10.0.* ")).unwrap();
-        dir.add_authority(ca("Alles", "*")).unwrap();
+        assert_eq!(reason(dir.add_authority(ca("Company", "  "))), Invalid::PatternInvalid);
+        assert_eq!(reason(dir.add_authority(ca("Company", "$(rm)"))), Invalid::PatternInvalid);
+        let company = dir.add_authority(ca("Company", " *.company.test, 10.0.*")).unwrap();
+        dir.add_authority(ca("All", "*")).unwrap();
 
         let view = &dir.snapshot().authorities[1];
-        assert_eq!((view.name.as_str(), view.pattern.as_str(), view.kind.as_str(), view.fingerprint.as_str()), ("Firma", "*.firma.test, 10.0.*", "Ed25519", "SHA256:Firma"));
+        assert_eq!((view.name.as_str(), view.pattern.as_str(), view.kind.as_str(), view.fingerprint.as_str()), ("Company", "*.company.test, 10.0.*", "Ed25519", "SHA256:Company"));
         assert!(view.added_at > 0);
 
-        let inside = dir.save_host(HostInput { address: "web-01.firma.test".into(), ..host("web-01", None) }).unwrap();
-        let outside = dir.save_host(HostInput { address: "203.0.113.5".into(), ..host("fremd", None) }).unwrap();
+        let inside = dir.save_host(HostInput { address: "web-01.company.test".into(), ..host("web-01", None) }).unwrap();
+        let outside = dir.save_host(HostInput { address: "203.0.113.5".into(), ..host("foreign", None) }).unwrap();
         let mut both = dir.connect_info(&inside).unwrap().authorities;
         both.sort();
-        assert_eq!(both, ["ssh-ed25519 AAAAAlles", "ssh-ed25519 AAAAFirma"], "without a comment, both match");
-        assert_eq!(dir.connect_info(&outside).unwrap().authorities, ["ssh-ed25519 AAAAAlles"]);
+        assert_eq!(both, ["ssh-ed25519 AAAAAll", "ssh-ed25519 AAAACompany"], "without a comment, both match");
+        assert_eq!(dir.connect_info(&outside).unwrap().authorities, ["ssh-ed25519 AAAAAll"]);
 
         dir.delete_authority(&company).unwrap();
         assert_eq!(dir.connect_info(&inside).unwrap().authorities.len(), 1);
@@ -2787,23 +2787,23 @@ mod tests {
         let input = |name: &str, layout: Arrangement| WorkspaceInput { id: None, name: name.into(), multi: true, layout };
 
         assert_eq!(reason(dir.save_workspace(input("", *pane(&web)))), Invalid::NameRequired);
-        assert_eq!(reason(dir.save_workspace(input("Leer", *pane("00000000000000000000000000000000")))), Invalid::WorkspaceEmpty);
+        assert_eq!(reason(dir.save_workspace(input("Empty", *pane("00000000000000000000000000000000")))), Invalid::WorkspaceEmpty);
         let id = dir.save_workspace(input("Deploy", side(7.0, pane(&web), stacked.clone()))).unwrap();
-        let single = dir.save_workspace(input("Allein", side(0.5, pane(&db), pane("00000000000000000000000000000000")))).unwrap();
+        let single = dir.save_workspace(input("Alone", side(0.5, pane(&db), pane("00000000000000000000000000000000")))).unwrap();
 
         let view = dir.snapshot().workspaces.into_iter().find(|w| w.id == id).unwrap();
         assert_eq!((view.name.as_str(), view.multi), ("Deploy", true));
         assert_eq!(view.layout, side(0.95, pane(&web), stacked), "the ratio is capped, the rest stays");
         let alone = dir.snapshot().workspaces.into_iter().find(|w| w.id == single).unwrap();
-        assert_eq!((alone.layout.clone(), alone.multi), (*pane(&db), false), "unbekannte Hosts fallen weg, Multi-Exec braucht zwei Bereiche");
+        assert_eq!((alone.layout.clone(), alone.multi), (*pane(&db), false), "unknown hosts are dropped, multi-exec needs two panes");
 
         // The same form the interface sends and reads.
         let json = serde_json::to_value(&alone.layout).unwrap();
         assert_eq!(json, serde_json::json!({ "pane": { "kind": "host", "id": db } }));
         assert!(serde_json::from_value::<Arrangement>(serde_json::json!({ "pane": { "kind": "direct", "user": "root", "host": "1.2.3.4", "port": 22 } })).is_err(), "typed addresses do not belong in the vault");
 
-        dir.save_workspace(WorkspaceInput { id: Some(id.clone()), name: "Deploy-Runde".into(), multi: false, layout: side(0.4, pane(&web), pane(&db)) }).unwrap();
-        assert_eq!(dir.snapshot().workspaces.iter().map(|w| w.name.as_str()).collect::<Vec<_>>(), ["Allein", "Deploy-Runde"]);
+        dir.save_workspace(WorkspaceInput { id: Some(id.clone()), name: "Deploy round".into(), multi: false, layout: side(0.4, pane(&web), pane(&db)) }).unwrap();
+        assert_eq!(dir.snapshot().workspaces.iter().map(|w| w.name.as_str()).collect::<Vec<_>>(), ["Alone", "Deploy round"]);
 
         dir.delete_host(&db).unwrap();
         let left = dir.snapshot().workspaces;
@@ -2826,7 +2826,7 @@ mod tests {
         assert_eq!(reason(dir.save_forward(rule("Grafana", ForwardKind::Local, &web, 0, "127.0.0.1", 3000))), Invalid::PortInvalid);
         assert_eq!(reason(dir.save_forward(rule("Grafana", ForwardKind::Local, &web, 70_000, "127.0.0.1", 3000))), Invalid::PortInvalid);
         assert_eq!(reason(dir.save_forward(rule("Grafana", ForwardKind::Local, &web, 3000, "  ", 3000))), Invalid::DestRequired);
-        assert_eq!(reason(dir.save_forward(rule("Grafana", ForwardKind::Remote, &web, 3000, "zwei worte", 3000))), Invalid::AddressInvalid);
+        assert_eq!(reason(dir.save_forward(rule("Grafana", ForwardKind::Remote, &web, 3000, "two words", 3000))), Invalid::AddressInvalid);
         assert_eq!(reason(dir.save_forward(rule("Grafana", ForwardKind::Local, &web, 3000, "127.0.0.1", 0))), Invalid::PortInvalid);
         assert_eq!(reason(dir.save_forward(ForwardInput { bind_address: "-o ProxyCommand".into(), ..rule("Grafana", ForwardKind::Local, &web, 3000, "127.0.0.1", 3000) })), Invalid::AddressInvalid);
 
@@ -2856,7 +2856,7 @@ mod tests {
     fn snippets_and_macros_are_validated_and_share_no_hotkey() {
         let temp = Temp::new("snippets");
         let mut dir = temp.directory();
-        let command = |name: &str, text: &str, hotkey: Option<&str>| SnippetInput { id: None, name: name.into(), package: " Alltag ".into(), kind: SnippetKind::Command, command: text.into(), steps: Vec::new(), hotkey: hotkey.map(Into::into) };
+        let command = |name: &str, text: &str, hotkey: Option<&str>| SnippetInput { id: None, name: name.into(), package: " Everyday".into(), kind: SnippetKind::Command, command: text.into(), steps: Vec::new(), hotkey: hotkey.map(Into::into) };
         let step = |wait: u32, keys: &str| MacroStep { wait, keys: keys.into() };
         let recorded = |name: &str, steps: Vec<MacroStep>| SnippetInput { id: None, name: name.into(), package: String::new(), kind: SnippetKind::Macro, command: "ignored".into(), steps, hotkey: None };
 
@@ -2864,7 +2864,7 @@ mod tests {
         assert_eq!(reason(dir.save_snippet(command("Platz", "  \n ", None))), Invalid::CommandRequired);
         assert_eq!(reason(dir.save_snippet(command("Platz", &"x".repeat(MAX_COMMAND + 1), None))), Invalid::SnippetTooLarge);
         assert_eq!(reason(dir.save_snippet(command("Platz", "df -h", Some("Ctrl+C")))), Invalid::HotkeyInvalid);
-        assert_eq!(reason(dir.save_snippet(recorded("Leer", vec![step(100, "")]))), Invalid::MacroEmpty);
+        assert_eq!(reason(dir.save_snippet(recorded("Empty", vec![step(100, "")]))), Invalid::MacroEmpty);
 
         let space = dir.save_snippet(command("Plattenplatz", "df -h\r\ndu -sh *\n", Some("Alt+1"))).unwrap();
         assert_eq!(reason(dir.save_snippet(command("Container", "docker ps", Some("Alt+1")))), Invalid::HotkeyTaken);
@@ -2874,11 +2874,11 @@ mod tests {
         let all = dir.snapshot().snippets;
         assert_eq!(all.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), ["Container", "Plattenplatz", "Rundgang"]);
         let stored = all.iter().find(|s| s.id == space).unwrap();
-        assert_eq!((stored.package.as_str(), stored.command.as_str(), stored.hotkey.as_deref()), ("Alltag", "df -h\ndu -sh *", Some("Alt+1")));
+        assert_eq!((stored.package.as_str(), stored.command.as_str(), stored.hotkey.as_deref()), ("Everyday", "df -h\ndu -sh *", Some("Alt+1")));
         let played = all.iter().find(|s| s.id == tour).unwrap();
         assert_eq!((played.command.as_str(), played.steps.len(), played.steps[1].wait), ("", 2, MAX_MACRO_WAIT), "empty steps are dropped, endless pauses are capped");
         assert_eq!(serde_json::to_value(&played.steps[0]).unwrap(), serde_json::json!({ "wait": 0, "keys": "cd /var\r" }));
-        assert!(!format!("{:?}", dir.snippets[&tour]).contains("cd /var"), "getippte Tasten erscheinen in keiner Ausgabe");
+        assert!(!format!("{:?}", dir.snippets[&tour]).contains("cd /var"), "typed keys appear in no output");
 
         // A snippet may keep its own hotkey when edited; it gets a free one without further ado.
         dir.save_snippet(SnippetInput { id: Some(space.clone()), ..command("Platz", "df -h", Some("Alt+1")) }).unwrap();
@@ -2954,10 +2954,10 @@ mod tests {
         });
         assert_eq!(reason(failed), Invalid::AddressRequired);
         assert_eq!(dir.snapshot().hosts.len(), 2);
-        assert!(dir.save_host(host("danach", None)).is_ok(), "after a batch change it continues normally");
+        assert!(dir.save_host(host("after", None)).is_ok(), "after a batch change it continues normally");
 
         // Several keys may apply to one address; the same one is not added a second time.
-        assert!(dir.add_known_host("Web.Example.org", 22, "ssh-ed25519", "SHA256:a", "ssh-ed25519 AAAA kommentar").unwrap());
+        assert!(dir.add_known_host("Web.Example.org", 22, "ssh-ed25519", "SHA256:a", "ssh-ed25519 AAAA comment").unwrap());
         assert!(dir.add_known_host("web.example.org", 22, "ssh-rsa", "SHA256:b", "ssh-rsa BBBB").unwrap());
         assert!(!dir.add_known_host("web.example.org", 22, "ssh-ed25519", "SHA256:a", "ssh-ed25519 AAAA").unwrap());
         assert_eq!(dir.known_hosts().len(), 2);
@@ -2971,7 +2971,7 @@ mod tests {
         let temp = Temp::new("ftp");
         let mut dir = temp.directory();
         // A group sets nothing for FTP: neither user nor port.
-        let net = dir.save_group(GroupInput { defs: Fields { user: Some("deploy".into()), port: Some(2222), ..Fields::default() }, ..group("Netz", None) }).unwrap();
+        let net = dir.save_group(GroupInput { defs: Fields { user: Some("deploy".into()), port: Some(2222), ..Fields::default() }, ..group("Network", None) }).unwrap();
         let ftp = |security| Ftp { security, anonymous: false, dir: None, plain_ok: false };
         let web = |own: Fields, settings: Option<Ftp>, password: Option<&str>| HostInput {
             protocol: Some("ftp".into()),
@@ -3016,7 +3016,7 @@ mod tests {
 
         // Anonymous: no user, no password, no identity.
         let anonymous = Ftp { anonymous: true, ..ftp(FtpSecurity::None) };
-        dir.save_host(HostInput { id: Some(id.clone()), ..web(Fields { user: Some("web123".into()), identity: Some(identity), ..Fields::default() }, Some(anonymous), Some("egal")) }).unwrap();
+        dir.save_host(HostInput { id: Some(id.clone()), ..web(Fields { user: Some("web123".into()), identity: Some(identity), ..Fields::default() }, Some(anonymous), Some("whatever")) }).unwrap();
         let info = dir.ftp_info(&id).unwrap();
         assert_eq!((info.user.as_str(), info.password.is_none(), info.saves_password, info.security), ("", true, false, FtpSecurity::None));
 
@@ -3055,7 +3055,7 @@ mod tests {
         let mut dir = temp.directory();
         let line = Serial { baud: 115_200, data_bits: 8, parity: Parity::None, stop_bits: 1, flow: Flow::None };
         let defs = Fields { user: Some("deploy".into()), port: Some(2222), charset: Some("iso-8859-1".into()), timeout: Some(40), ..Fields::default() };
-        let net = dir.save_group(GroupInput { defs, ..group("Netz", None) }).unwrap();
+        let net = dir.save_group(GroupInput { defs, ..group("Network", None) }).unwrap();
 
         // Telnet: the host does not inherit port and user, but timeout and charset it does.
         let own = Fields { startcmd: Some("enable".into()), ..Fields::default() };
@@ -3081,10 +3081,10 @@ mod tests {
         assert_eq!(reason(dir.save_host(serial(Some(Serial { data_bits: 9, ..line })))), Invalid::SerialInvalid);
         assert_eq!(reason(dir.save_host(serial(Some(Serial { stop_bits: 3, ..line })))), Invalid::SerialInvalid);
         let console = dir.save_host(serial(Some(line))).unwrap();
-        let Endpoint::Serial(info) = dir.endpoint(&console).unwrap() else { panic!("seriell erwartet") };
+        let Endpoint::Serial(info) = dir.endpoint(&console).unwrap() else { panic!("serial expected") };
         assert_eq!((info.port.as_str(), info.line, info.charset.as_str()), ("COM3", line, "utf-8"));
         dir.save_host(HostInput { id: Some(console.clone()), address: "/dev/ttyUSB0".into(), ..host("konsole", Some(&net)) }).unwrap();
-        let Endpoint::Serial(info) = dir.endpoint(&console).unwrap() else { panic!("seriell erwartet") };
+        let Endpoint::Serial(info) = dir.endpoint(&console).unwrap() else { panic!("serial expected") };
         assert_eq!((info.port.as_str(), info.line.baud, info.charset.as_str()), ("/dev/ttyUSB0", 115_200, "iso-8859-1"), "the line stays, the character set comes from the group");
         assert_eq!(serde_json::to_value(dir.snapshot().hosts.iter().find(|h| h.id == console).unwrap()).unwrap()["serial"], serde_json::json!({ "baud": 115_200, "dataBits": 8, "parity": "none", "stopBits": 1, "flow": "none" }));
 
@@ -3104,7 +3104,7 @@ mod tests {
 
         // Whoever is a jump host or carries port rules stays on SSH.
         let bastion = dir.save_host(host("bastion", None)).unwrap();
-        let behind = dir.save_host(HostInput { own: Fields { jump: Some(bastion.clone()), ..Fields::default() }, ..host("dahinter", None) }).unwrap();
+        let behind = dir.save_host(HostInput { own: Fields { jump: Some(bastion.clone()), ..Fields::default() }, ..host("behind", None) }).unwrap();
         let to_telnet = |id: &str| HostInput { id: Some(id.into()), protocol: Some("telnet".into()), ..host("bastion", None) };
         assert_eq!(reason(dir.save_host(to_telnet(&bastion))), Invalid::ProtocolInUse);
         dir.delete_host(&behind).unwrap();
@@ -3117,7 +3117,7 @@ mod tests {
         // After locking and opening, everything is there again.
         drop(dir);
         let mut vault = Vault::open(&temp.0).unwrap();
-        vault.unlock("richtig").unwrap();
+        vault.unlock("right").unwrap();
         let reopened = Directory::load(vault).unwrap();
         assert!(matches!(reopened.endpoint(&console).unwrap(), Endpoint::Serial(info) if info.line == line));
     }
@@ -3151,7 +3151,7 @@ mod tests {
     /// A directory with an own shared vault called “Team Infra”.
     fn with_shared(temp: &Temp) -> (Directory, String) {
         let mut dir = temp.directory();
-        let shared = hex(&dir.vault.create_shared(&[1; 16], "ich").unwrap());
+        let shared = hex(&dir.vault.create_shared(&[1; 16], "me").unwrap());
         dir.rename_vault(&shared, " Team Infra ").unwrap();
         (dir, shared)
     }
@@ -3178,7 +3178,7 @@ mod tests {
         assert_eq!(dir.record_name(&team_host).as_deref(), Some("pve-01"));
 
         // An entry lives in the same vault as its group.
-        assert_eq!(reason(dir.in_vault(Some(&shared), |d| d.save_host(host("falsch", Some(&own_group))))), Invalid::OtherVault);
+        assert_eq!(reason(dir.in_vault(Some(&shared), |d| d.save_host(host("wrong", Some(&own_group))))), Invalid::OtherVault);
         assert_eq!(reason(dir.save_host(HostInput { id: Some(own_host.clone()), ..host("web", Some(&team_group)) })), Invalid::OtherVault);
         assert_eq!(reason(dir.save_group(GroupInput { id: Some(own_group.clone()), ..group("Privat", Some(&team_group)) })), Invalid::OtherVault);
 
@@ -3199,7 +3199,7 @@ mod tests {
         // After locking and unlocking everything is back in its place.
         let mut vault = dir.into_vault();
         vault.lock();
-        vault.unlock("richtig").unwrap();
+        vault.unlock("right").unwrap();
         let dir = Directory::load(vault).unwrap();
         let snapshot = dir.snapshot();
         assert_eq!((snapshot.vaults[1].name.as_str(), snapshot.homes.get(&team_host)), ("Team", Some(&shared)));
@@ -3221,7 +3221,7 @@ mod tests {
         use crate::model::{PaneTarget, Split};
         let pane = |id: &str| Box::new(Arrangement::Pane { pane: PaneTarget::Host { id: id.into() } });
         let layout = Arrangement::Split { dir: Split::Row, ratio: 0.5, a: pane(&web), b: pane(&behind) };
-        let workspace = dir.save_workspace(WorkspaceInput { id: None, name: "Runde".into(), multi: false, layout }).unwrap();
+        let workspace = dir.save_workspace(WorkspaceInput { id: None, name: "Round".into(), multi: false, layout }).unwrap();
 
         assert!(matches!(dir.move_host(&web, &"00".repeat(16), true), Err(DirError::NotFound)));
         assert_eq!(dir.move_host(&web, &personal, true).unwrap(), web, "already there");
@@ -3290,7 +3290,7 @@ mod tests {
         assert_eq!(dir.proxmox_access(&id).unwrap().secret.expose(), "new");
 
         assert_eq!(reason(dir.save_proxmox(pve(" "))), Invalid::NameRequired);
-        for address in ["http://pve.example.de:8006", "pve.example.de:8006", "https://", "https://pve.example.de/pfad", "https://a b", "https://ich@pve"] {
+        for address in ["http://pve.example.de:8006", "pve.example.de:8006", "https://", "https://pve.example.com/path", "https://a b", "https://me@pve"] {
             assert_eq!(reason(dir.save_proxmox(ProxmoxInput { address: address.into(), ..pve("x") })), Invalid::AddressInvalid, "{address}");
         }
         for token in ["glowport", "glowport@pve", "@pve!x", "a@!x", "a@pve!", "a b@pve!x", "ä@pve!x"] {
@@ -3298,7 +3298,7 @@ mod tests {
         }
         assert_eq!(reason(dir.save_proxmox(ProxmoxInput { secret: None, ..pve("x") })), Invalid::SecretRequired);
         assert_eq!(reason(dir.save_proxmox(ProxmoxInput { secret: Some(Secret::new("  ".into())), ..pve("x") })), Invalid::SecretRequired);
-        assert_eq!(reason(dir.save_proxmox(ProxmoxInput { secret: Some(Secret::new("zeile\r\nX-Kopf: 1".into())), ..pve("x") })), Invalid::TokenInvalid);
+        assert_eq!(reason(dir.save_proxmox(ProxmoxInput { secret: Some(Secret::new("line\r\nX-Header: 1".into())), ..pve("x") })), Invalid::TokenInvalid);
         for fingerprint in ["5F:1A", &FINGERPRINT[..94], &FINGERPRINT.replace("5F", "ZZ")] {
             assert_eq!(reason(dir.save_proxmox(ProxmoxInput { fingerprint: Some(fingerprint.into()), ..pve("x") })), Invalid::FingerprintInvalid, "{fingerprint}");
         }
@@ -3344,7 +3344,7 @@ mod tests {
 
         // A host's copy belongs to no machine; neither does a host that moves into a shared vault.
         let web_id = by("web-01").id.clone();
-        let copy = dir.duplicate_host(&web_id, "web-01 Kopie").unwrap();
+        let copy = dir.duplicate_host(&web_id, "web-01 copy").unwrap();
         let moved = dir.move_host(&by("pihole").id, &shared, false).unwrap();
         let snapshot = dir.snapshot();
         let view = |id: &str| snapshot.hosts.iter().find(|h| h.id == id).unwrap();
@@ -3363,14 +3363,14 @@ mod tests {
         // What another member puts into a shared vault does not count: neither a connection nor the
         // link of a host there.
         let foreign = serde_json::to_vec(&serde_json::json!({ "t": "proxmox", "name": "Fremd", "address": "https://boese.example", "tokenId": "a@pve!b", "secret": "x" })).unwrap();
-        let linked = serde_json::to_vec(&serde_json::json!({ "t": "host", "name": "untergeschoben", "address": "10.9.9.9", "proxmox": { "connection": connection, "node": "pve", "vmid": 555, "kind": "qemu" } })).unwrap();
+        let linked = serde_json::to_vec(&serde_json::json!({ "t": "host", "name": "planted", "address": "10.9.9.9", "proxmox": { "connection": connection, "node": "pve", "vmid": 555, "kind": "qemu" } })).unwrap();
         let shared_id = parse_id(&shared).unwrap();
         dir.vault.put_in(&shared_id, &foreign).unwrap();
         dir.vault.put_in(&shared_id, &linked).unwrap();
         dir.refresh().unwrap();
         let snapshot = dir.snapshot();
         assert_eq!(snapshot.proxmox.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["Dedi"]);
-        assert_eq!((snapshot.hosts.iter().find(|h| h.name == "untergeschoben").unwrap().proxmox.clone(), dir.proxmox_host(&connection, 555)), (None, None));
+        assert_eq!((snapshot.hosts.iter().find(|h| h.name == "planted").unwrap().proxmox.clone(), dir.proxmox_host(&connection, 555)), (None, None));
         assert!(!dir.follow_proxmox(&connection, &[seen(555, "umbenannt", Some("10.6.6.6"))]).unwrap());
 
         // The links disappear with the connection, the hosts stay.
@@ -3478,6 +3478,6 @@ mod tests {
         let snapshot = dir.snapshot();
         assert_eq!(snapshot.hosts.iter().find(|h| h.name == "fremd").unwrap().proxmox, None);
         assert_eq!(dir.proxmox_host(&other, 101), None);
-        assert!(!dir.follow_proxmox(&other, &[seen(101, "anders", Some("192.168.1.2"))]).unwrap());
+        assert!(!dir.follow_proxmox(&other, &[seen(101, "different", Some("192.168.1.2"))]).unwrap());
     }
 }

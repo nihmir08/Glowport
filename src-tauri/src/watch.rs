@@ -43,7 +43,7 @@ pub struct Watched {
     /// „web-01:/etc/nginx/nginx.conf“
     origin: String,
     uploads: u32,
-    /// Millisekunden seit 1970.
+    /// Milliseconds since 1970.
     uploaded_at: Option<u64>,
     /// Error code if the last upload failed.
     #[serde(skip_serializing_if = "Option::is_none")]

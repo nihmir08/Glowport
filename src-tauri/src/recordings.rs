@@ -20,8 +20,12 @@ use serde::Serialize;
 
 const FOLDER: &str = "logs";
 const EXTENSION: &str = "log";
-const HEADER: &str = "# Glowport-Mitschnitt";
-const TITLE: &str = "# Titel: ";
+const HEADER: &str = "# Glowport recording";
+const TITLE: &str = "# Title: ";
+const ADDRESS: &str = "# Address: ";
+const START: &str = "# Start: ";
+/// Up to version 1.0.1 the header was German. Such files are still read and renamed.
+const OLD: [(&str, &str); 4] = [(HEADER, "# Glowport-Mitschnitt"), (TITLE, "# Titel: "), (ADDRESS, "# Adresse: "), (START, "# Beginn: ")];
 const TEMP: &str = "rename.tmp";
 /// The interface shows no more text than this at once; for larger files the end.
 const MAX_READ: u64 = 4 * 1024 * 1024;
@@ -42,7 +46,7 @@ pub struct Recording {
     /// Name of its own the user gave the recording afterwards.
     pub title: Option<String>,
     pub address: String,
-    /// Millisekunden seit 1970.
+    /// Milliseconds since 1970.
     pub started_at: i64,
     /// Missing while the recording runs.
     pub ended_at: Option<i64>,
@@ -188,10 +192,19 @@ fn file_part(name: &str) -> String {
     let cleaned: String = name.chars().map(|c| if c.is_alphanumeric() || matches!(c, '-' | '_' | '.') { c } else { '_' }).take(60).collect();
     let cleaned = cleaned.trim_matches(|c| c == '.' || c == '_').to_string();
     if cleaned.is_empty() {
-        "sitzung".into()
+        "session".into()
     } else {
         cleaned
     }
+}
+
+/// The German label of versions up to 1.0.1 for a header label.
+fn old(label: &'static str) -> &'static str {
+    OLD.iter().find(|(new, _)| *new == label).map_or(label, |(_, old)| old)
+}
+
+fn is_header(line: &str) -> bool {
+    line == HEADER || line == old(HEADER)
 }
 
 /// A header line must not carry line ends.
@@ -216,8 +229,8 @@ impl Recorder {
         let mut file = BufWriter::new(file);
         writeln!(file, "{HEADER}")?;
         writeln!(file, "# Host: {}", one_line(name))?;
-        writeln!(file, "# Adresse: {}", one_line(address))?;
-        writeln!(file, "# Beginn: {} ({})", now.format("%Y-%m-%d %H:%M:%S"), now.timestamp_millis())?;
+        writeln!(file, "{ADDRESS}{}", one_line(address))?;
+        writeln!(file, "{START}{} ({})", now.format("%Y-%m-%d %H:%M:%S"), now.timestamp_millis())?;
         writeln!(file)?;
         file.flush()?;
         Ok(Self { id, file, plain: Plain::new(), failed: false })
@@ -267,15 +280,15 @@ fn describe(path: &Path, running: &[String]) -> Option<Recording> {
     let id = path.file_name()?.to_str()?.to_string();
     let meta = fs::metadata(path).ok()?;
     let mut lines = BufReader::new(File::open(path).ok()?).lines();
-    if lines.next()?.ok()? != HEADER {
+    if !is_header(&lines.next()?.ok()?) {
         return None;
     }
     // The header reaches up to the first empty line; the order of its lines does not matter.
     let head: Vec<String> = lines.take(8).map_while(Result::ok).take_while(|line| !line.is_empty()).collect();
-    let field = |label: &str| head.iter().find_map(|line| line.strip_prefix(label)).map(str::to_string);
+    let field = |label: &'static str| head.iter().find_map(|line| line.strip_prefix(label).or_else(|| line.strip_prefix(old(label)))).map(str::to_string);
     let name = field("# Host: ")?;
-    let address = field("# Adresse: ")?;
-    let begin = field("# Beginn: ")?;
+    let address = field(ADDRESS)?;
+    let begin = field(START)?;
     let title = field(TITLE).filter(|title| !title.trim().is_empty());
     // The number in brackets is the start in milliseconds; if it is missing, the readable date before it applies.
     let started_at = begin
@@ -315,7 +328,7 @@ pub fn read(data_dir: &Path, id: &str) -> io::Result<String> {
     file.read_to_end(&mut bytes)?;
     let text = String::from_utf8_lossy(&bytes);
     // Header: all lines up to and including the first empty line.
-    Ok(match text.strip_prefix(HEADER).and_then(|rest| rest.split_once("\n\n")) {
+    Ok(match text.strip_prefix(HEADER).or_else(|| text.strip_prefix(old(HEADER))).and_then(|rest| rest.split_once("\n\n")) {
         Some((_, body)) => body.to_string(),
         None => text.into_owned(),
     })
@@ -329,17 +342,17 @@ pub fn rename(data_dir: &Path, id: &str, title: &str) -> io::Result<String> {
     let modified = fs::metadata(&path)?.modified()?;
     let bytes = fs::read(&path)?;
     let invalid = || io::Error::new(io::ErrorKind::InvalidData, "not a Glowport recording");
-    let split = bytes.windows(2).position(|pair| pair == b"\n\n").filter(|_| bytes.starts_with(HEADER.as_bytes())).ok_or_else(invalid)?;
+    let split = bytes.windows(2).position(|pair| pair == b"\n\n").filter(|_| bytes.starts_with(HEADER.as_bytes()) || bytes.starts_with(old(HEADER).as_bytes())).ok_or_else(invalid)?;
     let head = String::from_utf8_lossy(&bytes[..split]);
     let host = head.lines().find_map(|line| line.strip_prefix("# Host: ")).ok_or_else(invalid)?.to_string();
     let title = one_line(title.trim());
 
-    let mut lines: Vec<String> = head.lines().filter(|line| !line.starts_with(TITLE)).map(str::to_string).collect();
+    let mut lines: Vec<String> = head.lines().filter(|line| !line.starts_with(TITLE) && !line.starts_with(old(TITLE))).map(str::to_string).collect();
     if !title.is_empty() {
         lines.insert(1, format!("{TITLE}{title}"));
     }
     // The timestamp at the start of the file name stays; after it comes the new name, otherwise the host again.
-    let stamp = id.get(..19).filter(|stamp| stamp.len() == 19 && stamp.chars().all(|c| c.is_ascii_digit() || c == '-' || c == '_')).unwrap_or("mitschnitt");
+    let stamp = id.get(..19).filter(|stamp| stamp.len() == 19 && stamp.chars().all(|c| c.is_ascii_digit() || c == '-' || c == '_')).unwrap_or("recording");
     let base = format!("{stamp}_{}", file_part(if title.is_empty() { &host } else { &title }));
     let dir = folder(data_dir);
     let new_id = (0..100)
@@ -403,7 +416,7 @@ mod tests {
 
     #[test]
     fn a_sequence_split_across_packets_stays_invisible() {
-        assert_eq!(plain(&[b"vor\x1b[1;3", b"2mnach\x1b", b"[0m\n"]), ["vornach"]);
+        assert_eq!(plain(&[b"before\x1b[1;3", b"2mafter\x1b", b"[0m\n"]), ["beforeafter"]);
         // A multi-byte character, spread over two packets.
         let text = "Größe\n".as_bytes();
         assert_eq!(plain(&[&text[..3], &text[3..]]), ["Größe"]);
@@ -411,15 +424,15 @@ mod tests {
 
     #[test]
     fn redrawn_lines_keep_only_their_last_state() {
-        assert_eq!(plain(&[b"10 %\r50 %\r100 %\r\nfertig\r\n"]), ["100 %", "fertig"]);
+        assert_eq!(plain(&[b"10 %\r50 %\r100 %\r\ndone\r\n"]), ["100 %", "done"]);
         assert_eq!(plain(&[b"lss\x08 \x08 -la\r\n"]), ["ls -la"], "backspace removes the mistyped character");
         assert_eq!(plain(&["gr\u{f6}\x08\x08\u{fc}n\n".as_bytes()]), ["g\u{fc}n"], "characters of several bytes too");
     }
 
     #[test]
     fn full_screen_programs_are_left_out() {
-        let session = b"$ vim notes.md\r\n\x1b[?1049h\x1b[2J~ viel Bildschirm\r\n~ noch mehr\x1b[?1049l$ echo fertig\r\nfertig\r\n";
-        assert_eq!(plain(&[session]), ["$ vim notes.md", "$ echo fertig", "fertig"]);
+        let session = b"$ vim notes.md\r\n\x1b[?1049h\x1b[2J~ lots of screen\r\n~ even more\x1b[?1049l$ echo done\r\ndone\r\n";
+        assert_eq!(plain(&[session]), ["$ vim notes.md", "$ echo done", "done"]);
     }
 
     #[test]
@@ -444,7 +457,7 @@ mod tests {
         assert_eq!(read(&dir, &id).unwrap(), "deploy@web-01:~$ uptime\n 17:42 up 13 days\ndeploy@web-01:~$\n");
 
         // Foreign files in the folder and paths outside do not count.
-        fs::write(folder(&dir).join("notiz.log"), "not a recording").unwrap();
+        fs::write(folder(&dir).join("note.log"), "not a recording").unwrap();
         assert_eq!(list(&dir, &[]).len(), 1);
         assert!(read(&dir, "../vault.db").is_err() && read(&dir, "..\\vault.db").is_err() && delete(&dir, "C:\\Windows\\win.ini").is_err());
         assert_eq!(reveal_target(&dir, Some(&id)).unwrap(), folder(&dir).join(&id));
@@ -463,10 +476,27 @@ mod tests {
         assert_eq!(rename(&dir, &renamed, "Deploy before the release: check Größe").unwrap(), renamed);
         let plain = rename(&dir, &renamed, " ").unwrap();
         assert_eq!((plain.as_str(), list(&dir, &[])[0].title.as_deref()), (id.as_str(), None));
-        assert!(rename(&dir, "../vault.db", "x").is_err() && rename(&dir, "notiz.log", "x").is_err(), "only recordings can be renamed");
+        assert!(rename(&dir, "../vault.db", "x").is_err() && rename(&dir, "note.log", "x").is_err(), "only recordings can be renamed");
 
         delete(&dir, &id).unwrap();
         assert!(list(&dir, &[]).is_empty() && delete(&dir, &id).is_err());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn recordings_of_older_versions_with_a_german_header_still_work() {
+        let dir = std::env::temp_dir().join(format!("glowport-rec-old-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(folder(&dir)).unwrap();
+        let id = "2026-10-01_09-30-00_web-01.log";
+        let header = "# Glowport-Mitschnitt\n# Titel: Alt\n# Host: web-01\n# Adresse: deploy@10.0.10.11\n# Beginn: 2026-10-01 09:30:00 (1790839800000)\n\n";
+        fs::write(folder(&dir).join(id), format!("{header}$ uptime\n")).unwrap();
+
+        let found = list(&dir, &[]);
+        assert_eq!((found.len(), found[0].name.as_str(), found[0].address.as_str(), found[0].title.as_deref(), found[0].started_at), (1, "web-01", "deploy@10.0.10.11", Some("Alt"), 1_790_839_800_000));
+        assert_eq!(read(&dir, id).unwrap(), "$ uptime\n");
+        let renamed = rename(&dir, id, "Deploy").unwrap();
+        assert_eq!((list(&dir, &[])[0].title.as_deref(), read(&dir, &renamed).unwrap().as_str()), (Some("Deploy"), "$ uptime\n"), "the old title line is replaced, not doubled");
         fs::remove_dir_all(&dir).unwrap();
     }
 }

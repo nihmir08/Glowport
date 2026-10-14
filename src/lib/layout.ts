@@ -96,7 +96,7 @@ export function mapLeaves<L, M>(layout: Layout<L>, to: (leaf: L) => M | null | u
   return a && b ? { dir: layout.dir, ratio: layout.ratio, a, b } : (a ?? b);
 }
 
-/** Tauscht zwei Bereiche gegeneinander. */
+/** Swaps two panes. */
 export function swap(layout: Layout, one: string, other: string): Layout {
   return mapLeaves(layout, (leaf) => (leaf === one ? other : leaf === other ? one : leaf))!;
 }

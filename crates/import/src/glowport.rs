@@ -22,7 +22,7 @@ pub struct Export {
     /// Version of the program that wrote the file, for information only.
     #[serde(default)]
     pub app: String,
-    /// Zeitpunkt in Millisekunden seit 1970.
+    /// Point in time in milliseconds since 1970.
     #[serde(default)]
     pub exported: i64,
     #[serde(default)]
@@ -83,7 +83,7 @@ pub struct Host {
 pub struct Forward {
     pub name: String,
     pub kind: ForwardKind,
-    /// `id` eines Hosts derselben Datei.
+    /// `id` of a host in the same file.
     pub host: String,
     #[serde(default)]
     pub bind_address: String,
@@ -252,7 +252,7 @@ mod tests {
             app: "0.7.0".into(),
             exported: 1_790_000_000_000,
             groups: vec![
-                Group { id: "g1".into(), name: "Produktiv".into(), color: Some("#FF5D6C".into()), defs: Fields { user: Some("deploy".into()), jump: Some("h1".into()), ..Fields::default() }, ..Group::default() },
+                Group { id: "g1".into(), name: "Production".into(), color: Some("#FF5D6C".into()), defs: Fields { user: Some("deploy".into()), jump: Some("h1".into()), ..Fields::default() }, ..Group::default() },
                 Group { id: "g2".into(), name: "Web".into(), parent: Some("g1".into()), ..Group::default() },
             ],
             hosts: vec![
@@ -285,7 +285,7 @@ mod tests {
         // Groups in a cycle, a host with an unusable address, a rule without its host, unknown fields.
         let text = r#"{"glowport":1,"neu":true,"groups":[{"id":"a","name":"A","parent":"b"},{"id":"b","name":"B","parent":"a"}],
             "hosts":[{"id":"h","name":"ok","address":"10.0.0.1","group":"a","own":{"jump":"fehlt","zukunft":1}},{"id":"x","name":"schlecht","address":"-oProxyCommand=x"}],
-            "forwards":[{"name":"verwaist","kind":"local","host":"weg","bindPort":80}]}"#;
+            "forwards":[{"name":"verwaist","kind":"local","host":"gone","bindPort":80}]}"#;
         let draft = parse(text).unwrap();
         assert_eq!(draft.hosts.len(), 1);
         assert!(draft.groups.iter().any(|g| g.parent.is_none()));

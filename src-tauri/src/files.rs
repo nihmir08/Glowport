@@ -43,7 +43,7 @@ pub enum Place {
     Ftp { host: String, port: u16, user: String, security: FtpSecurity },
 }
 
-/// Offene SFTP-Verbindungen je Ort.
+/// Open SFTP connections per location.
 #[derive(Default)]
 pub struct Files {
     remotes: Mutex<HashMap<Place, Arc<Remote>>>,
@@ -58,7 +58,7 @@ pub struct EntryView {
     path: String,
     kind: &'static str,
     size: u64,
-    /// Millisekunden seit 1970.
+    /// Milliseconds since 1970.
     modified: u64,
     mode: Option<u32>,
     owner: String,
@@ -306,7 +306,7 @@ async fn my_user(app: &AppHandle, place: &Place) -> Option<u32> {
     Some(uid)
 }
 
-// ---------- Dieser PC ----------
+// ---------- This PC ----------
 
 fn text(path: &Path) -> String {
     path.to_string_lossy().into_owned()
@@ -436,7 +436,7 @@ fn local_remove(paths: &[String]) -> CmdResult<()> {
     Ok(())
 }
 
-// ---------- Befehle ----------
+// ---------- Commands ----------
 
 fn image_type(path: &str) -> Option<&'static str> {
     let extension = path.rsplit_once('.')?.1.to_ascii_lowercase();
@@ -638,7 +638,7 @@ pub fn pick_folder(app: AppHandle) -> Option<String> {
     app.dialog().file().blocking_pick_folder().and_then(|folder| folder.into_path().ok()).map(|path| text(&path))
 }
 
-// ---------- Suche am Server ----------
+// ---------- Search on the server ----------
 
 /// The search shows no more hits than this; whoever has that many should search more precisely.
 const MAX_HITS: usize = 300;

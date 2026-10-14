@@ -210,11 +210,11 @@ mod tests {
 
     #[test]
     fn output_falls_into_sections() {
-        let parts = sections("davor\n@eins\na\nb\n@leer\n@zwei\nc\n@Kein Abschnitt\n@\n");
-        assert_eq!(parts.get("eins"), Some(&vec!["a", "b"]));
-        assert_eq!(parts.get("leer"), Some(&vec![]));
+        let parts = sections("before\n@one\na\nb\n@empty\n@two\nc\n@No section\n@\n");
+        assert_eq!(parts.get("one"), Some(&vec!["a", "b"]));
+        assert_eq!(parts.get("empty"), Some(&vec![]));
         // Lines that only look like it belong to the content.
-        assert_eq!(parts.get("zwei"), Some(&vec!["c", "@Kein Abschnitt", "@"]));
+        assert_eq!(parts.get("two"), Some(&vec!["c", "@No section", "@"]));
         assert_eq!(parts.len(), 3);
     }
 }

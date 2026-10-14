@@ -56,7 +56,7 @@ function commands(word: string, context: Context): Suggestion[] {
   return [...known.slice(0, room), ...own].slice(0, LIMIT);
 }
 
-// ---------- Pfade ----------
+// ---------- Paths ----------
 
 interface Cached {
   at: number;

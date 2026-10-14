@@ -2,7 +2,7 @@
 //!
 //! Listens on a free port of 127.0.0.1 and names the address in the first line of output. The second
 //! line names the simulated Proxmox server running alongside: `pve <address> <fingerprint of its certificate>`.
-//! Sign-in: user `tester`, password `richtig`. The first argument optionally names a home directory:
+//! Sign-in: user `tester`, password `right`. The first argument optionally names a home directory:
 //! whoever owns a key from `.ssh/authorized_keys` inside it gets in without a password, and commands run
 //! via `sh` with this folder as `$HOME` (needs `sh` on the path, on Windows e.g. from Git). The second argument
 //! optionally names the file with a certificate authority's private key (without passphrase): its
@@ -22,7 +22,7 @@ use russh::keys::PrivateKey;
 async fn main() -> std::io::Result<()> {
     let ca = std::env::args().nth(2).and_then(|path| std::fs::read_to_string(path).ok()).and_then(|text| PrivateKey::from_openssh(text).ok());
     let options = Options {
-        password: Some(("tester".into(), "richtig".into())),
+        password: Some(("tester".into(), "right".into())),
         banner: Some("Glowport test server\n".into()),
         exec_output: Some("Linux\nID=ubuntu\nID_LIKE=debian\n".into()),
         home: std::env::args_os().nth(1).map(Into::into),

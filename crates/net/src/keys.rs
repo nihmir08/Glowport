@@ -320,7 +320,7 @@ mod tests {
         assert_eq!((old.kind, old.bits), (Kind::Rsa, 3072));
         assert_eq!(import(&old.private, None).unwrap().fingerprint, old.fingerprint);
         assert_eq!(import(PUTTY_ENC, None).unwrap_err(), KeyError::PassphraseRequired);
-        assert_eq!(import(PUTTY_ENC, Some("falsch")).unwrap_err(), KeyError::WrongPassphrase);
+        assert_eq!(import(PUTTY_ENC, Some("wrong")).unwrap_err(), KeyError::WrongPassphrase);
     }
 
     #[test]
@@ -328,7 +328,7 @@ mod tests {
         for text in [OPENSSH_ENC, PEM_RSA_ENC, PKCS8_ECDSA_ENC] {
             assert_eq!(import(text, None).unwrap_err(), KeyError::PassphraseRequired);
             assert_eq!(import(text, Some("")).unwrap_err(), KeyError::PassphraseRequired);
-            assert_eq!(import(text, Some("falsch")).unwrap_err(), KeyError::WrongPassphrase);
+            assert_eq!(import(text, Some("wrong")).unwrap_err(), KeyError::WrongPassphrase);
         }
         // A superfluous passphrase does no harm.
         assert!(import(OPENSSH, Some("unneeded")).is_ok());
@@ -351,7 +351,7 @@ mod tests {
         let opened = inspect(PEM_RSA_ENC, Some("geheim")).unwrap();
         assert_eq!((opened.format, opened.kind, opened.bits), (Format::Pem, Some(Kind::Rsa), Some(2048)));
         assert_eq!(inspect(PUTTY_ENC, Some("123")).unwrap().format, Format::Ppk);
-        assert_eq!(inspect(PEM_RSA_ENC, Some("falsch")).unwrap_err(), KeyError::WrongPassphrase);
+        assert_eq!(inspect(PEM_RSA_ENC, Some("wrong")).unwrap_err(), KeyError::WrongPassphrase);
         assert_eq!(inspect("Hallo", None).unwrap_err(), KeyError::Unreadable);
     }
 
@@ -422,7 +422,7 @@ mod tests {
 
         let locked = export(&key.private, "arbeit-2026", Some("new")).unwrap();
         assert!(inspect(&locked, None).unwrap().encrypted);
-        assert_eq!(import(&locked, Some("falsch")).unwrap_err(), KeyError::WrongPassphrase);
+        assert_eq!(import(&locked, Some("wrong")).unwrap_err(), KeyError::WrongPassphrase);
         let opened = import(&locked, Some("new")).unwrap();
         assert_eq!((opened.fingerprint, opened.comment.as_str()), (key.fingerprint, "arbeit-2026"));
         assert_eq!(export("not a key", "x", None).unwrap_err(), KeyError::Unreadable);

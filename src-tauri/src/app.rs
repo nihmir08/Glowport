@@ -678,7 +678,7 @@ pub(crate) mod tests {
         let source = Temp::new("restore-quelle");
         let backup = Temp::new("restore-sicherung");
         let mut session = source.session();
-        session.create("richtig-lang").unwrap();
+        session.create("right-and-long").unwrap();
         session.directory().unwrap().save_host(serde_json::from_value(json!({ "name": "web", "address": "10.0.0.1" })).unwrap()).unwrap();
         session.directory().unwrap().vault().backup(&backup.0).unwrap();
         // An existing vault is never overwritten.
@@ -696,7 +696,7 @@ pub(crate) mod tests {
         // The backup becomes the vault: locked, and it opens with its own master password.
         assert_eq!(fresh.restore(&backup.0).unwrap().state, "locked");
         assert_eq!(fresh.unlock("wrong-and-long").err().unwrap().code(), "wrong_password");
-        let opened = fresh.unlock("richtig-lang").unwrap();
+        let opened = fresh.unlock("right-and-long").unwrap();
         assert_eq!(opened.data.unwrap().hosts[0].name, "web");
         let _ = std::fs::remove_file(target.0.with_extension("db.new"));
     }
@@ -723,10 +723,10 @@ pub(crate) mod tests {
 
         session.lock();
         assert_eq!(as_json(&session.status()), json!({ "state": "locked", "startUnlock": false }));
-        assert_eq!(code(session.unlock("falsch")), "wrong_password");
+        assert_eq!(code(session.unlock("wrong")), "wrong_password");
         assert_eq!(as_json(&session.status())["state"], "locked", "after a wrong password the vault stays locked");
         assert_eq!(as_json(&session.unlock("long enough").unwrap())["state"], "open");
-        assert_eq!(as_json(&session.unlock("egal").unwrap())["state"], "open", "an open vault stays open");
+        assert_eq!(as_json(&session.unlock("whatever").unwrap())["state"], "open", "an open vault stays open");
 
         // A new program start finds the file and asks for the password.
         drop(session);
@@ -734,7 +734,7 @@ pub(crate) mod tests {
         assert_eq!(as_json(&session.status())["state"], "locked");
         assert_eq!(code(session.change_password("long enough", "new password")), "locked");
         session.unlock("long enough").unwrap();
-        assert_eq!(code(session.change_password("falsch", "new password")), "wrong_password");
+        assert_eq!(code(session.change_password("wrong", "new password")), "wrong_password");
         assert_eq!(code(session.change_password("long enough", "short")), "weak_password");
         session.change_password("long enough", "new password").unwrap();
         session.lock();
@@ -749,7 +749,7 @@ pub(crate) mod tests {
         let mut session = temp.session();
         session.create("long enough").unwrap();
 
-        let group: GroupInput = serde_json::from_value(json!({ "name": "Produktiv", "parent": null, "color": "#FF5D6C", "defs": { "user": "deploy", "port": 2200 } })).unwrap();
+        let group: GroupInput = serde_json::from_value(json!({ "name": "Production", "parent": null, "color": "#FF5D6C", "defs": { "user": "deploy", "port": 2200 } })).unwrap();
         let group_id = session.directory().unwrap().save_group(group).unwrap();
         let host: HostInput = serde_json::from_value(json!({
             "name": "web-01", "address": "10.0.10.11", "group": group_id, "color": null, "os": "Ub",
@@ -767,7 +767,7 @@ pub(crate) mod tests {
                 "own": { "jump": "", "startcmd": "cd /srv", "reconnect": "auto" }, "hasPassword": true, "hasProxyPassword": false
             })
         );
-        assert_eq!(changed["data"]["groups"][0], json!({ "id": group_id, "name": "Produktiv", "parent": null, "color": "#FF5D6C", "defs": { "user": "deploy", "port": 2200 }, "hasProxyPassword": false }));
+        assert_eq!(changed["data"]["groups"][0], json!({ "id": group_id, "name": "Production", "parent": null, "color": "#FF5D6C", "defs": { "user": "deploy", "port": 2200 }, "hasProxyPassword": false }));
         assert!(!changed.to_string().contains("geheim"), "the password must not leave the core");
 
         // A workspace as the interface builds it from a tab, and the message to the other windows.
@@ -777,10 +777,10 @@ pub(crate) mod tests {
             counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }));
         let layout = json!({ "dir": "row", "ratio": 0.5, "a": { "pane": { "kind": "host", "id": host_id } }, "b": { "pane": { "kind": "host", "id": host_id } } });
-        let workspace: WorkspaceInput = serde_json::from_value(json!({ "name": "Deploy-Runde", "multi": true, "layout": layout })).unwrap();
+        let workspace: WorkspaceInput = serde_json::from_value(json!({ "name": "Deploy round", "multi": true, "layout": layout })).unwrap();
         let workspace_id = session.directory().unwrap().save_workspace(workspace).unwrap();
         let changed = as_json(&session.changed(Some(workspace_id.clone())).unwrap());
-        assert_eq!(changed["data"]["workspaces"], json!([{ "id": workspace_id, "name": "Deploy-Runde", "multi": true, "layout": layout }]));
+        assert_eq!(changed["data"]["workspaces"], json!([{ "id": workspace_id, "name": "Deploy round", "multi": true, "layout": layout }]));
         session.lock();
         session.unlock("long enough").unwrap();
         assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 3, "change, lock and unlock report to the windows");
@@ -827,7 +827,7 @@ pub(crate) mod tests {
         // Locked stays locked: after that only the master password helps.
         session.lock();
         assert_eq!(as_json(&session.status())["state"], "locked");
-        assert_eq!(code(session.unlock("falsch")), "wrong_password");
+        assert_eq!(code(session.unlock("wrong")), "wrong_password");
         session.unlock("long enough").unwrap();
         // A new master password leaves the stored key valid.
         session.change_password("long enough", "new password").unwrap();

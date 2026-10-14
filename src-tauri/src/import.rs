@@ -862,7 +862,7 @@ fn apply(directory: &mut Directory, entry: &Entry, options: &Options) -> CmdResu
             let _ = dir.save_group(GroupInput { id: Some(known.id), name: known.name, parent: known.parent, color: known.color, defs, proxy_password: None });
         }
 
-        // 5. Port-Regeln, Snippets, bekannte Hosts.
+        // 5. Port rules, snippets, known hosts.
         for at in chosen_forwards.iter().copied().filter(|at| *at < draft.forwards.len()) {
             let rule = &draft.forwards[at];
             let Some(host) = host_ids.get(&rule.host).cloned() else {
@@ -1124,7 +1124,7 @@ fn export_text(directory: &Directory, request: &ExportRequest, app_version: &str
     })
 }
 
-// ---------- Befehle ----------
+// ---------- Commands ----------
 
 fn hold(imports: &Imports, state: &AppState, source: Source, origin: String, mut draft: Draft, base: Option<&Path>) -> CmdResult<DraftView> {
     if draft.is_empty() {
@@ -1291,7 +1291,7 @@ mod tests {
         let temp = Temp::new("import-config");
         let state = temp.state();
         let mut session = state.session();
-        session.create("richtig-lang").unwrap();
+        session.create("right-and-long").unwrap();
         let entry = held_entry(Source::SshConfig, reader::sshconfig::parse(CONFIG, "C:\\Users\\ich", &|_| Vec::new()));
         let mut choice = options(&entry);
         choice.into = Some(Into::New { name: "OpenSSH".into() });
@@ -1335,7 +1335,7 @@ mod tests {
         let temp = Temp::new("import-mixed");
         let state = temp.state();
         let mut session = state.session();
-        session.create("richtig-lang").unwrap();
+        session.create("right-and-long").unwrap();
 
         // A table with groups and passwords; a key as text in the cell.
         let key = keys::generate(Kind::Ed25519, 256).unwrap();
@@ -1381,7 +1381,7 @@ mod tests {
         let temp = Temp::new("import-export");
         let state = temp.state();
         let mut session = state.session();
-        session.create("richtig-lang").unwrap();
+        session.create("right-and-long").unwrap();
         let entry = held_entry(Source::SshConfig, reader::sshconfig::parse(CONFIG, "", &|_| Vec::new()));
         let mut choice = options(&entry);
         choice.into = Some(Into::New { name: "Produktiv Web".into() });
@@ -1412,7 +1412,7 @@ mod tests {
         let other = Temp::new("import-export-ziel");
         let target_state = other.state();
         let mut target = target_state.session();
-        target.create("richtig-lang").unwrap();
+        target.create("right-and-long").unwrap();
         let entry = held_entry(Source::Glowport, format::parse(&json).unwrap());
         let report = apply(target.directory().unwrap(), &entry, &options(&entry)).unwrap();
         assert_eq!((report.hosts, report.groups, report.forwards, report.failed.len()), (3, 1, 2, 0));
@@ -1427,7 +1427,7 @@ mod tests {
         let temp = Temp::new("import-ftp");
         let state = temp.state();
         let mut session = state.session();
-        session.create("richtig-lang").unwrap();
+        session.create("right-and-long").unwrap();
         let table = "Groups,Label,Hostname/IP,Protocol,Port,Username,Password\nWeb,webspace,ftp.example.org,ftps,,web1,geheim\nWeb,scanner,10.0.0.60,ftp,2121,scan,\nWeb,spiegel,mirror.example.org,ftps,990,,\nWeb,web,ftp.example.org,ssh,,web1,\n";
         let entry = held_entry(Source::Csv, reader::csv::parse(table).unwrap());
         let report = apply(session.directory().unwrap(), &entry, &options(&entry)).unwrap();
@@ -1480,7 +1480,7 @@ mod tests {
         let temp = Temp::new("import-protokolle");
         let state = temp.state();
         let mut session = state.session();
-        session.create("richtig-lang").unwrap();
+        session.create("right-and-long").unwrap();
         let table = "Groups,Label,Hostname/IP,Protocol,Port,Username\nNetz,switch,192.168.1.250,telnet,,admin\nNetz,konsole,COM4,serial,115200,\nNetz,web,10.0.0.5,ssh,2222,deploy\n";
         let entry = held_entry(Source::Csv, reader::csv::parse(table).unwrap());
         let report = apply(session.directory().unwrap(), &entry, &options(&entry)).unwrap();

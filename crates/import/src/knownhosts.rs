@@ -86,7 +86,7 @@ mod tests {
     #[test]
     fn reads_names_ports_and_fingerprints() {
         let text = format!(
-            "# Kommentar\nweb.example.org,203.0.113.10 ssh-ed25519 {ED} ich@pc\n[Git.Example.org]:2222 ssh-ed25519 {ED}\n|1|c2FsdA==|aGFzaA== ssh-ed25519 {ED}\n|1|YQ==|Yg== ssh-ed25519 {ED}\n*.intern.example ssh-ed25519 {ED}\n@cert-authority *.firma.example ssh-ed25519 {ED}\nkaputt ssh-ed25519 !!!\nfalsch ssh-rsa {ED}\n"
+            "# comment\nweb.example.org,203.0.113.10 ssh-ed25519 {ED} me@pc\n[Git.Example.org]:2222 ssh-ed25519 {ED}\n|1|c2FsdA==|aGFzaA== ssh-ed25519 {ED}\n|1|YQ==|Yg== ssh-ed25519 {ED}\n*.intern.example ssh-ed25519 {ED}\n@cert-authority *.company.example ssh-ed25519 {ED}\nbroken ssh-ed25519 !!!\nwrong ssh-rsa {ED}\n"
         );
         let draft = parse(&text);
         let found: Vec<_> = draft.known_hosts.iter().map(|k| (k.host.as_str(), k.port, k.algorithm.as_str())).collect();
@@ -94,7 +94,7 @@ mod tests {
         assert_eq!(draft.known_hosts[0].key, format!("ssh-ed25519 {ED}"));
         assert_eq!(draft.known_hosts[0].fingerprint, ED_FINGERPRINT);
         let skipped: Vec<_> = draft.skipped.iter().map(|s| (s.name.as_str(), s.reason)).collect();
-        assert_eq!(skipped, [("*.intern.example", "pattern"), ("*.firma.example", "pattern"), ("kaputt", "invalid"), ("falsch", "invalid"), ("2", "hashed")]);
+        assert_eq!(skipped, [("*.intern.example", "pattern"), ("*.company.example", "pattern"), ("broken", "invalid"), ("wrong", "invalid"), ("2", "hashed")]);
         assert!(looks_like(&text));
         assert!(!looks_like("Host web\n  HostName 10.0.0.1\n"));
         assert!(!looks_like(""));

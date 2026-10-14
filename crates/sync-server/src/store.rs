@@ -482,7 +482,7 @@ impl Store {
             conn.execute("UPDATE devices SET seen_at = ?2 WHERE id = ?1", params![device, now])?;
             conn.execute("UPDATE accounts SET seen_at = ?2 WHERE id = ?1", params![account, now])?;
         }
-        let internal = || Fail::Internal("Kennung".into());
+        let internal = || Fail::Internal("ID".into());
         Ok(Caller { account: account.as_slice().try_into().map_err(|_| internal())?, device: device.as_slice().try_into().map_err(|_| internal())?, admin, username, ed25519: ed25519.as_slice().try_into().map_err(|_| internal())? })
     }
 
@@ -586,7 +586,7 @@ impl Store {
             .ok_or(Fail::NotFound)
     }
 
-    // ── Tresore ──────────────────────────────────────────────────────────────────────────────────────────
+    // ── Vaults ───────────────────────────────────────────────────────────────────────────────────────────
 
     fn seat(conn: &Connection, caller: &Caller, vault: &Id) -> Result<Seat> {
         conn.query_row(
@@ -762,7 +762,7 @@ impl Store {
         if seat.frozen {
             return Err(Fail::Forbidden("vault_frozen"));
         }
-        let current = seat.roster.as_deref().and_then(|blob| roster::verify(blob, vault, None).ok()).ok_or_else(|| Fail::Internal("Mitgliederliste".into()))?;
+        let current = seat.roster.as_deref().and_then(|blob| roster::verify(blob, vault, None).ok()).ok_or_else(|| Fail::Internal("member list".into()))?;
         let next = roster::verify(blob, vault, Some(&current)).map_err(|_| Fail::Forbidden("roster_invalid"))?;
         Ok((current, next))
     }

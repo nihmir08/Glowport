@@ -182,20 +182,20 @@ mod tests {
     #[test]
     fn open_rejects_any_change() {
         let key = random_key();
-        let sealed = seal(&key, b"zweck", b"geheim");
-        assert_eq!(open(&key, &sealed.nonce, b"zweck", &sealed.ciphertext).unwrap().as_slice(), b"geheim");
+        let sealed = seal(&key, b"purpose", b"geheim");
+        assert_eq!(open(&key, &sealed.nonce, b"purpose", &sealed.ciphertext).unwrap().as_slice(), b"geheim");
 
-        assert_eq!(open(&random_key(), &sealed.nonce, b"zweck", &sealed.ciphertext), Err(CryptoError::Decrypt), "different key");
-        assert_eq!(open(&key, &sealed.nonce, b"anderer zweck", &sealed.ciphertext), Err(CryptoError::Decrypt), "andere Angaben");
-        assert_eq!(open(&key, &sealed.nonce[..23], b"zweck", &sealed.ciphertext), Err(CryptoError::Decrypt), "kurze Nonce");
+        assert_eq!(open(&random_key(), &sealed.nonce, b"purpose", &sealed.ciphertext), Err(CryptoError::Decrypt), "different key");
+        assert_eq!(open(&key, &sealed.nonce, b"other purpose", &sealed.ciphertext), Err(CryptoError::Decrypt), "different associated data");
+        assert_eq!(open(&key, &sealed.nonce[..23], b"purpose", &sealed.ciphertext), Err(CryptoError::Decrypt), "kurze Nonce");
         for i in 0..sealed.ciphertext.len() {
             let mut changed = sealed.ciphertext.clone();
             changed[i] ^= 1;
-            assert_eq!(open(&key, &sealed.nonce, b"zweck", &changed), Err(CryptoError::Decrypt), "byte {i} changed");
+            assert_eq!(open(&key, &sealed.nonce, b"purpose", &changed), Err(CryptoError::Decrypt), "byte {i} changed");
         }
         let mut nonce = sealed.nonce;
         nonce[0] ^= 1;
-        assert_eq!(open(&key, &nonce, b"zweck", &sealed.ciphertext), Err(CryptoError::Decrypt), "nonce changed");
+        assert_eq!(open(&key, &nonce, b"purpose", &sealed.ciphertext), Err(CryptoError::Decrypt), "nonce changed");
     }
 
     #[test]

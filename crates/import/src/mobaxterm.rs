@@ -142,7 +142,7 @@ mod tests {
         assert_eq!((web.address.as_str(), web.own.user.as_deref(), web.own.port, web.group), ("web.meier.example", Some("admin"), Some(2222), Some(1)));
         assert_eq!(web.own.startcmd.as_deref(), Some("sudo -i"));
         assert_eq!(draft.keys[web.own.key.unwrap()].source, KeySource::File("C:\\Users\\ich\\.ssh\\id_ed25519".into()));
-        // Kette: dieser PC → gate → 10.8.0.1 → Ziel.
+        // Chain: this PC → gate → 10.8.0.1 → destination.
         assert_eq!(web.own.jump, Jump::Host(3));
         let (gate, inner) = (&draft.hosts[2], &draft.hosts[3]);
         assert_eq!((gate.own.user.as_deref(), gate.own.port, gate.own.jump), (Some("jump"), None, Jump::Unset));

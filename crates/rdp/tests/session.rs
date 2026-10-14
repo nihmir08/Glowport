@@ -19,7 +19,7 @@ use tokio::sync::mpsc;
 
 const USER: &str = "tester";
 /// Only applies to the simulated server in this test.
-const PASSWORD: &str = "richtig";
+const PASSWORD: &str = "right";
 /// Color of the whole picture and that of the rectangle the server paints after the key “A” (red, green, blue).
 const BACKGROUND: [u8; 3] = [0xc0, 0x80, 0x40];
 const PAINTED: [u8; 3] = [0x10, 0xf0, 0x20];
@@ -288,12 +288,12 @@ async fn a_confirmed_certificate_is_not_asked_about_and_a_different_one_stops_th
 #[tokio::test]
 async fn a_wrong_password_is_refused() {
     let running = serve(true);
-    let mut session = open(connect(&running, USER, "falsch", Some(running.fingerprint)));
+    let mut session = open(connect(&running, USER, "wrong", Some(running.fingerprint)));
     assert_eq!(end(&mut session).await, End::AuthFailed, "over NLA the server already rejects the sign-in");
 
     // Without NLA the server only checks the password after setup and then disconnects.
     let running = serve(false);
-    let mut session = open(connect(&running, USER, "falsch", Some(running.fingerprint)));
+    let mut session = open(connect(&running, USER, "wrong", Some(running.fingerprint)));
     let end = end(&mut session).await;
     assert!(matches!(end, End::AuthFailed | End::ConnectFailed(_) | End::Server(_) | End::ConnectionLost(_)), "{end:?}");
     let logins = running.world.lock().unwrap().logins.clone();

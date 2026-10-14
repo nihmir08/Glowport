@@ -30,7 +30,7 @@ struct Process {
     pid: u32,
     parent: u32,
     user: &'static str,
-    /// Arbeitsspeicher in KiB.
+    /// Memory in KiB.
     rss: u64,
     command: &'static str,
     /// CPU time used in ticks per second: 100 means one core fully used.

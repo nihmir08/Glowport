@@ -111,7 +111,7 @@
     }
   }
 
-  // ── Starten, Stoppen, Neustarten ─────────────────────────────────────────────────────────────────────
+  // ── Start, stop, restart ─────────────────────────────────────────────────────────────────────────────
   let asking = $state<{ connection: ProxmoxConnection; guest: ProxmoxGuest; action: Exclude<Power, 'start'> } | null>(null);
 
   const power = (connection: ProxmoxConnection, guest: ProxmoxGuest, action: Power) => powerGuest(connection.id, guest, action);

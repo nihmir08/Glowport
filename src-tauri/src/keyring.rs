@@ -416,7 +416,7 @@ mod tests {
         let (first, second) = (host("web-01"), host("web-02"));
         let file = concat!(env!("CARGO_MANIFEST_DIR"), "/../crates/net/tests/keys/openssh_ed25519_enc");
 
-        assert_eq!(code(adopt_file(&state, file, "falsch", &first)), "wrong_passphrase");
+        assert_eq!(code(adopt_file(&state, file, "wrong", &first)), "wrong_passphrase");
         assert_eq!(code(adopt_file(&state, "Z:/does/not/exist", "geheim", &first)), "key_unreadable");
         adopt_file(&state, file, "geheim", &first).unwrap();
         adopt_file(&state, file, "geheim", &second).unwrap();
@@ -452,7 +452,7 @@ mod tests {
         assert_eq!(code(inspect("Hallo", None)), "key_unreadable");
         let import_with = |passphrase: Option<&str>| import(&state, Import { name: "old".into(), text: ENCRYPTED.into(), passphrase: passphrase.map(Into::into) });
         assert_eq!(code(import_with(None)), "passphrase_required");
-        assert_eq!(code(import_with(Some("falsch"))), "wrong_passphrase");
+        assert_eq!(code(import_with(Some("wrong"))), "wrong_passphrase");
         let imported = import_with(Some("geheim")).unwrap();
         let keys = data(&imported)["keys"].clone();
         assert_eq!((keys[0]["name"].as_str(), keys[0]["fingerprint"].as_str(), keys[0]["origin"].as_str()), (Some("old"), Some(FINGERPRINT), Some("imported")));

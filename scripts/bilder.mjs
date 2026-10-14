@@ -189,7 +189,7 @@ try {
   await tools(`await until(()=>q('.moshbar')); await wait(300);`);
   await shot('06-rueckfall-auf-ssh-mosh-fehlt');
 
-  // 7 · Schnellverbindung: „mosh benutzer@host“.
+  // 7 · Quick connect: “mosh user@host”.
   await key('k', 'KeyK', 75, 10);
   await run(`await until(()=>q('.pal input'))`);
   await page.send('Input.insertText', { text: 'mosh deploy@203.0.113.50' });
@@ -198,7 +198,7 @@ try {
   await key('Escape', 'Escape', 27);
   await sleep(200);
 
-  // 8 · Dasselbe hell.
+  // 8 · The same in light.
   await tools(`await go('Optionen'); byText('.seg button','Hell').click(); await wait(300); q('.tabs .tab:not(.home)')?.click(); await wait(600);`);
   await shot('08-rueckfall-hell');
   page.close();

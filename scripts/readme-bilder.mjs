@@ -183,7 +183,7 @@ try {
   await run(`if(!q('.side')) titled(${s('Server-Info und Snippets neben dem Terminal zeigen')}).click(); await until(()=>q('.side')); await side('Docker'); await until(()=>srow('shop-web'));`);
   await shot('docker');
 
-  // 5 · Dateileiste am Terminal.
+  // 5 · File bar at the terminal.
   await run(`qa('.tabs .tab').at(-1).querySelector('button.x').click(); await wait(500);`);
   await openHost('web-01');
   await run(`if(q('.side')) titled(${s('Server-Info und Snippets neben dem Terminal zeigen')})?.click(); if(!bar()) byText('.tbar .btn','Files').click(); await until(()=>bar() && rows(bar())>5);`);
@@ -198,7 +198,7 @@ try {
     choose(col(1),'${id('web-01')}'); await until(()=>rows(col(1))>1); await goto(col(1),'/var/www/app'); pick(col(0),'db.sql.gz');`);
   await shot('files');
 
-  // 7 · Port-Regeln, zwei laufen.
+  // 7 · Port rules, two running.
   await run(`await nav(2); await until(()=>rule('Grafana')); rule('Grafana').querySelector('.swt').click(); rule('SOCKS via bastion').querySelector('.swt').click(); await until(()=>qa('.rows .chip.ok').length===2); await wait(3200);`);
   await shot('port-forwarding');
 
@@ -243,7 +243,7 @@ try {
   await key('Escape', 'Escape', 27);
   await sleep(200);
 
-  // 14 · Einstellungen: Farbschemata.
+  // 14 · Settings: color schemes.
   await run(`await nav(9); await until(()=>q('.schemes')); byText('.sec','Terminal').scrollIntoView({ block: 'start' }); await wait(300);`);
   await shot('themes');
 

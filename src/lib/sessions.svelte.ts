@@ -327,7 +327,7 @@ export function movePane(key: string, onto: string, side: Side) {
   view.active = tab.key;
 }
 
-/** Tauscht zwei Bereiche desselben Tabs. */
+/** Swaps two panes of the same tab. */
 export function swapPanes(one: string, other: string) {
   const tab = tabOf(one);
   if (tab && tab === tabOf(other)) tab.layout = swap(tab.layout, one, other);

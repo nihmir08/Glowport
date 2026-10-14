@@ -183,7 +183,7 @@ pub fn docker_line(container: String, kind: DockerTab, sudo: bool) -> CmdResult<
     .ok_or_else(|| failed("Invalid ID".into()))
 }
 
-// ── Dienste ──────────────────────────────────────────────────────────────────────────────────────────────
+// ── Services ─────────────────────────────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize, PartialEq)]
 pub struct ServiceView {
@@ -247,7 +247,7 @@ pub fn service_line(unit: String, sudo: bool) -> CmdResult<String> {
     services::journal_line(&unit, sudo).ok_or_else(|| failed("Invalid name".into()))
 }
 
-// ── Prozesse ─────────────────────────────────────────────────────────────────────────────────────────────
+// ── Processes ────────────────────────────────────────────────────────────────────────────────────────────
 
 #[derive(Debug, Serialize, PartialEq)]
 pub struct ProcessView {

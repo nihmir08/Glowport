@@ -179,7 +179,7 @@ pub struct Guest {
 /// What the token lacks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Missing {
-    /// Maschinen sehen (`VM.Audit`).
+    /// See machines (`VM.Audit`).
     Audit,
     /// Switch on and off (`VM.PowerMgmt`).
     Power,

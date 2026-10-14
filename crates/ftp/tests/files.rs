@@ -19,7 +19,7 @@ use unftp_core::auth::{AuthenticationError, Authenticator, Credentials, Principa
 
 const USER: &str = "tester";
 /// Only applies to the simulated server in this test.
-const PASSWORD: &str = "richtig";
+const PASSWORD: &str = "right";
 
 /// Every sign-in the server saw: user, and whether the password was right.
 type Logins = Arc<Mutex<Vec<(String, bool)>>>;
@@ -112,7 +112,7 @@ async fn everything(remote: &Remote, running: &Running) {
     assert_eq!(names(&remote.list("/web").await.unwrap()), ["images", "index.html"]);
     assert!(matches!(remote.list("/does-not-exist").await, Err(FileError::NoSuchFile | FileError::NotADirectory)));
 
-    // Einzelnes ansehen.
+    // Looking at a single one.
     let stat = remote.stat("/web/index.html", true).await.unwrap();
     assert_eq!((stat.name.as_str(), stat.kind, stat.size), ("index.html", Kind::File, 14));
     assert_eq!(remote.stat("/web", true).await.unwrap().kind, Kind::Dir);
@@ -228,8 +228,8 @@ async fn an_unknown_certificate_stops_before_the_login() {
 #[tokio::test]
 async fn wrong_passwords_and_missing_tls_are_told_apart() {
     let running = serve(true).await;
-    assert_eq!(Remote::connect(&running.connect(Security::Explicit, "falsch", running.fingerprint)).await.err(), Some(Refusal::AuthFailed));
-    assert_eq!(Remote::connect(&running.connect(Security::None, "falsch", None)).await.err(), Some(Refusal::AuthFailed));
+    assert_eq!(Remote::connect(&running.connect(Security::Explicit, "wrong", running.fingerprint)).await.err(), Some(Refusal::AuthFailed));
+    assert_eq!(Remote::connect(&running.connect(Security::None, "wrong", None)).await.err(), Some(Refusal::AuthFailed));
     // Connected in the clear, the server shows that it could do TLS.
     let remote = Remote::connect(&running.connect(Security::None, PASSWORD, None)).await.unwrap();
     assert!(remote.abilities().offers_tls);

@@ -42,7 +42,7 @@ fn now_ms() -> i64 {
 }
 
 fn envelopes(records: &[WireRecord]) -> Result<Vec<Envelope>> {
-    records.iter().map(|record| record.envelope().ok_or(SyncError::Protocol("Datensatz"))).collect()
+    records.iter().map(|record| record.envelope().ok_or(SyncError::Protocol("record"))).collect()
 }
 
 /// A notice from syncing, as stored in the vault and shown in the settings.
@@ -62,7 +62,7 @@ pub enum Notice {
 }
 
 fn note(vault: &mut Vault, notice: &Notice) -> Result<()> {
-    Ok(vault.add_notice(&serde_json::to_vec(notice).map_err(|_| SyncError::Protocol("Hinweis"))?)?)
+    Ok(vault.add_notice(&serde_json::to_vec(notice).map_err(|_| SyncError::Protocol("Notice"))?)?)
 }
 
 /// Records what was noticed while taking over. Returns the number of notices.
@@ -720,7 +720,7 @@ impl<D: Door> Engine<D> {
         })
     }
 
-    // ── Geteilte Tresore ─────────────────────────────────────────────────────────────────────────────────
+    // ── Shared vaults ────────────────────────────────────────────────────────────────────────────────────
 
     /// Creates a shared vault; oneself is owner.
     pub async fn create_vault(&self, name: &str) -> Result<Id> {

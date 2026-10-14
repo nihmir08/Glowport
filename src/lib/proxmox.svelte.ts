@@ -10,7 +10,7 @@ export interface PveState {
   overview?: ProxmoxOverview;
   /** Message if reading failed. */
   error: string;
-  /** Wann zuletzt gelesen wurde. */
+  /** When it was last read. */
   at: number;
 }
 

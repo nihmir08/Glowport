@@ -816,14 +816,14 @@ impl Vault {
 
     /// Runs `work` completely or not at all, also inside a batch change.
     fn atomic<T>(&self, work: impl FnOnce() -> Result<T>) -> Result<T> {
-        self.conn.execute_batch("SAVEPOINT schritt")?;
+        self.conn.execute_batch("SAVEPOINT step")?;
         match work() {
             Ok(value) => {
-                self.conn.execute_batch("RELEASE schritt")?;
+                self.conn.execute_batch("RELEASE step")?;
                 Ok(value)
             }
             Err(e) => {
-                let _ = self.conn.execute_batch("ROLLBACK TO schritt; RELEASE schritt");
+                let _ = self.conn.execute_batch("ROLLBACK TO step; RELEASE step");
                 Err(e)
             }
         }
@@ -911,7 +911,7 @@ impl Vault {
         let envelope = seal(keys, &state.vault, &vault.key, *id, revision, deleted, plaintext);
         self.atomic(|| {
             if !state.dirty && state.synced > 0 {
-                let current = self.envelope(id)?.ok_or(VaultError::Corrupt("Datensatz"))?;
+                let current = self.envelope(id)?.ok_or(VaultError::Corrupt("record"))?;
                 self.store_base(&current)?;
             }
             self.store(&state.vault, &envelope, true, state.synced)
@@ -1000,7 +1000,7 @@ impl Vault {
         Ok(())
     }
 
-    // ── Konto ────────────────────────────────────────────────────────────────────────────────────────────
+    // ── Account ──────────────────────────────────────────────────────────────────────────────────────────
 
     /// The own public keys: signing (Ed25519) and receiving shared vault keys (X25519).
     pub fn public_keys(&self) -> Result<([u8; 32], [u8; 32])> {
@@ -1084,7 +1084,7 @@ impl Vault {
     pub fn link(&self) -> Result<Option<Zeroizing<Vec<u8>>>> {
         let keys = self.keys()?;
         let Some(stored) = self.meta_opt("link")? else { return Ok(None) };
-        open_small(&keys.account_key, AAD_LINK, &self.device_id()?, &stored).map(Some).ok_or(VaultError::Corrupt("Anmeldung am Sync-Server"))
+        open_small(&keys.account_key, AAD_LINK, &self.device_id()?, &stored).map(Some).ok_or(VaultError::Corrupt("sign-in to the sync server"))
     }
 
     pub fn set_link(&mut self, link: Option<&[u8]>) -> Result<()> {
@@ -1172,7 +1172,7 @@ impl Vault {
         Ok(())
     }
 
-    // ── Tresore ──────────────────────────────────────────────────────────────────────────────────────────
+    // ── Vaults ───────────────────────────────────────────────────────────────────────────────────────────
 
     pub fn personal(&self) -> Result<Id> {
         Ok(self.keys()?.personal)
@@ -1245,7 +1245,7 @@ impl Vault {
     pub fn roster_blob(&self, vault: &Id) -> Result<Vec<u8>> {
         let (keys, _) = self.vault_keys(vault)?;
         let stored = self.conn.query_row("SELECT roster FROM vaults WHERE id = ?1", [vault.as_slice()], |row| blob(row, 0))?;
-        Ok(open_small(&keys.account_key, AAD_ROSTER, vault, &stored).ok_or(VaultError::Corrupt("Mitgliederliste"))?.to_vec())
+        Ok(open_small(&keys.account_key, AAD_ROSTER, vault, &stored).ok_or(VaultError::Corrupt("member list"))?.to_vec())
     }
 
     /// As owner, signs a new member list without taking it over yet.
@@ -1286,7 +1286,7 @@ impl Vault {
         }
         self.touch();
         self.conn.execute("UPDATE vaults SET roster = ?2 WHERE id = ?1", params![vault.as_slice(), seal_small(&keys.account_key, AAD_ROSTER, vault, blob)])?;
-        let entry = self.unlocked.as_mut().and_then(|u| u.vaults.get_mut(vault)).expect("oben gefunden");
+        let entry = self.unlocked.as_mut().and_then(|u| u.vaults.get_mut(vault)).expect("found above");
         entry.roster = Some(roster);
         Ok(())
     }
@@ -1314,7 +1314,7 @@ impl Vault {
         Ok(())
     }
 
-    // ── Abgleich ─────────────────────────────────────────────────────────────────────────────────────────
+    // ── Sync ─────────────────────────────────────────────────────────────────────────────────────────────
 
     /// Up to which server number everything has been fetched.
     pub fn cursor(&self, vault: &Id) -> Result<u64> {
@@ -1709,35 +1709,35 @@ mod tests {
     /// Alters the file from outside, as an attacker with write access could.
     fn tamper(path: &Path, sql: &str) {
         let conn = Connection::open(path).unwrap();
-        assert!(conn.execute(sql, []).unwrap() > 0, "Manipulation hat nichts getroffen: {sql}");
+        assert!(conn.execute(sql, []).unwrap() > 0, "the tampering hit nothing: {sql}");
     }
 
     #[test]
     fn create_lock_unlock_round_trips() {
         let temp = Temp::new("roundtrip");
-        let mut vault = Vault::create(&temp.0, "richtig", FAST).unwrap();
-        vault.put(None, b"eins").unwrap();
-        vault.put(None, b"zwei").unwrap();
+        let mut vault = Vault::create(&temp.0, "right", FAST).unwrap();
+        vault.put(None, b"one").unwrap();
+        vault.put(None, b"two").unwrap();
         vault.lock();
         assert!(matches!(vault.list(), Err(VaultError::Locked)));
         drop(vault);
 
         let mut vault = Vault::open(&temp.0).unwrap();
         assert!(!vault.is_unlocked());
-        vault.unlock("richtig").unwrap();
-        assert_eq!(texts(&vault), ["eins", "zwei"]);
+        vault.unlock("right").unwrap();
+        assert_eq!(texts(&vault), ["one", "two"]);
     }
 
     #[test]
     fn wrong_password_is_rejected_and_changes_nothing() {
         let temp = Temp::new("wrongpw");
-        let mut vault = Vault::create(&temp.0, "richtig", FAST).unwrap();
-        vault.put(None, b"eins").unwrap();
+        let mut vault = Vault::create(&temp.0, "right", FAST).unwrap();
+        vault.put(None, b"one").unwrap();
         drop(vault);
         let before = std::fs::read(&temp.0).unwrap();
 
         let mut vault = Vault::open(&temp.0).unwrap();
-        assert!(matches!(vault.unlock("falsch"), Err(VaultError::WrongPassword)));
+        assert!(matches!(vault.unlock("wrong"), Err(VaultError::WrongPassword)));
         assert!(matches!(vault.unlock(""), Err(VaultError::WrongPassword)));
         assert!(!vault.is_unlocked());
         drop(vault);
@@ -1747,8 +1747,8 @@ mod tests {
     #[test]
     fn locked_vault_refuses_everything() {
         let temp = Temp::new("locked");
-        let mut vault = Vault::create(&temp.0, "richtig", FAST).unwrap();
-        let id = vault.put(None, b"eins").unwrap();
+        let mut vault = Vault::create(&temp.0, "right", FAST).unwrap();
+        let id = vault.put(None, b"one").unwrap();
         vault.lock();
         assert!(matches!(vault.put(None, b"x"), Err(VaultError::Locked)));
         assert!(matches!(vault.put(Some(id), b"x"), Err(VaultError::Locked)));
@@ -1759,7 +1759,7 @@ mod tests {
     #[test]
     fn update_raises_revision_and_delete_leaves_tombstone() {
         let temp = Temp::new("revisions");
-        let mut vault = Vault::create(&temp.0, "richtig", FAST).unwrap();
+        let mut vault = Vault::create(&temp.0, "right", FAST).unwrap();
         let id = vault.put(None, b"old").unwrap();
         assert_eq!(vault.put(Some(id), b"new").unwrap(), id);
         let listing = vault.list().unwrap();
@@ -1783,16 +1783,16 @@ mod tests {
         let cases = [
             ("ciphertext", "UPDATE records SET ciphertext = substr(ciphertext, 1, 2) || x'00' || substr(ciphertext, 4)"),
             ("Nonce", "UPDATE records SET nonce = x'000000000000000000000000000000000000000000000000'"),
-            ("Signatur", "UPDATE records SET signature = substr(signature, 1, 10) || x'00' || substr(signature, 12)"),
+            ("signature", "UPDATE records SET signature = substr(signature, 1, 10) || x'00' || substr(signature, 12)"),
             ("Revision", "UPDATE records SET revision = revision + 1"),
             ("deletion mark set", "UPDATE records SET deleted = 1"),
             ("Autor", "UPDATE records SET author = x'0000000000000000000000000000000000000000000000000000000000000000'"),
             ("vault ID", "UPDATE records SET vault_id = (SELECT id FROM records LIMIT 1)"),
-            ("Kennung", "UPDATE records SET id = x'01010101010101010101010101010101'"),
+            ("ID", "UPDATE records SET id = x'01010101010101010101010101010101'"),
         ];
         for (what, sql) in cases {
             let temp = Temp::new(&format!("tamper-{}", what.replace(' ', "-")));
-            let mut vault = Vault::create(&temp.0, "richtig", FAST).unwrap();
+            let mut vault = Vault::create(&temp.0, "right", FAST).unwrap();
             vault.put(None, b"exactly one record with some content").unwrap();
             // The vault ID points to `vaults` via a foreign key; this case needs a second entry there.
             if what == "vault ID" {
@@ -1808,7 +1808,7 @@ mod tests {
     #[test]
     fn swapped_and_resurrected_records_are_detected() {
         let temp = Temp::new("swap");
-        let mut vault = Vault::create(&temp.0, "richtig", FAST).unwrap();
+        let mut vault = Vault::create(&temp.0, "right", FAST).unwrap();
         let a = vault.put(None, b"Host A").unwrap();
         let b = vault.put(None, b"Host B").unwrap();
         let conn = Connection::open(&temp.0).unwrap();
@@ -1839,15 +1839,15 @@ mod tests {
             "UPDATE meta SET value = substr(value, 1, 5) || x'00' || substr(value, 7) WHERE key = 'account_wrapped'",
         ] {
             let temp = Temp::new("header");
-            drop(Vault::create(&temp.0, "richtig", FAST).unwrap());
+            drop(Vault::create(&temp.0, "right", FAST).unwrap());
             tamper(&temp.0, sql);
-            assert!(matches!(Vault::open(&temp.0).unwrap().unlock("richtig"), Err(VaultError::WrongPassword)), "{sql}");
+            assert!(matches!(Vault::open(&temp.0).unwrap().unlock("right"), Err(VaultError::WrongPassword)), "{sql}");
         }
         // A swapped public key shows up when unwrapping the private one.
         let temp = Temp::new("header-key");
-        drop(Vault::create(&temp.0, "richtig", FAST).unwrap());
+        drop(Vault::create(&temp.0, "right", FAST).unwrap());
         tamper(&temp.0, "UPDATE meta SET value = x'0000000000000000000000000000000000000000000000000000000000000000' WHERE key = 'ed25519_public'");
-        assert!(matches!(Vault::open(&temp.0).unwrap().unlock("richtig"), Err(VaultError::Corrupt("ed25519"))));
+        assert!(matches!(Vault::open(&temp.0).unwrap().unlock("right"), Err(VaultError::Corrupt("ed25519"))));
     }
 
     #[test]
@@ -1855,7 +1855,7 @@ mod tests {
         let temp = Temp::new("changepw");
         let mut vault = Vault::create(&temp.0, "old", FAST).unwrap();
         vault.put(None, b"stays").unwrap();
-        assert!(matches!(vault.change_password("falsch", "new", FAST), Err(VaultError::WrongPassword)));
+        assert!(matches!(vault.change_password("wrong", "new", FAST), Err(VaultError::WrongPassword)));
         vault.change_password("old", "new", FAST).unwrap();
         assert_eq!(texts(&vault), ["stays"], "an open vault stays usable");
         drop(vault);
@@ -1869,40 +1869,40 @@ mod tests {
     #[test]
     fn failed_batch_leaves_nothing_behind() {
         let temp = Temp::new("batch");
-        let mut vault = Vault::create(&temp.0, "richtig", FAST).unwrap();
-        vault.put(None, b"vorher").unwrap();
+        let mut vault = Vault::create(&temp.0, "right", FAST).unwrap();
+        vault.put(None, b"before").unwrap();
         let result = vault.batch(|v| {
-            v.put(None, b"halb")?;
+            v.put(None, b"half")?;
             v.put(Some([9; 16]), b"does not exist")
         });
         assert!(matches!(result, Err(VaultError::NotFound)));
-        assert_eq!(texts(&vault), ["vorher"]);
+        assert_eq!(texts(&vault), ["before"]);
 
-        vault.batch(|v| v.put(None, b"ganz").map(drop)).unwrap();
-        assert_eq!(texts(&vault), ["ganz", "vorher"]);
+        vault.batch(|v| v.put(None, b"whole").map(drop)).unwrap();
+        assert_eq!(texts(&vault), ["before", "whole"]);
     }
 
     #[test]
     fn backup_is_a_working_copy() {
         let temp = Temp::new("backup-src");
         let copy = Temp::new("backup-dst");
-        let mut vault = Vault::create(&temp.0, "richtig", FAST).unwrap();
+        let mut vault = Vault::create(&temp.0, "right", FAST).unwrap();
         vault.put(None, b"gesichert").unwrap();
         vault.backup(&copy.0).unwrap();
-        vault.put(None, b"danach").unwrap();
+        vault.put(None, b"after").unwrap();
         vault.backup(&copy.0).unwrap();
 
         let mut restored = Vault::open(&copy.0).unwrap();
-        assert!(matches!(restored.unlock("falsch"), Err(VaultError::WrongPassword)));
-        restored.unlock("richtig").unwrap();
-        assert_eq!(texts(&restored), ["danach", "gesichert"]);
+        assert!(matches!(restored.unlock("wrong"), Err(VaultError::WrongPassword)));
+        restored.unlock("right").unwrap();
+        assert_eq!(texts(&restored), ["after", "gesichert"]);
     }
 
     #[test]
     fn create_and_open_reject_bad_files() {
         let temp = Temp::new("badfiles");
-        drop(Vault::create(&temp.0, "richtig", FAST).unwrap());
-        assert!(matches!(Vault::create(&temp.0, "richtig", FAST), Err(VaultError::AlreadyExists)));
+        drop(Vault::create(&temp.0, "right", FAST).unwrap());
+        assert!(matches!(Vault::create(&temp.0, "right", FAST), Err(VaultError::AlreadyExists)));
 
         tamper(&temp.0, "UPDATE meta SET value = x'03000000' WHERE key = 'format_version'");
         assert!(matches!(Vault::open(&temp.0), Err(VaultError::UnsupportedFormat(3))));
@@ -1914,11 +1914,11 @@ mod tests {
     #[test]
     fn stored_file_reveals_no_plaintext() {
         let temp = Temp::new("leak");
-        let mut vault = Vault::create(&temp.0, "richtig", FAST).unwrap();
+        let mut vault = Vault::create(&temp.0, "right", FAST).unwrap();
         vault.put(None, br#"{"t":"host","name":"geheimer-server","password":"hunter2-sehr-geheim"}"#).unwrap();
         drop(vault);
         let bytes = std::fs::read(&temp.0).unwrap();
-        for needle in [b"geheimer-server".as_slice(), b"hunter2", b"\"host\"", b"richtig"] {
+        for needle in [b"geheimer-server".as_slice(), b"hunter2", b"\"host\"", b"right"] {
             assert!(!bytes.windows(needle.len()).any(|w| w == needle), "plaintext found in the file");
         }
     }
@@ -1953,14 +1953,14 @@ mod tests {
     #[ignore = "measurement, not a test"]
     fn measure_default_unlock() {
         let temp = Temp::new("measure");
-        drop(Vault::create(&temp.0, "richtig", KdfParams::DEFAULT).unwrap());
+        drop(Vault::create(&temp.0, "right", KdfParams::DEFAULT).unwrap());
         let mut vault = Vault::open(&temp.0).unwrap();
         let start = Instant::now();
-        vault.unlock("richtig").unwrap();
+        vault.unlock("right").unwrap();
         println!("Unlocking with {:?}: {} ms", KdfParams::DEFAULT, start.elapsed().as_millis());
     }
 
-    // ── Fassung 2: mehrere Tresore, Abgleich, Teilen ─────────────────────────────────────────────────────
+    // ── Format 2: several vaults, syncing, sharing ───────────────────────────────────────────────────────
 
     use serde_json::{json, Value};
 
@@ -1973,7 +1973,7 @@ mod tests {
         let copy = Temp(Vault::migration_copy(&temp.0));
 
         let mut vault = Vault::open(&temp.0).unwrap();
-        assert!(matches!(vault.unlock("falsch"), Err(VaultError::WrongPassword)));
+        assert!(matches!(vault.unlock("wrong"), Err(VaultError::WrongPassword)));
         vault.unlock("fixture-passwort").unwrap();
         let listing = vault.list().unwrap();
         assert!(listing.damaged.is_empty());
@@ -2013,7 +2013,7 @@ mod tests {
 
     fn member(vault: &Vault, seed: u8, role: Role) -> Member {
         let (ed25519, x25519) = vault.public_keys().unwrap();
-        Member { account: crypto::hex(&account(seed)), name: format!("konto{seed}"), ed25519: crypto::hex(&ed25519), x25519: crypto::hex(&x25519), role }
+        Member { account: crypto::hex(&account(seed)), name: format!("account{seed}"), ed25519: crypto::hex(&ed25519), x25519: crypto::hex(&x25519), role }
     }
 
     /// Plays the server: whatever waits at `from` arrives at `to` and counts as accepted at `from`.
@@ -2037,8 +2037,8 @@ mod tests {
     /// Two devices of the same account: the second one is created from what the server keeps.
     fn two_devices(name: &str) -> (Temp, Temp, Vault, Vault, Id) {
         let (ta, tb) = (Temp::new(&format!("{name}-a")), Temp::new(&format!("{name}-b")));
-        let a = Vault::create(&ta.0, "richtig", FAST).unwrap();
-        let b = Vault::create_from_account(&tb.0, "richtig", &a.account().unwrap()).unwrap();
+        let a = Vault::create(&ta.0, "right", FAST).unwrap();
+        let b = Vault::create_from_account(&tb.0, "right", &a.account().unwrap()).unwrap();
         let personal = a.personal().unwrap();
         (ta, tb, a, b, personal)
     }
@@ -2054,30 +2054,30 @@ mod tests {
         assert_eq!(values(&b, &personal), [json!({"name": "web"})]);
         assert!(b.pending(&personal).unwrap().is_empty(), "fetched records do not wait");
 
-        let other = Temp::new("zweites-falsch");
-        assert!(matches!(Vault::create_from_account(&other.0, "falsch", &a.account().unwrap()), Err(VaultError::WrongPassword)));
+        let other = Temp::new("second-wrong");
+        assert!(matches!(Vault::create_from_account(&other.0, "wrong", &a.account().unwrap()), Err(VaultError::WrongPassword)));
         assert!(!other.0.exists(), "no remains of a failed sign-in");
-        assert!(matches!(Vault::create_from_account(&tb.0, "richtig", &a.account().unwrap()), Err(VaultError::AlreadyExists)));
+        assert!(matches!(Vault::create_from_account(&tb.0, "right", &a.account().unwrap()), Err(VaultError::AlreadyExists)));
 
         // The sign-in key follows from the password and opens nothing.
-        let auth = a.auth_key("richtig").unwrap();
+        let auth = a.auth_key("right").unwrap();
         let blob = a.account().unwrap();
-        assert_eq!(auth.as_ref(), auth_key("richtig", &blob.salt, blob.kdf).unwrap().as_ref());
-        assert!(matches!(a.auth_key("falsch"), Err(VaultError::WrongPassword)));
+        assert_eq!(auth.as_ref(), auth_key("right", &blob.salt, blob.kdf).unwrap().as_ref());
+        assert!(matches!(a.auth_key("wrong"), Err(VaultError::WrongPassword)));
         assert!(matches!(a.unlock_with_key(&auth), Err(VaultError::StaleDeviceKey)));
     }
 
     #[test]
     fn a_waiting_change_raises_the_revision_only_once() {
         let (_ta, _tb, mut a, mut b, personal) = two_devices("revision");
-        let id = put_json(&mut a, None, json!({"name": "eins"}));
-        put_json(&mut a, Some(id), json!({"name": "zwei"}));
+        let id = put_json(&mut a, None, json!({"name": "one"}));
+        put_json(&mut a, Some(id), json!({"name": "two"}));
         assert_eq!(a.pending(&personal).unwrap()[0].revision, 2, "what the server does not know counts up freely");
         deliver(&mut a, &mut b, &personal);
         assert!(a.pending(&personal).unwrap().is_empty());
 
-        put_json(&mut a, Some(id), json!({"name": "drei"}));
-        put_json(&mut a, Some(id), json!({"name": "vier"}));
+        put_json(&mut a, Some(id), json!({"name": "three"}));
+        put_json(&mut a, Some(id), json!({"name": "four"}));
         let pending = a.pending(&personal).unwrap();
         assert_eq!((pending.len(), pending[0].revision), (1, 3), "exactly one above the server");
         assert_eq!(a.base(&id).unwrap().unwrap().revision, 2, "the synced state is kept");
@@ -2089,7 +2089,7 @@ mod tests {
         a.acknowledge(&personal, &sent).unwrap();
         let pending = a.pending(&personal).unwrap();
         assert_eq!((pending.len(), pending[0].revision), (1, 4));
-        assert_eq!(values(&b, &personal), [json!({"name": "vier"})]);
+        assert_eq!(values(&b, &personal), [json!({"name": "four"})]);
         deliver(&mut a, &mut b, &personal);
         assert_eq!(values(&b, &personal), [json!({"name": "five"})]);
         assert!(a.base(&id).unwrap().is_none() && a.pending(&personal).unwrap().is_empty());
@@ -2151,17 +2151,17 @@ mod tests {
     #[test]
     fn forged_and_stale_records_from_the_server_are_refused() {
         let (_ta, _tb, mut a, mut b, personal) = two_devices("faelschen");
-        let id = put_json(&mut a, None, json!({"name": "eins"}));
+        let id = put_json(&mut a, None, json!({"name": "one"}));
         let first = a.pending(&personal).unwrap();
         deliver(&mut a, &mut b, &personal);
-        put_json(&mut a, Some(id), json!({"name": "zwei"}));
+        put_json(&mut a, Some(id), json!({"name": "two"}));
         let second = a.pending(&personal).unwrap();
         deliver(&mut a, &mut b, &personal);
 
         let refused = |b: &mut Vault, envelope: Envelope, what: &str| {
             let applied = b.apply_remote(&personal, &[envelope]).unwrap();
             assert_eq!((applied.rejected.len(), applied.taken.len(), applied.merged.len()), (1, 0, 0), "{what}");
-            assert_eq!(values(b, &personal), [json!({"name": "zwei"})], "{what}");
+            assert_eq!(values(b, &personal), [json!({"name": "two"})], "{what}");
         };
         refused(&mut b, first[0].clone(), "alter Stand");
         let mut changed = second[0].clone();
@@ -2175,7 +2175,7 @@ mod tests {
         refused(&mut b, changed, "passed off as deleted");
         let mut changed = second[0].clone();
         changed.id = [3; 16];
-        refused(&mut b, changed, "unter anderer Kennung");
+        refused(&mut b, changed, "under another ID");
 
         // A foreign account has nothing to write in the personal vault, not even with the right key.
         let other = Temp::new("faelschen-fremd");
@@ -2200,7 +2200,7 @@ mod tests {
         let mut a = Vault::create(&temps[0].0, "a", FAST).unwrap();
         let mut b = Vault::create(&temps[1].0, "b", FAST).unwrap();
         let mut c = Vault::create(&temps[2].0, "c", FAST).unwrap();
-        let shared = a.create_shared(&account(1), "konto1").unwrap();
+        let shared = a.create_shared(&account(1), "account1").unwrap();
         let mut roster = a.vaults().unwrap()[1].roster.clone().unwrap();
         roster.version = 2;
         roster.members.extend([member(&b, 2, Role::Write), member(&c, 3, Role::Read)]);
@@ -2215,7 +2215,7 @@ mod tests {
 
     #[test]
     fn a_shared_vault_reaches_its_members_and_enforces_roles() {
-        let Team { _temps, mut a, mut b, mut c, shared } = team("teilen");
+        let Team { _temps, mut a, mut b, mut c, shared } = team("share");
         let infos = b.vaults().unwrap();
         assert_eq!((infos.len(), infos[0].kind, infos[1].kind, infos[1].role), (2, Kind::Personal, Kind::Shared, Role::Write));
         assert_eq!(c.vaults().unwrap()[1].role, Role::Read);
@@ -2287,7 +2287,7 @@ mod tests {
         b.put_in(&shared, br#"{"name":"from B"}"#).unwrap();
 
         let mut roster = a.vaults().unwrap()[1].roster.clone().unwrap();
-        roster.members.retain(|m| m.name != "konto3");
+        roster.members.retain(|m| m.name != "account3");
         roster.version += 1;
         assert!(matches!(a.prepare_rotation(&shared, &roster), Err(VaultError::Roster(RosterError::Stale))), "without a new key epoch");
         roster.epoch += 1;
@@ -2333,13 +2333,13 @@ mod tests {
 
     #[test]
     fn discarding_waiting_changes_returns_to_the_synced_state() {
-        let (_ta, _tb, mut a, mut b, personal) = two_devices("verwerfen");
-        let id = put_json(&mut a, None, json!({"name": "abgeglichen"}));
+        let (_ta, _tb, mut a, mut b, personal) = two_devices("discard");
+        let id = put_json(&mut a, None, json!({"name": "synced"}));
         deliver(&mut a, &mut b, &personal);
         put_json(&mut a, Some(id), json!({"name": "changed"}));
         put_json(&mut a, None, json!({"name": "new"}));
         assert_eq!(a.discard_pending(&personal).unwrap(), 2);
-        assert_eq!(values(&a, &personal), [json!({"name": "abgeglichen"})]);
+        assert_eq!(values(&a, &personal), [json!({"name": "synced"})]);
         assert!(a.pending(&personal).unwrap().is_empty());
     }
 
@@ -2347,7 +2347,7 @@ mod tests {
     fn the_link_to_the_server_stays_on_this_device() {
         let temp = Temp::new("link");
         let copy = Temp::new("link-copy");
-        let mut vault = Vault::create(&temp.0, "richtig", FAST).unwrap();
+        let mut vault = Vault::create(&temp.0, "right", FAST).unwrap();
         let personal = vault.personal().unwrap();
         assert!(vault.link().unwrap().is_none());
         vault.set_link(Some(b"https://sync.example|token")).unwrap();
@@ -2362,7 +2362,7 @@ mod tests {
 
         vault.lock();
         assert!(matches!(vault.link(), Err(VaultError::Locked)));
-        vault.unlock("richtig").unwrap();
+        vault.unlock("right").unwrap();
         assert_eq!(vault.link().unwrap().unwrap().as_slice(), b"https://sync.example|token");
         assert_eq!(vault.cursor(&personal).unwrap(), 42);
         let bytes = std::fs::read(&temp.0).unwrap();
@@ -2370,7 +2370,7 @@ mod tests {
 
         // The backup does not know the server and syncs from scratch.
         let mut restored = Vault::open(&copy.0).unwrap();
-        restored.unlock("richtig").unwrap();
+        restored.unlock("right").unwrap();
         assert!(restored.link().unwrap().is_none());
         assert_eq!(restored.cursor(&personal).unwrap(), 0);
         vault.set_link(None).unwrap();
@@ -2379,10 +2379,10 @@ mod tests {
 
     #[test]
     fn a_password_changed_elsewhere_takes_over_once_it_opens() {
-        let (_ta, _tb, mut a, mut b, _) = two_devices("passwort");
-        assert!(matches!(a.rewrap("falsch", "new", FAST), Err(VaultError::WrongPassword)));
-        let (wrapping, old_auth, new_auth) = a.rewrap("richtig", "new", FAST).unwrap();
-        assert_eq!(old_auth.as_ref(), a.auth_key("richtig").unwrap().as_ref(), "before adopting, the old one still applies");
+        let (_ta, _tb, mut a, mut b, _) = two_devices("password");
+        assert!(matches!(a.rewrap("wrong", "new", FAST), Err(VaultError::WrongPassword)));
+        let (wrapping, old_auth, new_auth) = a.rewrap("right", "new", FAST).unwrap();
+        assert_eq!(old_auth.as_ref(), a.auth_key("right").unwrap().as_ref(), "before adopting, the old one still applies");
         a.install_wrapping(&wrapping).unwrap();
         assert_eq!(new_auth.as_ref(), a.auth_key("new").unwrap().as_ref());
         assert_ne!(old_auth.as_ref(), new_auth.as_ref());
@@ -2390,15 +2390,15 @@ mod tests {
         // The second device gets the new wrapping from the server and stores it as pending: the old password keeps opening.
         b.stage_wrapping(&wrapping).unwrap();
         b.lock();
-        b.unlock("richtig").unwrap();
+        b.unlock("right").unwrap();
         assert_ne!(b.current_wrapping().unwrap(), wrapping);
         b.lock();
-        assert!(matches!(b.unlock("falsch"), Err(VaultError::WrongPassword)));
+        assert!(matches!(b.unlock("wrong"), Err(VaultError::WrongPassword)));
         // With the new password it becomes the current one, and the old one no longer opens.
         b.unlock("new").unwrap();
         assert_eq!(b.current_wrapping().unwrap(), wrapping);
         b.lock();
-        assert!(matches!(b.unlock("richtig"), Err(VaultError::WrongPassword)));
+        assert!(matches!(b.unlock("right"), Err(VaultError::WrongPassword)));
         b.unlock("new").unwrap();
 
         // Nonsense from the server locks nobody out, not even the real wrapping of a foreign account.
@@ -2407,7 +2407,7 @@ mod tests {
         b.stage_wrapping(&garbage).unwrap();
         b.lock();
         b.unlock("new").unwrap();
-        let other = Temp::new("passwort-fremd");
+        let other = Temp::new("password-foreign");
         let stranger = Vault::create(&other.0, "fremd", FAST).unwrap();
         b.stage_wrapping(&stranger.current_wrapping().unwrap()).unwrap();
         b.lock();
@@ -2418,39 +2418,39 @@ mod tests {
 
     #[test]
     fn names_of_other_people_are_not_readable_in_the_file() {
-        let Team { _temps, a, mut b, c: _, shared } = team("namen");
+        let Team { _temps, a, mut b, c: _, shared } = team("names");
         assert_eq!(b.roster_blob(&shared).unwrap(), a.roster_blob(&shared).unwrap(), "the same list as it goes to the server");
 
-        let contact = Contact { name: "konto1".into(), ed25519: "aa".repeat(32), x25519: "bb".repeat(32), seen_at: 5 };
+        let contact = Contact { name: "account1".into(), ed25519: "aa".repeat(32), x25519: "bb".repeat(32), seen_at: 5 };
         assert!(b.contact(&account(1)).unwrap().is_none());
         b.remember_contact(&account(1), &contact).unwrap();
         b.remember_contact(&account(1), &Contact { seen_at: 9, ..contact.clone() }).unwrap();
         assert_eq!(b.contact(&account(1)).unwrap().unwrap().seen_at, 9);
         assert!(b.contact(&account(2)).unwrap().is_none());
 
-        for text in ["notice one about konto1", "notice two", "notice three"] {
+        for text in ["notice one about account1", "notice two", "notice three"] {
             b.add_notice(text.as_bytes()).unwrap();
         }
         let notices = b.notices().unwrap();
-        assert_eq!(notices.iter().map(|notice| String::from_utf8(notice.data.to_vec()).unwrap()).collect::<Vec<_>>(), ["notice one about konto1", "notice two", "notice three"]);
+        assert_eq!(notices.iter().map(|notice| String::from_utf8(notice.data.to_vec()).unwrap()).collect::<Vec<_>>(), ["notice one about account1", "notice two", "notice three"]);
         b.clear_notices(notices[1].id).unwrap();
         assert_eq!(b.notices().unwrap().len(), 1);
 
         let bytes = std::fs::read(b.path()).unwrap();
-        for needle in [b"konto1".as_slice(), b"konto3", b"Hinweis"] {
+        for needle in [b"account1".as_slice(), b"account3", b"Notice"] {
             assert!(!bytes.windows(needle.len()).any(|w| w == needle), "plaintext found in the file");
         }
         b.lock();
         assert!(matches!(b.contact(&account(1)), Err(VaultError::Locked)));
         assert!(matches!(b.notices(), Err(VaultError::Locked)));
         b.unlock("b").unwrap();
-        assert_eq!(b.contact(&account(1)).unwrap().unwrap().name, "konto1");
+        assert_eq!(b.contact(&account(1)).unwrap().unwrap().name, "account1");
     }
 
     #[test]
     fn old_notices_fall_out() {
-        let temp = Temp::new("hinweise");
-        let mut vault = Vault::create(&temp.0, "richtig", FAST).unwrap();
+        let temp = Temp::new("notices");
+        let mut vault = Vault::create(&temp.0, "right", FAST).unwrap();
         for i in 0..(MAX_NOTICES + 5) {
             vault.add_notice(format!("{i}").as_bytes()).unwrap();
         }
@@ -2471,7 +2471,7 @@ mod tests {
 
     #[test]
     fn a_full_state_from_the_server_removes_what_is_gone_there() {
-        let (_ta, _tb, mut a, mut b, personal) = two_devices("ganz");
+        let (_ta, _tb, mut a, mut b, personal) = two_devices("whole");
         let kept = put_json(&mut a, None, json!({"name": "stays"}));
         let gone = put_json(&mut a, None, json!({"name": "deleted there"}));
         let edited = put_json(&mut a, None, json!({"name": "deleted there, changed here"}));
@@ -2492,10 +2492,10 @@ mod tests {
     fn a_device_with_own_data_can_bring_it_into_an_account() {
         let (_ta, _tb, mut a, _b, personal) = two_devices("uebernehmen");
         let existing = put_json(&mut a, None, json!({"name": "in the account"}));
-        let local = Temp::new("uebernehmen-lokal");
-        let mut old = Vault::create(&local.0, "anderes passwort", FAST).unwrap();
-        let group = put_json(&mut old, None, json!({"t": "group", "name": "Gruppe"}));
-        let host = put_json(&mut old, None, json!({"t": "host", "name": "lokal", "group": crypto::hex(&group)}));
+        let local = Temp::new("adopt-local");
+        let mut old = Vault::create(&local.0, "other password", FAST).unwrap();
+        let group = put_json(&mut old, None, json!({"t": "group", "name": "Group"}));
+        let host = put_json(&mut old, None, json!({"t": "host", "name": "local", "group": crypto::hex(&group)}));
         let deleted = put_json(&mut old, None, json!({"name": "was deleted"}));
         old.delete(&deleted).unwrap();
 
@@ -2556,7 +2556,7 @@ mod tests {
     fn an_invitation_can_be_looked_at_before_joining() {
         let Team { _temps, mut a, b, c: _, shared } = team("einladung");
         a.put_in(&shared, br#"{"t":"vault-info","name":"Team Server"}"#).unwrap();
-        let gone = a.put_in(&shared, b"weg").unwrap();
+        let gone = a.put_in(&shared, b"gone").unwrap();
         a.delete(&gone).unwrap();
         let rows = a.pending(&shared).unwrap();
         let (roster, sealed) = (a.roster_blob(&shared).unwrap(), |v: &Vault| a.seal_key_for(&shared, &v.public_keys().unwrap().1).unwrap());
@@ -2569,7 +2569,7 @@ mod tests {
         next.members.push(member(&invited, 4, Role::Read));
         let roster = a.sign_roster(&shared, &next).unwrap();
         let (seen, plain) = invited.peek_invitation(&shared, &sealed(&invited), &roster, &rows).unwrap();
-        assert_eq!(seen.owner().unwrap().name, "konto1");
+        assert_eq!(seen.owner().unwrap().name, "account1");
         assert_eq!(plain.iter().map(|p| p.to_vec()).collect::<Vec<_>>(), [br#"{"t":"vault-info","name":"Team Server"}"#.to_vec()]);
         assert_eq!(invited.vaults().unwrap().len(), 1, "only looked at, not taken in");
         assert!(matches!(invited.peek_invitation(&shared, &sealed(&b), &roster, &rows), Err(VaultError::Corrupt(_))), "someone else's key");
@@ -2599,7 +2599,7 @@ mod tests {
         let mut roster = b.vaults().unwrap()[1].roster.clone().unwrap();
         roster.version += 1;
         assert!(matches!(a.sign_roster(&shared, &roster), Err(VaultError::NotOwner)));
-        roster.members.retain(|m| m.name != "konto3");
+        roster.members.retain(|m| m.name != "account3");
         roster.epoch += 1;
         let rotation = b.prepare_rotation(&shared, &roster).unwrap();
         let (blob, records) = (rotation.roster.clone(), rotation.records.clone());

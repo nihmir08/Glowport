@@ -222,16 +222,16 @@ async fn accounts_need_a_code_and_logins_are_throttled() {
     fails(register(&server, "carl", &code).await.map(drop), 403, "code_invalid");
     assert!(server.get::<Vec<Invite>>("/v1/admin/invites", &anna.token).await.unwrap().is_empty());
 
-    // Unbekannte Namen bekommen feste erfundene Werte.
+    // Unknown names get fixed made-up values.
     let unknown = |name: &str| server.post::<PreloginReply>("/v1/prelogin", None, Prelogin { username: name.into() });
-    assert_eq!(unknown("niemand").await.unwrap(), unknown("niemand").await.unwrap());
-    assert_ne!(unknown("niemand").await.unwrap().salt, unknown("keiner").await.unwrap().salt);
+    assert_eq!(unknown("nobody").await.unwrap(), unknown("nobody").await.unwrap());
+    assert_ne!(unknown("nobody").await.unwrap().salt, unknown("none").await.unwrap().salt);
 
     // The second device opens with the master password; wrong attempts are slowed down.
     let second = login(&server, "bert", "bert").await.unwrap();
     assert_eq!(second.vault.public_keys().unwrap(), bert.vault.public_keys().unwrap());
     for _ in 0..5 {
-        fails(login(&server, "bert", "falsch").await.map(drop), 401, "unauthorized");
+        fails(login(&server, "bert", "wrong").await.map(drop), 401, "unauthorized");
     }
     fails(login(&server, "bert", "bert").await.map(drop), 429, "too_many_attempts");
     server.pass(16 * MINUTE);
@@ -247,7 +247,7 @@ async fn two_devices_of_one_account_converge() {
     let server = Server::new();
     let mut one = register(&server, "anna", &server.setup).await.unwrap();
     let personal = one.personal();
-    one.vault.put(None, b"eins").unwrap();
+    one.vault.put(None, b"one").unwrap();
     let host = one.vault.put(None, br#"{"name":"web","own":{"port":22}}"#).unwrap();
     assert_eq!(one.push(&server, &personal).await.unwrap().seq, 1);
 
@@ -263,7 +263,7 @@ async fn two_devices_of_one_account_converge() {
     assert!(one.push(&server, &personal).await.unwrap().accepted);
     two.pull(&server, &personal).await.unwrap();
     one.pull(&server, &personal).await.unwrap();
-    assert_eq!(one.names(&personal), ["eins", r#"{"name":"web-01","own":{"port":2222}}"#]);
+    assert_eq!(one.names(&personal), ["one", r#"{"name":"web-01","own":{"port":2222}}"#]);
     assert_eq!(two.names(&personal), one.names(&personal));
     assert!(one.vault.pending(&personal).unwrap().is_empty() && two.vault.pending(&personal).unwrap().is_empty());
 
@@ -271,7 +271,7 @@ async fn two_devices_of_one_account_converge() {
     one.vault.delete(&host).unwrap();
     one.push(&server, &personal).await.unwrap();
     two.pull(&server, &personal).await.unwrap();
-    assert_eq!(two.names(&personal), ["eins"]);
+    assert_eq!(two.names(&personal), ["one"]);
 
     // All or nothing: a package with an outdated record does not get the new one in either.
     let stale = two.vault.pending(&personal).unwrap();
@@ -423,11 +423,11 @@ async fn devices_password_and_administration() {
     // Changing the password: only with the previous sign-in key; afterwards the new one applies.
     let third = login(&server, "bert", "bert").await.unwrap();
     let old_auth = bert.vault.auth_key("bert").unwrap();
-    bert.vault.change_password("bert", "neues passwort", FAST).unwrap();
+    bert.vault.change_password("bert", "new password", FAST).unwrap();
     let account = bert.vault.account().unwrap();
     let change = |auth: &[u8]| PasswordChange {
         auth_key: auth.into(),
-        new_auth_key: bert.vault.auth_key("neues passwort").unwrap().as_ref().into(),
+        new_auth_key: bert.vault.auth_key("new password").unwrap().as_ref().into(),
         salt: account.salt.into(),
         kdf: account.kdf.into(),
         account_nonce: (&account.account_nonce).into(),
@@ -438,7 +438,7 @@ async fn devices_password_and_administration() {
     server.post::<()>("/v1/account/password", Some(&bert.token), change(old_auth.as_ref())).await.unwrap();
     fails(server.get::<Overview>("/v1/account", &third.token).await, 401, "unauthorized");
     fails(login(&server, "bert", "bert").await.map(drop), 401, "unauthorized");
-    let fresh = login(&server, "bert", "neues passwort").await.unwrap();
+    let fresh = login(&server, "bert", "new password").await.unwrap();
     assert_eq!(fresh.vault.public_keys().unwrap(), bert.vault.public_keys().unwrap());
 
     // Administration: view, disable, enable, delete. None of it opens a vault.
@@ -453,7 +453,7 @@ async fn devices_password_and_administration() {
     fails(server.post::<()>(&format!("/v1/admin/accounts/{}/disable", crypto::hex(&anna.account)), Some(&anna.token), ()).await, 403, "own_account");
     server.post::<()>(&format!("/v1/admin/accounts/{id}/disable"), Some(&anna.token), ()).await.unwrap();
     fails(server.get::<Overview>("/v1/account", &bert.token).await, 403, "account_disabled");
-    fails(login(&server, "bert", "neues passwort").await.map(drop), 403, "account_disabled");
+    fails(login(&server, "bert", "new password").await.map(drop), 403, "account_disabled");
     server.post::<()>(&format!("/v1/admin/accounts/{id}/enable"), Some(&anna.token), ()).await.unwrap();
     server.get::<Overview>("/v1/account", &bert.token).await.unwrap();
     server.delete(&format!("/v1/admin/accounts/{id}"), &anna.token).await.unwrap();

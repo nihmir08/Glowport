@@ -580,8 +580,8 @@ mod tests {
         assert_eq!(codec.typed(&[0x7f, 0x7f, 0x7f]).echo, b"\x08 \x08\x08 \x08");
         assert_eq!(codec.typed(b"\r").wire, b"\r\n");
         // Ctrl+U discards, Ctrl+C reports the interruption to the server.
-        codec.typed(b"weg");
-        assert_eq!(codec.typed(&[0x15]).echo, b"\x08 \x08\x08 \x08\x08 \x08");
+        codec.typed(b"gone");
+        assert_eq!(codec.typed(&[0x15]).echo, b"\x08 \x08\x08 \x08\x08 \x08\x08 \x08");
         codec.typed(b"gone too");
         assert_eq!(codec.typed(&[0x03]), Typed { wire: vec![IAC, IP], echo: b"^C\r\n".to_vec() });
         assert_eq!(codec.typed(b"\r").wire, b"\r\n", "the discarded line does not go out with it");

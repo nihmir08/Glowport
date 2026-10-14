@@ -37,7 +37,7 @@ function startServer() {
     let text = '';
     child.stdout.on('data', (chunk) => {
       text += String(chunk);
-      const found = /Verwalter\): (\S+)/.exec(text);
+      const found = /administrator\): (\S+)/.exec(text);
       if (found && text.includes('listening on')) ok(found[1]);
     });
     child.once('error', no);
@@ -204,7 +204,7 @@ try {
   const accounts = await a.run(`return (await invoke('admin_accounts')).map(x=>[x.username,x.admin,x.devices])`);
   ok('m9 Der Verwalter sieht beide Konten', J(accounts) === J([['anna', true, 2], ['bert', false, 1]]), J(accounts));
 
-  // ── Geteilter Tresor: einladen, annehmen, Rollen ──────────────────────────────────────────────────────
+  // ── Shared vault: invite, accept, roles ───────────────────────────────────────────────────────────────
   const team = await a.run(`return await invoke('shared_create',{name:'Team Infra'})`);
   const candidate = await a.run(`return await invoke('shared_lookup',{username:'bert'})`);
   ok('m9 Looking up an account shows the safety code of the other one', candidate.username === 'bert' && candidate.known === 'new' && candidate.code === bert.code, J(candidate));

@@ -1319,7 +1319,7 @@ export const de = {
   'err.update_failed': 'Das Update ließ sich nicht laden. {message}',
   'err.update_unavailable': 'Diese Fassung kann nicht nach Updates suchen.',
 
-  // Lokales Terminal, Telnet, serielle Leitung
+  // Local terminal, Telnet, serial line
   'newtab.connect': 'Host verbinden …',
   'newtab.hosts': 'Zur Host-Übersicht',
   'local.title': 'Lokales Terminal',

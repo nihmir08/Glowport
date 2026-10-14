@@ -527,7 +527,7 @@ pub fn sync_notices_clear(app: AppHandle, state: State<'_, AppState>) -> CmdResu
     Ok(())
 }
 
-// ── Geteilte Tresore ─────────────────────────────────────────────────────────────────────────────────────
+// ── Shared vaults ────────────────────────────────────────────────────────────────────────────────────────
 
 #[tauri::command]
 pub async fn shared_create(app: AppHandle, name: String) -> CmdResult<String> {

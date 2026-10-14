@@ -19,7 +19,7 @@ use tokio::{
 };
 
 fn options() -> Options {
-    Options { password: Some(("tester".into(), "richtig".into())), forwarding: true, ..Options::default() }
+    Options { password: Some(("tester".into(), "right".into())), forwarding: true, ..Options::default() }
 }
 
 fn connect(address: SocketAddr, password: Option<&str>) -> Connect {
@@ -67,7 +67,7 @@ async fn settle(session: &mut Session, password: Option<&str>) -> Result<Tunnel,
 async fn local(address: SocketAddr, rule: Rule, counters: &Arc<Counters>) -> (Tunnel, u16) {
     let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let port = listener.local_addr().unwrap().port();
-    let mut session = forward::open(connect(address, Some("richtig")), rule, Some(listener), Arc::clone(counters));
+    let mut session = forward::open(connect(address, Some("right")), rule, Some(listener), Arc::clone(counters));
     (settle(&mut session, None).await.expect("forwarding did not come about"), port)
 }
 
@@ -99,9 +99,9 @@ async fn a_local_port_leads_through_the_server_to_its_target() {
     let mut first = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
     assert_eq!(exchange(&mut first, b"hallo").await, b"echo:hallo");
     let mut second = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-    assert_eq!(exchange(&mut second, b"zwei").await, b"echo:zwei");
+    assert_eq!(exchange(&mut second, b"two").await, b"echo:two");
     assert_eq!((counters.open.load(Ordering::Relaxed), counters.total.load(Ordering::Relaxed)), (2, 2));
-    assert_eq!((counters.sent.load(Ordering::Relaxed), counters.received.load(Ordering::Relaxed)), (9, 19));
+    assert_eq!((counters.sent.load(Ordering::Relaxed), counters.received.load(Ordering::Relaxed)), (8, 18));
 
     drop(first);
     drop(second);
@@ -140,7 +140,7 @@ async fn a_dynamic_port_speaks_socks() {
     let mut answer = [0u8; 8];
     old.read_exact(&mut answer).await.unwrap();
     assert_eq!(answer[..2], [0, 0x5A]);
-    assert_eq!(exchange(&mut old, b"vier").await, b"echo:vier");
+    assert_eq!(exchange(&mut old, b"four").await, b"echo:four");
 
     // A destination that does not exist: the refusal comes in the language of SOCKS, the connection to the server stays.
     let dead = free_port().await;
@@ -166,7 +166,7 @@ async fn a_remote_port_leads_back_to_this_machine() {
     let at_server = free_port().await;
     let counters = Arc::new(Counters::default());
     let rule = Rule::Remote { bind: "127.0.0.1".into(), bind_port: at_server, host: "127.0.0.1".into(), port: target.port() };
-    let mut session = forward::open(connect(running.address, Some("richtig")), rule.clone(), None, Arc::clone(&counters));
+    let mut session = forward::open(connect(running.address, Some("right")), rule.clone(), None, Arc::clone(&counters));
     let tunnel = settle(&mut session, None).await.expect("forwarding did not come about");
 
     // The test server now listens itself; whatever arrives there ends up at the destination on this side.
@@ -181,7 +181,7 @@ async fn a_remote_port_leads_back_to_this_machine() {
 
     // A server that does not allow this refuses; the rule does not come about.
     let strict = server::start(Options { forwarding: false, ..options() }, server::key(2)).await.unwrap();
-    let mut session = forward::open(connect(strict.address, Some("richtig")), rule, None, Arc::new(Counters::default()));
+    let mut session = forward::open(connect(strict.address, Some("right")), rule, None, Arc::new(Counters::default()));
     assert_eq!(settle(&mut session, None).await.err(), Some(End::Refused(format!("127.0.0.1:{at_server}"))));
 }
 
@@ -206,7 +206,7 @@ async fn setting_up_asks_like_a_session_and_can_be_cancelled() {
     let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let mut session = forward::open(connect(running.address, None), rule.clone(), Some(listener), Arc::new(Counters::default()));
-    let _tunnel = settle(&mut session, Some("richtig")).await.unwrap();
+    let _tunnel = settle(&mut session, Some("right")).await.unwrap();
     let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
     assert_eq!(exchange(&mut stream, b"ok").await, b"echo:ok");
 
@@ -270,17 +270,17 @@ async fn commands_report_output_errors_and_status() {
     }
     let home = Home::new("befehle");
     let running = server::start(Options { home: Some(home.0.clone()), ..options() }, server::key(1)).await.unwrap();
-    let ready = connect(running.address, Some("richtig"));
+    let ready = connect(running.address, Some("right"));
     let minute = Duration::from_secs(60);
     let text = |bytes: &[u8]| String::from_utf8_lossy(bytes).replace("\r\n", "\n");
 
-    let fine = run_command(&ready, "echo eins; echo zwei", minute, 1024, |_, _, _| true).await.unwrap();
-    assert_eq!((text(&fine.stdout).as_str(), fine.exit_status, fine.truncated), ("eins\nzwei\n", Some(0), false));
+    let fine = run_command(&ready, "echo one; echo two", minute, 1024, |_, _, _| true).await.unwrap();
+    assert_eq!((text(&fine.stdout).as_str(), fine.exit_status, fine.truncated), ("one\ntwo\n", Some(0), false));
 
     // The error output is part of the result, and so is the exit code.
-    let failed = run_command(&ready, "echo vorher; echo kaputt >&2; exit 3", minute, 1024, |_, _, _| true).await.unwrap();
+    let failed = run_command(&ready, "echo before; echo broken >&2; exit 3", minute, 1024, |_, _, _| true).await.unwrap();
     assert_eq!(failed.exit_status, Some(3));
-    assert!(text(&failed.stdout).contains("vorher") && text(&failed.stdout).contains("kaputt"), "{}", text(&failed.stdout));
+    assert!(text(&failed.stdout).contains("before") && text(&failed.stdout).contains("broken"), "{}", text(&failed.stdout));
 
     // More than allowed is cut off and reported as such.
     let long = run_command(&ready, "printf '%0100d' 7", minute, 40, |_, _, _| true).await.unwrap();
@@ -304,7 +304,7 @@ async fn the_measuring_command_runs_in_a_plain_shell() {
     // This machine has no /proc; the test checks that the command runs as a whole and names its sections.
     let home = Home::new("messung");
     let running = server::start(Options { home: Some(home.0.clone()), ..options() }, server::key(1)).await.unwrap();
-    let output = run_command(&connect(running.address, Some("richtig")), stats::COMMAND, Duration::from_secs(30), 256 * 1024, |_, _, _| true).await.unwrap();
+    let output = run_command(&connect(running.address, Some("right")), stats::COMMAND, Duration::from_secs(30), 256 * 1024, |_, _, _| true).await.unwrap();
     let text = String::from_utf8_lossy(&output.stdout);
     for section in ["@cpu", "@cores", "@mem", "@load", "@uptime", "@net", "@disk", "@kernel", "@host", "@os"] {
         assert!(text.lines().any(|line| line.trim() == section), "section {section} missing in:\n{text}");

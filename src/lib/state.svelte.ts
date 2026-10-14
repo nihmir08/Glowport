@@ -37,7 +37,7 @@ export interface Settings {
   termBackground: string | null;
   /** Blur of the image in pixels. */
   termBlur: number;
-  /** Durchscheinendes Fenster (Windows 11). */
+  /** Translucent window (Windows 11). */
   windowEffect: WindowEffect;
   /** After a crash, ask whether the tabs should be restored. Off = never restore. */
   restorePrompt: boolean;
@@ -55,7 +55,7 @@ export interface Settings {
   fileBarWidth: number;
   /** The file bar follows the folder the terminal is in. */
   fileFollow: boolean;
-  /** Versteckte Dateien zeigen. */
+  /** Show hidden files. */
   fileHidden: boolean;
   /** Open text files in the built-in editor; off = in your own program. */
   fileEditor: boolean;
@@ -79,7 +79,7 @@ export interface Settings {
   localShell: string;
   /** Check on start whether there is a newer version. */
   updateCheck: boolean;
-  /** Wann zuletzt nachgesehen wurde, in Millisekunden seit 1970. */
+  /** When it last checked, in milliseconds since 1970. */
   updateChecked: number;
   /** The version that ran last. If it differs on start, Glowport was updated; empty on first start. */
   lastVersion: string;

@@ -60,7 +60,7 @@ const STATUS = (unit: ServiceUnit) =>
   ].join('\n');
 
 const PROCESSES: [number, number, string, string, string, number, number, number][] = [
-  // pid, parent, user, name, command, memory (MiB), ticks je Sekunde, Laufzeit
+  // pid, parent, user, name, command, memory (MiB), ticks per second, run time
   [1, 0, 'root', 'systemd', '/sbin/init', 14, 0.2, 1_209_700],
   [2, 0, 'root', 'kthreadd', '[kthreadd]', 0, 0, 1_209_700],
   [612, 1, 'root', 'dockerd', '/usr/bin/dockerd -H fd:// --containerd=/run/containerd/containerd.sock', 96, 1.4, 1_209_600],

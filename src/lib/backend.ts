@@ -171,7 +171,7 @@ export const sessionResize = (id: number, columns: number, rows: number): Promis
 export const sessionAck = (id: number, bytes: number): Promise<void> => (inApp ? invoke('session_ack', { id, bytes }) : Promise.resolve());
 export const sessionAnswer = (id: number, answer: Answer): Promise<void> => (inApp ? invoke('session_answer', { id, answer }) : fakeSession.answer(id, answer));
 export const sessionClose = (id: number): Promise<void> => (inApp ? invoke('session_close', { id }) : fakeSession.close(id));
-/** Anzahl laufender Sitzungen in allen Fenstern. */
+/** Number of running sessions in all windows. */
 export const sessionCount = (): Promise<number> => (inApp ? invoke('session_count') : Promise.resolve(0));
 /** Pauses sessions whose tab changes windows: their output is collected until the new window picks them up. */
 export const sessionHold = (ids: number[]): Promise<void> => (inApp ? invoke('session_hold', { ids }) : Promise.resolve());
@@ -258,14 +258,14 @@ export const onVaultChanged = (handler: (data: Snapshot) => void) => (inApp ? on
 export const clipboardRead = (): Promise<string> => (inApp ? readText() : navigator.clipboard.readText());
 export const clipboardWrite = (text: string): Promise<void> => (inApp ? writeText(text) : navigator.clipboard.writeText(text));
 
-// ---------- Lokales Terminal, serielle Ports ----------
+// ---------- Local terminal, serial ports ----------
 
 /** This PC's shells that can be opened as a local terminal. */
 export const localShells = (): Promise<LocalShell[]> => (inApp ? invoke('local_shells') : fakeSession.shells());
 /** The serial ports that exist right now. A USB adapter only shows up when it is plugged in. */
 export const serialPorts = (): Promise<SerialPortInfo[]> => (inApp ? invoke('serial_ports') : fakeSession.ports());
 
-// ---------- Dateien ----------
+// ---------- Files ----------
 
 /**
  * Sets up a connection to a host for the Files page, with the same prompts as a terminal.
@@ -299,7 +299,7 @@ export function fsSearch(place: Place, dir: string, query: string, content: bool
   hits.onmessage = onHit;
   return invoke('fs_search', { place, dir, query, content, hits });
 }
-/** Vergleicht zwei Ordner samt Unterordnern. */
+/** Compares two folders including subfolders. */
 export const fsCompare = (left: Place, leftPath: string, right: Place, rightPath: string): Promise<DiffEntry[]> =>
   inApp ? invoke('fs_compare', { left, leftPath, right, rightPath }) : fakeFiles.compare(left, leftPath, right, rightPath);
 
@@ -337,7 +337,7 @@ export const pickUploads = (): Promise<string[] | null> => (inApp ? invoke('pick
 export const syncStart = (left: Place, leftPath: string, right: Place, rightPath: string, items: { rel: string; toRight: boolean }[]): Promise<number[]> =>
   inApp ? invoke('sync_start', { left, leftPath, right, rightPath, items }) : fakeFiles.syncStart(left, leftPath, right, rightPath, items);
 
-// ---------- Port-Regeln ----------
+// ---------- Port rules ----------
 
 export const forwardSave = (rule: ForwardInput): Promise<Changed> => (inApp ? invoke('forward_save', { rule, vault: rule.vault }) : fake.forwardSave(rule));
 export const forwardDelete = (id: string): Promise<Changed> => (inApp ? invoke('forward_delete', { id }) : fake.forwardDelete(id));

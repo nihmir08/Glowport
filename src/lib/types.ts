@@ -118,7 +118,7 @@ export interface KnownHost {
   port: number;
   algorithm: string;
   fingerprint: string;
-  /** Millisekunden seit 1970. */
+  /** Milliseconds since 1970. */
   addedAt: number;
 }
 
@@ -137,7 +137,7 @@ export interface SshKey {
   /** A line in OpenSSH format, as it appears in `authorized_keys`. */
   publicKey: string;
   origin: 'generated' | 'imported';
-  /** Millisekunden seit 1970. */
+  /** Milliseconds since 1970. */
   addedAt: number;
   certificate?: KeyCertificate | null;
 }
@@ -177,7 +177,7 @@ export interface Authority {
   /** Key type for display. */
   kind: string;
   fingerprint: string;
-  /** Millisekunden seit 1970. */
+  /** Milliseconds since 1970. */
   addedAt: number;
 }
 
@@ -312,7 +312,7 @@ export interface SyncState {
   error?: string;
   /** Changes that have not reached the server yet. */
   pending: number;
-  /** Wann zuletzt alles abgeglichen war, in Millisekunden seit 1970. */
+  /** When everything was last synced, in milliseconds since 1970. */
   syncedAt: number | null;
   /** Your own safety code. */
   code: string;
@@ -865,7 +865,7 @@ export interface RunResult {
   /** Was the output shortened because it was too long? */
   truncated?: boolean;
   error?: string | null;
-  /** Dauer in Millisekunden. */
+  /** Duration in milliseconds. */
   ms: number;
 }
 
@@ -881,7 +881,7 @@ export interface StatsSample {
   /** CPU time in ticks: all together and the idle part of it. */
   cpu: { total: number; idle: number };
   cores: number;
-  /** Speicher in Bytes. */
+  /** Memory in bytes. */
   mem: { total: number; available: number; swapTotal: number; swapFree: number };
   load: [number, number, number];
   disks: { mount: string; device: string; total: number; used: number }[];
@@ -1119,7 +1119,7 @@ export interface DockerContainer {
   /** Seconds it has been running; for an exited one the seconds since the end. */
   since?: number;
   exitCode?: number;
-  /** Prozent eines Kerns. */
+  /** Percent of one core. */
   cpu?: number;
   memory?: { used: number; limit: number };
 }
@@ -1142,11 +1142,11 @@ export interface ProcessInfo {
   /** The program without path and arguments. */
   name: string;
   command: string;
-  /** Arbeitsspeicher in Bytes. */
+  /** Memory in bytes. */
   memory: number;
   /** Seconds it has been running. */
   elapsed: number;
-  /** Verbrauchte Rechenzeit seit seinem Start, in Ticks. */
+  /** CPU time used since its start, in ticks. */
   ticks: number;
   /** A kernel thread, not a program. */
   kernel: boolean;
@@ -1169,7 +1169,7 @@ export interface ProxmoxConnection {
   name: string;
   /** `https://pve.example.de:8006` */
   address: string;
-  /** `benutzer@realm!name` */
+  /** `user@realm!name` */
   tokenId: string;
   /** The confirmed fingerprint of a self-signed certificate. If missing, the certificate must be trusted. */
   fingerprint?: string;

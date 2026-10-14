@@ -55,7 +55,7 @@ pub enum Endpoint {
 struct Meta {
     dir: bool,
     size: u64,
-    /// Sekunden seit 1970.
+    /// Seconds since 1970.
     modified: u64,
 }
 
@@ -171,7 +171,7 @@ impl Endpoint {
 pub enum Policy {
     Overwrite,
     Skip,
-    /// Daneben legen: „name (2).txt“.
+    /// Put beside: “name (2).txt”.
     Rename,
 }
 
@@ -886,7 +886,7 @@ pub fn transfer_clear(queue: tauri::State<'_, Queue>) {
     queue.0.clear();
 }
 
-// ---------- Ordner abgleichen ----------
+// ---------- Folder sync ----------
 
 /// The comparison does not compare more entries; then the folder is too big for a list.
 const MAX_COMPARED: usize = 20_000;
@@ -897,7 +897,7 @@ const SAME_WITHIN: u64 = 2;
 pub struct Side {
     path: String,
     size: u64,
-    /// Millisekunden seit 1970.
+    /// Milliseconds since 1970.
     modified: u64,
 }
 
@@ -1233,7 +1233,7 @@ mod tests {
         const SMALL: usize = 2000;
         let root = std::env::temp_dir().join(format!("glowport-tempo-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
-        let (files, local, home) = (root.join("server"), root.join("lokal"), root.join("home"));
+        let (files, local, home) = (root.join("server"), root.join("local"), root.join("home"));
         for dir in [files.join("srv"), local.join("viele"), local.join("zurueck"), home.join(".ssh")] {
             std::fs::create_dir_all(dir).unwrap();
         }
@@ -1252,10 +1252,10 @@ mod tests {
         if keyed {
             std::fs::copy(key.with_extension("pub"), home.join(".ssh").join("authorized_keys")).unwrap();
         }
-        let options = Options { password: Some(("tester".into(), "richtig".into())), files: Some(files.clone()), home: Some(home.clone()), ..Options::default() };
+        let options = Options { password: Some(("tester".into(), "right".into())), files: Some(files.clone()), home: Some(home.clone()), ..Options::default() };
         let running = server::start(options, server::key(1)).await.unwrap();
         let port = running.address.port();
-        let connect = Connect { host: "127.0.0.1".into(), port, user: "tester".into(), password: Some(Secret::new("richtig".into())), detect_os: false, ..Connect::default() };
+        let connect = Connect { host: "127.0.0.1".into(), port, user: "tester".into(), password: Some(Secret::new("right".into())), detect_os: false, ..Connect::default() };
         let remote = Arc::new(Remote::Sftp(glowport_net::files::Remote::connect(&connect, |_, _, _| true).await.unwrap()));
         let reach = remote.clone();
         let engine = Engine::new(

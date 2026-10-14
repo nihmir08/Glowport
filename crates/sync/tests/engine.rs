@@ -229,7 +229,7 @@ async fn a_vault_becomes_an_account_and_a_second_device_follows() {
     // A wrong code creates no account and leaves the vault unconnected.
     let file = Temp::new("anna");
     let door = Arc::new(Mutex::new(Vault::create(&file.0, &password("anna"), FAST).unwrap()));
-    door.lock().unwrap().put(None, b"eins").unwrap();
+    door.lock().unwrap().put(None, b"one").unwrap();
     let host = door.lock().unwrap().put(None, br#"{"name":"web","own":{"port":22}}"#).unwrap();
     refused(register(&door, &server.address, "FALS-CHER-CODE", "anna", &password("anna"), "PC").await.map(drop), "code_invalid");
     refused(register(&door, &server.address, server.setup(), "anna", "falsches passwort", "PC").await.map(drop), "wrong_password");
@@ -246,7 +246,7 @@ async fn a_vault_becomes_an_account_and_a_second_device_follows() {
 
     // The second device only needs user name and master password.
     let missing = Temp::new("anna-falsch");
-    refused(login_new(&missing.0, &server.address, "anna", "falsch", "Laptop", FAST).await.map(drop), "unauthorized");
+    refused(login_new(&missing.0, &server.address, "anna", "wrong", "Laptop", FAST).await.map(drop), "unauthorized");
     assert!(!missing.0.exists());
     assert!(matches!(login_new(&missing.0, &server.address, "anna", &password("anna"), "Laptop", MIN_KDF).await, Err(SyncError::Protocol(_))), "a server must not dictate a tiny key derivation");
     assert!(!missing.0.exists());
@@ -262,7 +262,7 @@ async fn a_vault_becomes_an_account_and_a_second_device_follows() {
     one.engine.sync().await.unwrap();
     assert_eq!(two.engine.sync().await.unwrap().notices, 0);
     one.engine.sync().await.unwrap();
-    assert_eq!(one.texts(&personal), ["eins", r#"{"name":"web-01","own":{"port":2222}}"#]);
+    assert_eq!(one.texts(&personal), ["one", r#"{"name":"web-01","own":{"port":2222}}"#]);
     assert_eq!(two.texts(&personal), one.texts(&personal));
 
     // The same field: the newer change applies, and the device that merges records it.
@@ -279,7 +279,7 @@ async fn a_vault_becomes_an_account_and_a_second_device_follows() {
     one.vault(|v| v.delete(&host).unwrap());
     one.engine.sync().await.unwrap();
     two.engine.sync().await.unwrap();
-    assert_eq!(two.texts(&personal), ["eins"]);
+    assert_eq!(two.texts(&personal), ["one"]);
     let devices = one.engine.devices().await.unwrap();
     assert_eq!(devices.iter().map(|d| (d.name.as_str(), d.current)).collect::<Vec<_>>(), [("PC", true), ("Laptop", false)]);
 }
@@ -385,7 +385,7 @@ async fn the_operator_manages_without_an_account() {
     assert!(store.invites(&operator).unwrap().is_empty());
     let id = store.account_id("bert").unwrap();
     assert_eq!(id, bert.account());
-    assert_eq!(store.account_id("niemand"), Err(Fail::NotFound));
+    assert_eq!(store.account_id("nobody"), Err(Fail::NotFound));
     assert_eq!(store.accounts(&operator).unwrap().iter().map(|a| (a.username.as_str(), a.admin)).collect::<Vec<_>>(), [("anna", true), ("bert", false)]);
 
     // Appointing an administrator: the device learns about it with the next sync and keeps it.
@@ -424,7 +424,7 @@ async fn sharing_from_invitation_to_removal() {
     // Anna creates a vault and invites.
     refused(anna.engine.create_vault("  ").await.map(drop), "invalid");
     let shared = anna.engine.create_vault("Team").await.unwrap();
-    refused(anna.engine.lookup("niemand").await.map(drop), "not_found");
+    refused(anna.engine.lookup("nobody").await.map(drop), "not_found");
     let candidate = anna.engine.lookup("bert").await.unwrap();
     assert_eq!((candidate.known, candidate.code.split(" · ").count()), (Known::New, 6));
     refused(anna.engine.invite(&shared, &candidate, Role::Owner).await, "invalid");
@@ -518,21 +518,21 @@ async fn password_devices_and_reconnecting() {
     let one = Device::register(&server, "anna", server.setup()).await;
     let two = Device::login(&server, "anna", "Laptop").await;
     let personal = one.personal();
-    one.put(None, "eins");
+    one.put(None, "one");
     one.engine.sync().await.unwrap();
 
     // Changing the password: the server gets the new wrapping first; the second device stores it as pending.
-    refused(one.engine.change_password("falsch", "neues passwort", FAST, false).await, "wrong_password");
-    one.engine.change_password(&password("anna"), "neues passwort", FAST, false).await.unwrap();
+    refused(one.engine.change_password("wrong", "new password", FAST, false).await, "wrong_password");
+    one.engine.change_password(&password("anna"), "new password", FAST, false).await.unwrap();
     assert!(two.engine.sync().await.unwrap().password_changed);
     two.vault(|v| {
         v.lock();
         v.unlock(&password("anna")).expect("the old one still opens here");
         v.lock();
-        v.unlock("neues passwort").expect("the new one applies from now on");
+        v.unlock("new password").expect("the new one applies from now on");
         v.lock();
         assert!(matches!(v.unlock(&password("anna")), Err(VaultError::WrongPassword)));
-        v.unlock("neues passwort").unwrap();
+        v.unlock("new password").unwrap();
     });
     assert!(!two.engine.sync().await.unwrap().password_changed);
 
@@ -545,35 +545,35 @@ async fn password_devices_and_reconnecting() {
     refused(two.engine.sync().await.map(drop), "unauthorized");
 
     // The signed-out device reconnects: the same vault, a new sign-in.
-    refused(connect(&two.door, &server.address, "anna", "neues passwort", "Laptop", FAST).await.map(drop), "already_linked");
+    refused(connect(&two.door, &server.address, "anna", "new password", "Laptop", FAST).await.map(drop), "already_linked");
     // Signing out before deleting the data: an already signed-out device counts as signed out.
     two.engine.sign_out().await.unwrap();
     two.engine.unlink().await.unwrap();
     assert!(Engine::open(two.door.clone()).unwrap().is_none());
-    refused(connect(&two.door, &server.address, "anna", "falsch", "Laptop", FAST).await.map(drop), "unauthorized");
-    let again = connect(&two.door, &server.address, "anna", "neues passwort", "Laptop again", FAST).await.unwrap();
-    one.put(None, "zwei");
+    refused(connect(&two.door, &server.address, "anna", "wrong", "Laptop", FAST).await.map(drop), "unauthorized");
+    let again = connect(&two.door, &server.address, "anna", "new password", "Laptop again", FAST).await.unwrap();
+    one.put(None, "two");
     one.engine.sync().await.unwrap();
     again.sync().await.unwrap();
-    assert_eq!(two.texts(&personal), ["eins", "zwei"]);
+    assert_eq!(two.texts(&personal), ["one", "two"]);
     assert_eq!(one.engine.devices().await.unwrap().iter().map(|d| d.name.clone()).collect::<Vec<_>>(), ["PC of anna", "Laptop again"]);
 
     // A vault that belongs to no account cannot be connected this way, and no device is left behind.
     let foreign_file = Temp::new("fremd");
-    let foreign = Arc::new(Mutex::new(Vault::create(&foreign_file.0, "lokal", FAST).unwrap()));
+    let foreign = Arc::new(Mutex::new(Vault::create(&foreign_file.0, "local", FAST).unwrap()));
     foreign.lock().unwrap().put(None, b"was already on this device").unwrap();
-    refused(connect(&foreign, &server.address, "anna", "neues passwort", "Dritter", FAST).await.map(drop), "other_account");
+    refused(connect(&foreign, &server.address, "anna", "new password", "Dritter", FAST).await.map(drop), "other_account");
     assert!(Engine::open(foreign.clone()).unwrap().is_none());
     assert_eq!(one.engine.devices().await.unwrap().len(), 2);
 
     // The way for it: sign in as a new device and take the existing entries over into the account.
     let third_file = Temp::new("anna-dritter");
-    let mut vault = login_new(&third_file.0, &server.address, "anna", "neues passwort", "Dritter", FAST).await.unwrap();
+    let mut vault = login_new(&third_file.0, &server.address, "anna", "new password", "Dritter", FAST).await.unwrap();
     assert_eq!(vault.adopt_from(&foreign.lock().unwrap()).unwrap(), 1);
     let third = Device::wrap(vault, third_file);
     third.engine.sync().await.unwrap();
     one.engine.sync().await.unwrap();
-    assert_eq!(one.texts(&personal), ["eins", "was already on this device", "zwei"]);
+    assert_eq!(one.texts(&personal), ["one", "two", "was already on this device"]);
     assert_eq!(third.texts(&personal), one.texts(&personal));
 
     // Signing out before deleting the data: the device disappears from the list and gets in no more.

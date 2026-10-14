@@ -47,12 +47,12 @@ impl Drop for Root {
 }
 
 async fn serve(root: &Root, options: Options) -> Running {
-    let options = Options { password: Some(("tester".into(), "richtig".into())), files: Some(root.0.clone()), ..options };
+    let options = Options { password: Some(("tester".into(), "right".into())), files: Some(root.0.clone()), ..options };
     server::start(options, server::key(1)).await.expect("Testserver")
 }
 
 fn target(running: &Running) -> Connect {
-    Connect { host: "127.0.0.1".into(), port: running.address.port(), user: "tester".into(), password: Some(Secret::new("richtig".into())), detect_os: false, ..Connect::default() }
+    Connect { host: "127.0.0.1".into(), port: running.address.port(), user: "tester".into(), password: Some(Secret::new("right".into())), detect_os: false, ..Connect::default() }
 }
 
 async fn remote(running: &Running) -> Remote {
@@ -194,7 +194,7 @@ async fn reports_folders_that_must_not_be_changed() {
 async fn refuses_to_connect_when_stored_credentials_do_not_suffice() {
     let root = Root::new();
     let running = serve(&root, Options::default()).await;
-    let wrong = Connect { password: Some(Secret::new("falsch".into())), ..target(&running) };
+    let wrong = Connect { password: Some(Secret::new("wrong".into())), ..target(&running) };
     assert!(matches!(Remote::connect(&wrong, |_, _, _| true).await, Err(End::AuthFailed)));
     assert!(matches!(Remote::connect(&target(&running), |_, _, _| false).await, Err(End::HostKeyRejected)));
 }
@@ -215,7 +215,7 @@ async fn connects_for_files_alone_and_asks_like_a_terminal_would() {
             }
             Some(Event::Secret { attempt, reply, .. }) => {
                 asked.push(if attempt == 1 { "password" } else { "again" });
-                reply.send(Some(Secret::new(if attempt == 1 { "falsch" } else { "richtig" }.into()))).unwrap();
+                reply.send(Some(Secret::new(if attempt == 1 { "wrong" } else { "right" }.into()))).unwrap();
             }
             Some(Event::Files(found)) => break found,
             Some(Event::End(end)) => panic!("endete: {end:?}"),
@@ -254,7 +254,7 @@ async fn connects_for_files_alone_and_asks_like_a_terminal_would() {
 
 #[tokio::test]
 async fn says_so_when_the_server_has_no_sftp() {
-    let running = server::start(Options { password: Some(("tester".into(), "richtig".into())), ..Options::default() }, server::key(1)).await.unwrap();
+    let running = server::start(Options { password: Some(("tester".into(), "right".into())), ..Options::default() }, server::key(1)).await.unwrap();
     assert!(matches!(Remote::connect(&target(&running), |_, _, _| true).await, Err(End::ConnectFailed(reason)) if reason == "sftp: not_supported"));
 }
 

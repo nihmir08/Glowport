@@ -269,7 +269,7 @@ const WORDS: &str = include_str!("words.txt");
 /// keys. Forging a matching code would take generating quadrillions of key pairs.
 pub fn safety_code(ed25519: &[u8; 32], x25519: &[u8; 32]) -> String {
     let print = fingerprint(ed25519, x25519);
-    let bits = u64::from_be_bytes(print[..8].try_into().expect("acht Byte"));
+    let bits = u64::from_be_bytes(print[..8].try_into().expect("eight bytes"));
     let words: Vec<&str> = WORDS.lines().collect();
     (0..6).map(|i| words[((bits >> (64 - 9 * (i + 1))) & 511) as usize]).collect::<Vec<_>>().join(" · ")
 }
@@ -297,7 +297,7 @@ mod tests {
     fn member(seed: u8, role: Role) -> Member {
         Member {
             account: crypto::hex(&[seed; 16]),
-            name: format!("konto{seed}"),
+            name: format!("account{seed}"),
             ed25519: crypto::hex(&key(seed).verifying_key().to_bytes()),
             x25519: crypto::hex(&[seed; 32]),
             role,
@@ -406,7 +406,7 @@ mod tests {
     fn contradictory_rosters_are_refused() {
         let cases = [
             ("no owner", roster(1, vec![member(1, Role::Write)])),
-            ("zwei Besitzer", roster(1, vec![member(1, Role::Owner), member(2, Role::Owner)])),
+            ("two owners", roster(1, vec![member(1, Role::Owner), member(2, Role::Owner)])),
             ("account twice", roster(1, vec![member(1, Role::Owner), member(1, Role::Read)])),
             ("empty", roster(1, vec![])),
             ("Nummer null", roster(0, vec![member(1, Role::Owner)])),

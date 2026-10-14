@@ -73,7 +73,7 @@ export const hotkeyLabel = (hotkey: string, lang: string) =>
     .map((part) => (lang === 'de' ? ({ Ctrl: 'Strg', Shift: '⇧' }[part] ?? part) : part === 'Shift' ? '⇧' : part))
     .join(' ');
 
-// ---------- Makros ----------
+// ---------- Macros ----------
 
 const NAMED: [string, string][] = [
   ['\x1b[A', '↑'],

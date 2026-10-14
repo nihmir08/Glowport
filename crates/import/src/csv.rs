@@ -10,7 +10,7 @@ use crate::{ftp_host, host_name, port, serial_host, serial_line, telnet_host, un
 const NAME: &[&str] = &["label", "name", "title", "alias", "displayname", "sessionname", "bezeichnung"];
 const ADDRESS: &[&str] = &["hostnameip", "hostname", "address", "adresse", "host", "ip", "ipaddress", "ipadresse", "server", "hostip", "fqdn"];
 const USER: &[&str] = &["username", "user", "login", "account", "benutzer", "benutzername"];
-const PASSWORD: &[&str] = &["password", "pass", "pwd", "passwort", "kennwort"];
+const PASSWORD: &[&str] = &["password", "pass", "pwd", "password", "kennwort"];
 const GROUP: &[&str] = &["groups", "group", "folder", "path", "category", "gruppe", "gruppen", "ordner"];
 const KEY: &[&str] = &["sshkey", "key", "keyfile", "identityfile", "privatekey", "keypath", "schlüssel", "schluessel", "schlüsseldatei"];
 const PROTOCOL: &[&str] = &["protocol", "type", "protokoll"];

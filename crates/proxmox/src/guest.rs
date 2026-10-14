@@ -205,6 +205,6 @@ mod tests {
         assert_eq!(facts(false, "pihole", &json!({ "net0": "name=eth0,bridge=vmbr0,ip=10.0.0.53/24", "ostype": "debian" }), &[], None), Facts { address: Some(("10.0.0.53".into(), Source::Config)), user: Some("root".into()), keys: vec![], os: Some("De") });
         assert_eq!(facts(false, "gitea", &json!({ "net0": "name=eth0,bridge=vmbr0,ip=dhcp", "ostype": "alpine" }), &eth, None).address, Some(("10.0.10.99".into(), Source::Guest)));
         // The second network card has the fixed address.
-        assert_eq!(facts(false, "zwei", &json!({ "net0": "name=eth0,ip=dhcp", "net1": "name=eth1,ip=10.9.9.9/24" }), &[], None).address, Some(("10.9.9.9".into(), Source::Config)));
+        assert_eq!(facts(false, "two", &json!({ "net0": "name=eth0,ip=dhcp", "net1": "name=eth1,ip=10.9.9.9/24" }), &[], None).address, Some(("10.9.9.9".into(), Source::Config)));
     }
 }

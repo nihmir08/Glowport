@@ -12,7 +12,7 @@ export type UseMode = 'run' | 'paste';
 export const snipUi = $state({
   /** Snippet whose variables are asked for before it goes into a pane. */
   asking: null as { snippet: Snippet; pane: string; mode: UseMode } | null,
-  /** Laufende Aufzeichnung eines Makros. */
+  /** Running recording of a macro. */
   recording: null as { pane: string; steps: MacroStep[]; last: number } | null,
   /** A finished recording that still needs its name. */
   naming: null as MacroStep[] | null,
@@ -71,7 +71,7 @@ export function answerVariables(values: Record<string, string>, mode: UseMode) {
   send(asking.pane, fill(asking.snippet.command, values), mode);
 }
 
-// ---------- Makros ----------
+// ---------- Macros ----------
 
 let stopPlaying = false;
 

@@ -41,7 +41,7 @@ pub enum Rule {
 /// Counters of a running rule. They belong to the caller and survive a reconnect.
 #[derive(Debug, Default)]
 pub struct Counters {
-    /// Gerade offene Verbindungen.
+    /// Connections open right now.
     pub open: AtomicU32,
     /// All connections since switching on.
     pub total: AtomicU64,
@@ -361,7 +361,7 @@ async fn read_until_zero<S: AsyncRead + Unpin>(stream: &mut S) -> Option<Vec<u8>
 async fn answer<S: AsyncWrite + Unpin>(stream: &mut S, version: u8, connected: bool) -> std::io::Result<()> {
     match (version, connected) {
         (5, true) => stream.write_all(&[5, 0, 0, 1, 0, 0, 0, 0, 0, 0]).await,
-        // 5 = Verbindung abgelehnt
+        // 5 = connection refused
         (5, false) => stream.write_all(&[5, 5, 0, 1, 0, 0, 0, 0, 0, 0]).await,
         (_, true) => stream.write_all(&[0, 0x5A, 0, 0, 0, 0, 0, 0]).await,
         (_, false) => stream.write_all(&[0, 0x5B, 0, 0, 0, 0, 0, 0]).await,
@@ -417,7 +417,7 @@ mod tests {
         assert_eq!(greet(&[5, 1, 2]).await, (None, vec![5, 0xFF]));
         // BIND instead of CONNECT: “command not supported”.
         assert_eq!(greet(&[5, 1, 0, 5, 2, 0, 1, 1, 2, 3, 4, 0, 80]).await, (None, vec![5, 0, 5, 7, 0, 1, 0, 0, 0, 0, 0, 0]));
-        // Unbekannte Adressart.
+        // Unknown address type.
         assert_eq!(greet(&[5, 1, 0, 5, 1, 0, 9]).await.1[2..4], [5, 8]);
         // Truncated or not SOCKS.
         assert_eq!(greet(&[5, 1, 0, 5, 1, 0, 3, 5, b'a']).await.0, None);

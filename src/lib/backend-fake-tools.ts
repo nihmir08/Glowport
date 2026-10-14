@@ -21,7 +21,7 @@ const fail = (code: string, reason?: string): never => {
 };
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// ---------- Port-Regeln ----------
+// ---------- Port rules ----------
 
 const states = new Map<string, ForwardState>();
 /** Connections waiting for an answer: connection number → rule. */
