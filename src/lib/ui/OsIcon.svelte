@@ -3,9 +3,9 @@
   import { UNKNOWN_COLOR, osEntry } from '../os';
 
   /**
-   * Kachel mit dem Logo eines Betriebssystems. Ein unbekanntes System bekommt ein neutrales Zeichen: einen Server,
-   * bei Telnet ein Netz, bei einer seriellen Leitung einen Stecker (`protocol`).
-   * `bare` zeigt nur das Logo ohne Kachel, für enge Stellen wie die Kopfzeile eines Bereichs.
+   * Tile with an operating system's logo. An unknown system gets a neutral symbol: a server,
+   * for Telnet a network, for a serial line a plug (`protocol`).
+   * `bare` shows only the logo without a tile, for tight spots like a pane's header row.
    */
   let { os, size = 'md', bare = false, protocol }: { os: string | null | undefined; size?: 'sm' | 'md' | 'lg'; bare?: boolean; protocol?: string } = $props();
 

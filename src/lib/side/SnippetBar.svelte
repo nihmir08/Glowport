@@ -9,7 +9,7 @@
   import Button from '../ui/Button.svelte';
   import Icon from '../ui/Icon.svelte';
 
-  /** Snippets am Terminal: mit einem Klick ausführen oder nur einfügen, dazu Makros aufzeichnen und abspielen. */
+  /** Snippets at the terminal: run with one click or just paste, plus record and play macros. */
   let { pane }: { pane: Pane } = $props();
 
   let query = $state('');
@@ -22,7 +22,7 @@
   const playing = $derived(snipUi.playing?.pane === pane.key ? snipUi.playing : null);
   const locked = $derived(vault.state !== 'open');
 
-  /** Öffnet die Seite „Snippets“ im Start-Tab. */
+  /** Opens the Snippets page in the start tab. */
   function manage() {
     ui.page = 'snip';
     view.active = 'home';

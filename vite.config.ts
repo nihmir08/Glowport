@@ -4,7 +4,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 
 const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'));
 
-// Feste Adresse, weil Tauri im Entwicklungsmodus genau diese lädt.
+// Fixed address, because Tauri loads exactly this one in development mode.
 export default defineConfig({
   plugins: [svelte()],
   define: { __APP_VERSION__: JSON.stringify(version) },

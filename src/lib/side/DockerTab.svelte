@@ -11,7 +11,7 @@
   import Dialog from '../ui/Dialog.svelte';
   import Icon from '../ui/Icon.svelte';
 
-  /** Die Container des Servers, an dem der Bereich hängt. */
+  /** The containers of the server the pane is connected to. */
   let { pane }: { pane: Pane } = $props();
 
   const session = $derived(pane.phase === 'connected' ? pane.sessionId : null);
@@ -19,21 +19,21 @@
   const listed = $derived(feed?.value);
   const containers = $derived(listed?.state === 'ok' ? listed.items : []);
 
-  // Geladen wird nur, solange dieser Reiter offen ist und die Verbindung steht.
+  // Loaded only while this tab is open and the connection is up.
   $effect(() => {
     if (session !== null) return docker.watch(session);
   });
 
-  /** Der aufgeklappte Container. */
+  /** The expanded container. */
   let open = $state<string | null>(null);
   let busy = $state<string | null>(null);
-  /** Stoppen und Neustarten fragen nach. */
+  /** Stopping and restarting ask first. */
   let confirm = $state<{ container: DockerContainer; action: 'stop' | 'restart' } | null>(null);
 
   const live = (c: DockerContainer) => c.state === 'running' || c.state === 'paused' || c.state === 'restarting';
   const tone = (c: DockerContainer) => (c.health === 'unhealthy' || c.state === 'dead' ? 'err' : c.state === 'restarting' || c.health === 'starting' || c.state === 'paused' ? 'warn' : live(c) ? 'ok' : (c.exitCode ?? 0) !== 0 ? 'err' : 'idle');
 
-  /** Zustand in Worten: „läuft seit 3 T 14 Std“, „beendet vor 6 Std (Fehler 1)“. */
+  /** State in words: “running for 3 d 14 h”, “exited 6 h ago (error 1)”. */
   function stateText(c: DockerContainer): string {
     const time = c.since === undefined ? '' : span(c.since);
     if (c.state === 'running') return c.health === 'unhealthy' ? t('docker.state.unhealthy', { time }) : c.health === 'starting' ? t('docker.state.starting', { time }) : t('docker.state.running', { time });
@@ -59,7 +59,7 @@
     if (pending) await run(pending.container, pending.action);
   }
 
-  /** Logs und Shell laufen in einem neuen Tab am selben Server. */
+  /** Logs and shell run in a new tab on the same server. */
   async function tab(container: DockerContainer, kind: 'logs' | 'shell') {
     try {
       openTabWith(pane.target, await dockerLine(container.id, kind, listed?.state === 'ok' && listed.sudo));

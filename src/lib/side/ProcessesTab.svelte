@@ -9,10 +9,10 @@
   import Dialog from '../ui/Dialog.svelte';
   import Icon from '../ui/Icon.svelte';
 
-  /** Die Prozesse des Servers, an dem der Bereich hängt, die mit der höchsten Last zuerst. */
+  /** The processes of the server the pane is connected to, those with the highest load first. */
   let { pane }: { pane: Pane } = $props();
 
-  /** Mehr zeigt die Liste nicht. */
+  /** The list shows no more than this. */
   const MOST = 200;
 
   const session = $derived(pane.phase === 'connected' ? pane.sessionId : null);
@@ -29,12 +29,12 @@
   const cpuOf = (p: ProcessInfo) => view?.cpu[p.pid] ?? 0;
   const shown = $derived(
     (view?.sample.processes ?? [])
-      // Fäden des Kerns sind keine Programme und lassen sich nicht beenden.
+      // Kernel threads are not programs and cannot be ended.
       .filter((p) => !p.kernel && (!needle || p.name.toLowerCase().includes(needle) || p.user.toLowerCase().includes(needle) || p.command.toLowerCase().includes(needle) || String(p.pid) === needle))
       .sort((a, b) => (order === 'cpu' ? cpuOf(b) - cpuOf(a) || b.memory - a.memory : b.memory - a.memory || cpuOf(b) - cpuOf(a)))
       .slice(0, MOST),
   );
-  /** Bei der ersten Messung gibt es noch keine Auslastung. */
+  /** For the first measurement there is no load yet. */
   const measured = $derived(!!view && Object.keys(view.cpu).length > 0);
 
   let open = $state<number | null>(null);

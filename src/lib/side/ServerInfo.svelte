@@ -6,7 +6,7 @@
   import { STATS_INTERVALS, cpuBetween, historyOf, netBetween, pruneStats, retimeStats, watchStats } from '../stats.svelte';
   import Icon from '../ui/Icon.svelte';
 
-  /** Auslastung des Servers, an dem der Bereich hängt: Prozessor, Speicher, Platten, Netz und ein paar Eckdaten. */
+  /** Load of the server the pane is connected to: processor, memory, disks, network and a few key facts. */
   let { pane }: { pane: Pane } = $props();
 
   const session = $derived(pane.phase === 'connected' ? pane.sessionId : null);
@@ -15,7 +15,7 @@
   const now = $derived(samples[samples.length - 1]);
   const before = $derived(samples[samples.length - 2]);
 
-  // Gemessen wird nur, solange diese Ansicht offen ist und die Verbindung steht.
+  // Measured only while this view is open and the connection is up.
   $effect(() => {
     if (session !== null) return watchStats(session);
   });
@@ -32,7 +32,7 @@
   const level = (part: number) => (part >= 0.95 ? 'err' : part >= 0.85 ? 'warn' : '');
   const decimal = (n: number) => n.toFixed(2).replace('.', settings.lang === 'de' ? ',' : '.');
 
-  /** Laufzeit in den zwei größten Einheiten: „3 Tage 14 Std.“ */
+  /** Uptime in the two largest units: “3 days 14 h” */
   function uptime(seconds: number): string {
     const days = Math.floor(seconds / 86_400);
     const hours = Math.floor((seconds % 86_400) / 3600);
@@ -41,7 +41,7 @@
     return hours ? t('info.uptime.hours', { h: hours, m: minutes }) : t('info.uptime.minutes', { m: minutes });
   }
 
-  /** Eine Kurve aus Werten zwischen 0 und `max`, als Pfad in einem Feld von 120 × 36. */
+  /** A curve from values between 0 and `max`, as a path in a 120 × 36 box. */
   function curve(values: number[], max: number): { line: string; area: string } | null {
     if (values.length < 2) return null;
     const step = 120 / (values.length - 1);

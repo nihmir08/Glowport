@@ -10,78 +10,78 @@ export type WindowEffect = 'none' | 'mica' | 'acrylic';
 export type Conflict = 'ask' | 'overwrite' | 'skip' | 'rename';
 export type SideTab = 'info' | 'snip' | 'docker' | 'services' | 'processes';
 
-/** Alles, was ohne Tresor gespeichert wird: Aussehen und Bedienung, keine Geheimnisse. */
+/** Everything saved without the vault: appearance and operation, no secrets. */
 export interface Settings {
   mode: Mode;
   accent: string;
   lang: Lang;
   hostView: HostView;
-  /** Minuten ohne Eingabe bis zur Sperre, 0 = aus. */
+  /** Minutes without input until locking, 0 = off. */
   autoLockMinutes: number;
-  /** Was bei einem Verbindungsabriss geschieht, wenn weder Host noch Gruppe etwas festlegen. */
+  /** What happens on a dropped connection if neither host nor group sets anything. */
   reconnect: Reconnect;
-  /** Schriftgröße im Terminal in Pixeln. */
+  /** Terminal font size in pixels. */
   termFontSize: number;
-  /** Kennung des Farbschemas für alle Terminals; Hosts und Gruppen dürfen abweichen. */
+  /** ID of the color scheme for all terminals; hosts and groups may differ. */
   termScheme: string;
-  /** Name der Schrift im Terminal; leer = die mitgelieferte JetBrains Mono. */
+  /** Name of the terminal font; empty = the bundled JetBrains Mono. */
   termFont: string;
-  /** Zeilenhöhe als Vielfaches der Schriftgröße. */
+  /** Line height as a multiple of the font size. */
   termLineHeight: number;
   termLigatures: boolean;
   termCursor: Cursor;
   termCursorBlink: boolean;
-  /** Deckkraft des Terminal-Hintergrunds in Prozent. */
+  /** Opacity of the terminal background in percent. */
   termOpacity: number;
-  /** Bild hinter dem Terminal als Adresse, sonst null. */
+  /** Image behind the terminal as an address, otherwise null. */
   termBackground: string | null;
-  /** Unschärfe des Bildes in Pixeln. */
+  /** Blur of the image in pixels. */
   termBlur: number;
   /** Durchscheinendes Fenster (Windows 11). */
   windowEffect: WindowEffect;
-  /** Nach einem Abbruch fragen, ob die Tabs wiederhergestellt werden sollen. Aus = nie wiederherstellen. */
+  /** After a crash, ask whether the tabs should be restored. Off = never restore. */
   restorePrompt: boolean;
-  /** Beim Schließen mit offenen Sitzungen nachfragen. Bei laufenden Transfers und Port-Regeln fragt Glowport immer. */
+  /** Ask when closing with open sessions. With running transfers and port rules Glowport always asks. */
   closePrompt: boolean;
-  /** Abstand der Messungen in der Server-Info, in Sekunden. */
+  /** Interval between measurements in the server info, in seconds. */
   statsInterval: number;
-  /** Jede neue Sitzung von Beginn an mitschneiden. */
+  /** Record every new session from the start. */
   recordAuto: boolean;
-  /** Selbst eingelesene Farbschemata. */
+  /** Imported color schemes. */
   customSchemes: Scheme[];
-  /** Dateileiste neben dem Terminal zeigen. */
+  /** Show the file bar next to the terminal. */
   fileBar: boolean;
-  /** Breite der Dateileiste in Pixeln. */
+  /** Width of the file bar in pixels. */
   fileBarWidth: number;
-  /** Die Dateileiste folgt dem Ordner, in dem das Terminal steht. */
+  /** The file bar follows the folder the terminal is in. */
   fileFollow: boolean;
   /** Versteckte Dateien zeigen. */
   fileHidden: boolean;
-  /** Textdateien im eingebauten Editor öffnen; aus = im eigenen Programm. */
+  /** Open text files in the built-in editor; off = in your own program. */
   fileEditor: boolean;
-  /** Programm zum Bearbeiten, wenn der eingebaute Editor aus ist; leer = was Windows für die Datei vorsieht. */
+  /** Program for editing when the built-in editor is off; empty = what Windows intends for the file. */
   fileEditorPath: string;
-  /** Wie viele Dateien gleichzeitig übertragen werden. */
+  /** How many files are transferred at the same time. */
   transferParallel: number;
-  /** Was geschieht, wenn es die Datei am Ziel schon gibt. */
+  /** What happens if the file already exists at the destination. */
   transferConflict: Conflict;
-  /** Ordner für Downloads aus der Dateileiste; leer = der Download-Ordner von Windows. */
+  /** Folder for downloads from the file bar; empty = the Windows downloads folder. */
   downloadDir: string;
-  /** Seitenleiste rechts neben dem Terminal zeigen (Server-Info, Snippets). */
+  /** Show the sidebar right of the terminal (server info, snippets). */
   sideBar: boolean;
-  /** Breite der Seitenleiste in Pixeln. */
+  /** Width of the sidebar in pixels. */
   sideBarWidth: number;
-  /** Welcher Reiter der Seitenleiste vorn ist. */
+  /** Which sidebar tab is in front. */
   sideTab: SideTab;
-  /** Beim Tippen im Terminal Befehle, Optionen und Pfade vorschlagen. */
+  /** Suggest commands, options and paths while typing in the terminal. */
   termSuggest: boolean;
-  /** Kennung der Shell, die als lokales Terminal aufgeht, wenn keine gewählt wird; leer = die erste gefundene. */
+  /** ID of the shell that opens as local terminal when none is chosen; empty = the first one found. */
   localShell: string;
-  /** Beim Start nachsehen, ob es eine neuere Version gibt. */
+  /** Check on start whether there is a newer version. */
   updateCheck: boolean;
   /** Wann zuletzt nachgesehen wurde, in Millisekunden seit 1970. */
   updateChecked: number;
-  /** Die Version, die zuletzt lief. Weicht sie beim Start ab, wurde Glowport aktualisiert; leer beim ersten Start. */
+  /** The version that ran last. If it differs on start, Glowport was updated; empty on first start. */
   lastVersion: string;
 }
 
@@ -133,9 +133,9 @@ export const settings = $state<Settings>({
 
 export const ui = $state({
   page: 'hosts' as PageId,
-  /** Suche und Schnellverbindung (Strg+K). */
+  /** Search and quick connect (Ctrl+K). */
   palette: false,
-  /** Erst nach dem Laden der Einstellungen wird gespeichert, sonst überschreiben die Vorgaben die Datei. */
+  /** Only save after the settings have loaded, otherwise the defaults overwrite the file. */
   ready: false,
 });
 

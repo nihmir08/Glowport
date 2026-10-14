@@ -4,7 +4,7 @@
   import { titleOf } from '../sessions.svelte';
   import type { SavedLayout, Target } from '../types';
 
-  /** Kleines Abbild einer Anordnung: jeder Bereich als Feld mit dem Namen seines Ziels. */
+  /** Small image of a layout: every pane as a box with its destination's name. */
   let { layout, small = false }: { layout: SavedLayout; small?: boolean } = $props();
 
   const cells = $derived(

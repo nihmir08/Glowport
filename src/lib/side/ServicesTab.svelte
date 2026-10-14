@@ -10,7 +10,7 @@
   import Dialog from '../ui/Dialog.svelte';
   import Icon from '../ui/Icon.svelte';
 
-  /** Die systemd-Dienste des Servers, an dem der Bereich hängt. */
+  /** The systemd services of the server the pane is connected to. */
   let { pane }: { pane: Pane } = $props();
 
   type ServiceAction = 'start' | 'stop' | 'restart' | 'enable' | 'disable';
@@ -33,7 +33,7 @@
   );
 
   let open = $state<string | null>(null);
-  /** Zustand und letzte Meldungen des aufgeklappten Dienstes, wie systemd sie ausgibt. */
+  /** State and latest messages of the expanded service, as systemd prints them. */
   let status = $state('');
   let busy = $state<string | null>(null);
   let confirm = $state<{ service: ServiceUnit; action: 'stop' | 'restart' | 'disable' } | null>(null);
@@ -75,7 +75,7 @@
     if (pending) await run(pending.service, pending.action);
   }
 
-  /** Das Journal läuft in einem neuen Tab am selben Server mit. */
+  /** The journal follows along in a new tab on the same server. */
   async function follow(service: ServiceUnit) {
     try {
       openTabWith(pane.target, await serviceLine(service.unit, !abilitiesOf(session)?.root));

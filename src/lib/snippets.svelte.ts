@@ -5,33 +5,33 @@ import { asInput, fill, MAX_WAIT, variablesOf } from './snippets';
 import { toast } from './state.svelte';
 import type { MacroStep, Snippet } from './types';
 
-/** Ausführen schickt den Befehl samt Eingabetaste ab, Einfügen tippt ihn nur. */
+/** Run sends the command with Enter, paste only types it. */
 export type UseMode = 'run' | 'paste';
 
-/** Was rund um Snippets gerade offen ist. Die Dialoge dazu zeichnet `SnippetDialogs.svelte`. */
+/** What is currently open around snippets. `SnippetDialogs.svelte` draws the dialogs for it. */
 export const snipUi = $state({
-  /** Snippet, dessen Variablen abgefragt werden, bevor es in einen Bereich geht. */
+  /** Snippet whose variables are asked for before it goes into a pane. */
   asking: null as { snippet: Snippet; pane: string; mode: UseMode } | null,
   /** Laufende Aufzeichnung eines Makros. */
   recording: null as { pane: string; steps: MacroStep[]; last: number } | null,
-  /** Eine fertige Aufzeichnung, die noch ihren Namen braucht. */
+  /** A finished recording that still needs its name. */
   naming: null as MacroStep[] | null,
-  /** Makro, das gerade abgespielt wird. */
+  /** Macro currently being played. */
   playing: null as { pane: string; name: string } | null,
-  /** Editor außerhalb der Seite „Snippets“ (aus der Seitenleiste am Terminal); `snippet` null = neu. */
+  /** Editor outside the Snippets page (from the sidebar at the terminal); `snippet` null = new. */
   editing: null as { snippet: Snippet | null } | null,
-  /** Snippet, das auf mehreren Hosts ausgeführt werden soll. */
+  /** Snippet that should run on several hosts. */
   running: null as Snippet | null,
 });
 
-/** Zuletzt eingesetzte Werte je Snippet. Nur im Speicher: Sie können Geheimes enthalten und werden nie gesichert. */
+/** Values last used per snippet. Only in memory: they can contain secrets and are never saved. */
 const remembered = new Map<string, Record<string, string>>();
 export const lastValues = (snippet: string) => remembered.get(snippet) ?? {};
 export const remember = (snippet: string, values: Record<string, string>) => void remembered.set(snippet, { ...values });
 
 export const snippetForHotkey = (hotkey: string) => vault.snippets.find((snippet) => snippet.hotkey === hotkey);
 
-/** Pakete in der Reihenfolge ihrer Namen; Snippets ohne Paket stehen am Ende unter dem leeren Namen. */
+/** Packages in the order of their names; snippets without a package come last under the empty name. */
 export function packages(snippets: Snippet[] = vault.snippets): { name: string; items: Snippet[] }[] {
   const names = [...new Set(snippets.map((snippet) => snippet.package))].sort((a, b) => Number(!a) - Number(!b) || a.localeCompare(b));
   return names.map((name) => ({ name, items: snippets.filter((snippet) => snippet.package === name).sort((a, b) => a.name.localeCompare(b.name)) }));
@@ -44,7 +44,7 @@ function connected(pane: string): boolean {
   return false;
 }
 
-/** Schickt einen fertigen Befehl in einen Bereich. */
+/** Sends a finished command into a pane. */
 export function send(pane: string, command: string, mode: UseMode) {
   if (mode === 'run') input(pane, asInput(command));
   else pasteTerminal(pane, command);
@@ -52,8 +52,8 @@ export function send(pane: string, command: string, mode: UseMode) {
 }
 
 /**
- * Benutzt ein Snippet in einem Bereich: Makros werden abgespielt, Befehle ausgeführt oder eingefügt.
- * Hat der Befehl Variablen, fragt erst ein Dialog nach ihren Werten.
+ * Uses a snippet in a pane: macros are played, commands run or pasted.
+ * If the command has variables, a dialog asks for their values first.
  */
 export function useSnippet(snippet: Snippet, pane: string, mode: UseMode) {
   if (!connected(pane)) return;
@@ -62,7 +62,7 @@ export function useSnippet(snippet: Snippet, pane: string, mode: UseMode) {
   else send(pane, snippet.command, mode);
 }
 
-/** Schließt die Abfrage der Variablen und schickt den Befehl mit den eingesetzten Werten los. */
+/** Closes the variable query and sends the command with the filled-in values. */
 export function answerVariables(values: Record<string, string>, mode: UseMode) {
   const asking = snipUi.asking;
   if (!asking) return;
@@ -75,7 +75,7 @@ export function answerVariables(values: Record<string, string>, mode: UseMode) {
 
 let stopPlaying = false;
 
-/** Spielt ein Makro ab: dieselben Tasten in denselben Abständen, lange Pausen gekürzt. */
+/** Plays a macro: the same keys at the same intervals, long pauses shortened. */
 export async function play(snippet: Snippet, pane: string) {
   if (snipUi.playing) return toast(t('macro.busy'), 'err');
   snipUi.playing = { pane, name: snippet.name };
@@ -83,7 +83,7 @@ export async function play(snippet: Snippet, pane: string) {
   focusTerminal(pane);
   for (const step of snippet.steps) {
     if (step.wait > 0) await new Promise((resolve) => setTimeout(resolve, Math.min(step.wait, MAX_WAIT)));
-    // Abgebrochen, oder der Bereich ist inzwischen zu oder getrennt.
+    // Cancelled, or the pane has been closed or disconnected in the meantime.
     if (stopPlaying || paneByKey(pane)?.sessionId == null) break;
     input(pane, step.keys);
   }
@@ -92,14 +92,14 @@ export async function play(snippet: Snippet, pane: string) {
 
 export const stopMacro = () => (stopPlaying = true);
 
-/** Beginnt, alles mitzuschreiben, was in diesen Bereich getippt wird. */
+/** Starts recording everything typed into this pane. */
 export function startRecording(pane: string) {
   if (!connected(pane)) return;
   snipUi.recording = { pane, steps: [], last: 0 };
   focusTerminal(pane);
 }
 
-/** Beendet die Aufzeichnung. Mit `keep` wird nach einem Namen gefragt, sonst verfällt sie. */
+/** Ends the recording. With `keep` it asks for a name, otherwise it is discarded. */
 export function stopRecording(keep = true) {
   const recording = snipUi.recording;
   snipUi.recording = null;
@@ -108,7 +108,7 @@ export function stopRecording(keep = true) {
   snipUi.naming = $state.snapshot(recording.steps);
 }
 
-/** Tasten, die kurz hintereinander kommen, gehören zu einem Schritt; eine Zeile endet mit der Eingabetaste. */
+/** Keys that come in quick succession belong to one step; a line ends with Enter. */
 const SAME_STEP = 350;
 
 inputTaps.add((key, text) => {

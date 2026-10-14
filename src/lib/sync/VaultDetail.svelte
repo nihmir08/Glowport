@@ -15,7 +15,7 @@
   let { info, onclose, onresync }: { info: VaultInfo; onclose: () => void; onresync: () => void } = $props();
 
   const owner = $derived(info.kind === 'shared' && info.role === 'owner');
-  // Der Name im Feld beginnt beim gespeicherten; das Panel entsteht für jeden Tresor neu.
+  // The name in the field starts with the saved one; the panel is created anew for every vault.
   let name = $state(untrack(() => info.name));
   let busy = $state(false);
 
@@ -35,7 +35,7 @@
 
   const rename = (event: SubmitEvent) => (event.preventDefault(), run(() => sharedRename(info.id, name), t('common.saved')));
 
-  /** Das Mitglied, dessen Sicherheitscode gerade aufgeklappt ist. */
+  /** The member whose safety code is currently expanded. */
   let opened = $state<string | null>(null);
 
   let inviting = $state(false);
@@ -43,7 +43,7 @@
   let as = $state<VaultRole>('read');
   let candidate = $state<SyncCandidate | null>(null);
   let lookupError = $state('');
-  // Ein anderer Name ist ein anderes Konto: Der gezeigte Sicherheitscode gilt nicht mehr.
+  // Another name is another account: the safety code shown no longer applies.
   $effect(() => {
     void who;
     candidate = null;
@@ -71,14 +71,14 @@
     if (await run(() => sharedInvite(info.id, found.account, as), t('vault.invite.done', { name: found.username }))) closeInvite();
   }
 
-  /** Weniger Rechte tauschen den Schlüssel des Tresors; das dauert einen Moment und wird gesagt. */
+  /** Fewer rights swap the vault's key; that takes a moment and is said so. */
   const setRole = (member: VaultMember, role: VaultRole) => run(() => sharedSetRole(info.id, member.account, role), t(role === 'read' ? 'vault.role.lowered' : 'vault.role.raised', { name: member.name }));
 
   let removing = $state<VaultMember | null>(null);
   let handing = $state<VaultMember | null>(null);
   let leaving = $state(false);
   let deleting = $state(false);
-  /** Hosts dieses Tresors mit gespeichertem Passwort oder Schlüssel: Diese Zugänge kennt jedes Mitglied. */
+  /** Hosts of this vault with a saved password or key: every member knows these credentials. */
   const exposed = $derived(vault.hosts.filter((h) => h.vault === info.id && (h.hasPassword || !!authFor(h.group, h.own).key || authFor(h.group, h.own).identityPassword)));
 
   async function remove() {

@@ -1,5 +1,5 @@
-// Vorschläge beim Tippen im Terminal: Befehle, Unterbefehle, Optionen, Snippets und Pfade am Server.
-// Grundlage ist nur die Zeile, die im Terminal steht. Einen gespeicherten Verlauf gibt es nicht.
+// Suggestions while typing in the terminal: commands, subcommands, options, snippets and paths on the server.
+// The only basis is the line in the terminal. There is no saved history.
 
 import { fsHome, fsList } from './backend';
 import { firstLine } from './snippets';
@@ -8,22 +8,22 @@ import type { FileEntry, Place, Snippet } from './types';
 
 export interface Suggestion {
   kind: 'command' | 'sub' | 'option' | 'dir' | 'file' | 'snippet';
-  /** Was in der Liste steht, und die Erklärung daneben. */
+  /** What is in the list, and the explanation beside it. */
   label: string;
   detail: string;
-  /** Wie viele Zeichen am Ende der Zeile ersetzt werden und womit. */
+  /** How many characters at the end of the line are replaced and with what. */
   replace: number;
   insert: string;
-  /** Bei einem Snippet: Es wird eingefügt, als hätte man es in der Seitenleiste gewählt. */
+  /** For a snippet: it is pasted as if it had been chosen in the sidebar. */
   snippet?: Snippet;
 }
 
 export interface Context {
-  /** Die Zeile bis zur Schreibmarke, ohne die Eingabeaufforderung. */
+  /** The line up to the cursor, without the prompt. */
   line: string;
-  /** Der Server der Sitzung, für Pfade; null, solange keine Verbindung steht. */
+  /** The session's server, for paths; null as long as no connection is up. */
   place: Place | null;
-  /** Ordner, in dem die Shell steht, soweit bekannt. */
+  /** Folder the shell is in, as far as known. */
   cwd: string | null;
   lang: 'de' | 'en';
   snippets: Snippet[];
@@ -32,7 +32,7 @@ export interface Context {
 const LIMIT = 7;
 const describe = (item: Item, lang: 'de' | 'en') => (lang === 'de' ? item[1] : item[2]);
 
-/** Wo der Befehl beginnt, an dem gerade getippt wird: hinter dem letzten `|`, `&&`, `||` oder `;`. */
+/** Where the command being typed begins: after the last `|`, `&&`, `||` or `;`. */
 function segmentStart(line: string): number {
   let start = 0;
   for (const match of line.matchAll(/\|\||&&|[|;]/g)) start = match.index + match[0].length;
@@ -51,7 +51,7 @@ function commands(word: string, context: Context): Suggestion[] {
     .filter((snippet) => snippet.name.toLowerCase().includes(lower))
     .sort((a, b) => Number(b.name.toLowerCase().startsWith(lower)) - Number(a.name.toLowerCase().startsWith(lower)) || a.name.localeCompare(b.name))
     .map((snippet): Suggestion => ({ kind: 'snippet', label: snippet.name, detail: snippet.kind === 'macro' ? '' : firstLine(snippet.command), replace: word.length, insert: '', snippet }));
-  // Eigene Snippets sollen nicht hinter einer langen Liste von Befehlen verschwinden.
+  // Your own snippets should not disappear behind a long list of commands.
   const room = Math.max(LIMIT - Math.min(own.length, 3), 0);
   return [...known.slice(0, room), ...own].slice(0, LIMIT);
 }
@@ -67,7 +67,7 @@ const listings = new Map<string, Cached>();
 const homes = new Map<string, Promise<string | null>>();
 const placeKey = (place: Place) => (place.kind === 'local' ? 'local' : place.kind === 'ftp' ? `ftp:${place.user}@${place.host}:${place.port}` : `${place.kind}:${place.id}`);
 
-/** Der Inhalt eines Ordners am Server. Kurz gemerkt, damit nicht jeder Tastendruck neu fragt. */
+/** The content of a folder on the server. Remembered briefly, so not every key press asks again. */
 function listing(place: Place, dir: string): Promise<FileEntry[]> {
   const key = `${placeKey(place)}|${dir}`;
   const cached = listings.get(key);
@@ -88,7 +88,7 @@ function home(place: Place): Promise<string | null> {
   return known;
 }
 
-/** Macht aus einem Pfad mit `.` und `..` einen sauberen, der an der Wurzel beginnt. */
+/** Turns a path with `.` and `..` into a clean one starting at the root. */
 function clean(path: string): string {
   const out: string[] = [];
   for (const part of path.split('/')) {
@@ -98,7 +98,7 @@ function clean(path: string): string {
   return `/${out.join('/')}`;
 }
 
-/** Zeichen, die die Shell sonst als etwas anderes läse. */
+/** Characters the shell would otherwise read as something else. */
 const escape = (name: string) => name.replace(/([\s'"\\$`!&;|<>()*?[\]{}#~])/g, '\\$1');
 
 async function paths(word: string, only: 'dir' | 'any', context: Context): Promise<Suggestion[]> {
@@ -123,20 +123,20 @@ async function paths(word: string, only: 'dir' | 'any', context: Context): Promi
 
 const looksLikePath = (word: string) => word.includes('/') || word.startsWith('.') || word.startsWith('~/');
 
-/** Die Vorschläge zu einer Zeile, die besten zuerst; leer, wenn es nichts Sinnvolles gibt. */
+/** The suggestions for a line, the best first; empty if there is nothing sensible. */
 export async function suggest(context: Context): Promise<Suggestion[]> {
   const segment = context.line.slice(segmentStart(context.line)).replace(/^\s+/, '');
   if (!segment) return [];
   const words = segment.split(/\s+/);
-  // `sudo`, `time` und Zuweisungen wie `LANG=C` stehen vor dem eigentlichen Befehl.
+  // `sudo`, `time` and assignments like `LANG=C` come before the actual command.
   while (words.length > 1 && (PREFIXES.has(words[0]) || /^\w+=\S*$/.test(words[0]))) words.shift();
   const word = words[words.length - 1];
-  // Offene Anführungszeichen: Da steht freier Text, kein Befehl.
+  // Open quotes: free text is there, not a command.
   if ((segment.match(/"/g)?.length ?? 0) % 2 || (segment.match(/'/g)?.length ?? 0) % 2) return [];
 
   if (words.length === 1) return word.startsWith('/') || word.startsWith('./') || word.startsWith('~/') ? paths(word, 'any', context) : commands(word, context);
 
-  // Unterbefehle können selbst welche haben: `docker compose up`.
+  // Subcommands can have subcommands themselves: `docker compose up`.
   let spec: Spec | undefined = SPECS[words[0]];
   let depth = 1;
   while (spec?.nested?.[words[depth]] && words.length - 1 > depth) spec = spec.nested[words[depth++]];
@@ -149,9 +149,9 @@ export async function suggest(context: Context): Promise<Suggestion[]> {
   }
   if (spec?.paths && (word || spec.paths === 'dir')) return paths(word, spec.paths, context);
   if (looksLikePath(word)) return paths(word, 'any', context);
-  // Nach dem Befehl und einem Leerzeichen: zeigen, was er an Optionen kennt.
+  // After the command and a space: show the options it knows.
   if (!word && first) return items(spec?.options, '', 'option', context.lang).slice(0, LIMIT);
-  // Zahlen und Optionen mit festem Wert stehen bei manchen Befehlen als Vorschlag in der Liste (`chmod 755`).
+  // For some commands, numbers and options with a fixed value are suggestions in the list (`chmod 755`).
   return items(spec?.options, word, 'option', context.lang)
     .filter(() => !!word)
     .slice(0, LIMIT);

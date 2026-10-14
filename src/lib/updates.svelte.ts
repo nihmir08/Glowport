@@ -1,4 +1,4 @@
-// Updates: nachsehen, ob es eine neuere Version gibt, und sie nach Rückfrage installieren.
+// Updates: check whether there is a newer version and install it after asking.
 
 import { appInfo, inApp, updateCheck, updateInstall } from './backend';
 import { errorText } from './data.svelte';
@@ -7,23 +7,23 @@ import { settings, toast } from './state.svelte';
 import type { UpdateInfo, UpdateProgress } from './types';
 
 export const updates = $state<{
-  /** Kann diese Fassung überhaupt nach Updates suchen? Die Vorschau im Browser tut so, damit sich der Ablauf ansehen lässt. */
+  /** Can this version look for updates at all? The browser preview pretends to, so the flow can be looked at. */
   enabled: boolean;
   available: UpdateInfo | null;
-  /** Der Dialog mit der Rückfrage ist offen. */
+  /** The dialog with the prompt is open. */
   open: boolean;
   checking: boolean;
-  /** Gesetzt, solange geladen und installiert wird. */
+  /** Set while downloading and installing. */
   progress: UpdateProgress | null;
   error: string;
 }>({ enabled: !inApp, available: null, open: false, checking: false, progress: null, error: '' });
 
-/** Im Betrieb wird stündlich nachgesehen, damit ein neues Release ohne Neustart auftaucht. */
+/** While running it checks hourly, so a new release shows up without a restart. */
 const HOUR = 3_600_000;
-/** Die zuletzt gemeldete Version: Der Hinweis kommt einmal je neuer Version, nicht bei jedem Nachsehen. */
+/** The version last announced: the notice comes once per new version, not on every check. */
 let announced = '';
 
-/** Fragt nach einer neueren Version. `manual`: Der Nutzer hat gefragt und bekommt in jedem Fall eine Antwort. */
+/** Asks for a newer version. `manual`: the user asked and gets an answer in any case. */
 export async function checkForUpdate(manual: boolean) {
   if (!updates.enabled || updates.checking) return;
   updates.checking = true;
@@ -35,17 +35,17 @@ export async function checkForUpdate(manual: boolean) {
     else if (!updates.available && manual) toast(t('upd.none'), 'ok');
     if (updates.available) announced = updates.available.version;
   } catch (e) {
-    // Beim Start ohne Netz bleibt Glowport still; wer selbst gefragt hat, erfährt den Grund.
+    // On start without network Glowport stays quiet; whoever asked themselves learns the reason.
     if (manual) toast(errorText(e), 'err');
   }
   updates.checking = false;
 }
 
-/** Beim Start und danach stündlich nachsehen, solange es eingeschaltet ist; nicht während schon installiert wird. */
+/** Check on start and hourly afterwards as long as it is switched on; not while already installing. */
 export async function initUpdates() {
   const info = inApp ? await appInfo().catch(() => null) : null;
   if (inApp) updates.enabled = !!info?.updates;
-  // Lief zuletzt eine andere Version, ist das Update angekommen: einmal sagen, dann merken.
+  // If a different version ran last, the update has arrived: say so once, then remember.
   const version = info?.version ?? __APP_VERSION__;
   if (settings.lastVersion && settings.lastVersion !== version) toast(t('upd.done', { version }), 'ok');
   settings.lastVersion = version;
@@ -63,7 +63,7 @@ export async function installUpdate() {
   updates.progress = { done: 0, total: null };
   try {
     await updateInstall((progress) => (updates.progress = progress));
-    // Im Programm startet Glowport hier neu; in der Vorschau gibt es nichts zu installieren.
+    // In the program Glowport restarts here; in the preview there is nothing to install.
     if (!inApp) (toast(t('upd.preview'), 'info'), (updates.open = false));
   } catch (e) {
     updates.error = errorText(e);

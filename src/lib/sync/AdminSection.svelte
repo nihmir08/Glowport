@@ -10,7 +10,7 @@
   import Dialog from '../ui/Dialog.svelte';
   import Icon from '../ui/Icon.svelte';
 
-  // Was das Konto sieht, das den Server verwaltet: Konten, Speicher, Einladungscodes. In keinen Tresor hinein.
+  // What the account administering the server sees: accounts, storage, invite codes. Into no vault.
   let invites = $state<SyncInviteCode[]>([]);
   let accounts = $state<SyncAccount[]>([]);
   let busy = $state(false);

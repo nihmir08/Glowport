@@ -2,7 +2,7 @@
   import { shellLook } from '../local.svelte';
   import type { LocalShell } from '../types';
 
-  /** Kachel einer Shell dieses PCs: PowerShell, Eingabeaufforderung, Git Bash oder das Logo der WSL-Distribution. */
+  /** Tile of a shell on this PC: PowerShell, Command Prompt, Git Bash or the WSL distribution's logo. */
   let { shell, size = 'md', bare = false }: { shell: Pick<LocalShell, 'kind' | 'detail'> | undefined; size?: 'sm' | 'md' | 'lg'; bare?: boolean } = $props();
 
   const look = $derived(shellLook(shell));

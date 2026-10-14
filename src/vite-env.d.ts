@@ -1,5 +1,5 @@
 /// <reference types="svelte" />
 /// <reference types="vite/client" />
 
-/** Versionsnummer aus package.json, beim Bauen eingesetzt. */
+/** Version number from package.json, filled in at build time. */
 declare const __APP_VERSION__: string;

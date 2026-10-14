@@ -12,8 +12,8 @@
   import TextField from '../ui/TextField.svelte';
 
   /**
-   * `fresh`: Auf diesem Gerät gibt es noch keinen Tresor (erster Start). Dann bleibt nur das Anmelden an einem
-   * bestehenden Konto; der Tresor entsteht daraus.
+   * `fresh`: there is no vault on this device yet (first start). Then only signing in to an
+   * existing account remains; the vault is created from it.
    */
   let { fresh = false, oncancel }: { fresh?: boolean; oncancel?: () => void } = $props();
 
@@ -23,7 +23,7 @@
   let code = $state('');
   let password = $state('');
   let device = $state('');
-  /** Was mit den Einträgen dieses Geräts geschieht, wenn es sich mit einem bestehenden Konto verbindet. */
+  /** What happens to this device's entries when it links to an existing account. */
   let local = $state<'keep' | 'discard'>('keep');
   let askLocal = $state(false);
 
@@ -31,16 +31,16 @@
   let probing = $state(false);
   let busy = $state(false);
   let error = $state('');
-  /** Was an der Adresse nicht stimmt. Steht direkt bei ihr, nicht am Ende des Formulars. */
+  /** What is wrong with the address. Shown right at it, not at the end of the form. */
   let serverError = $state('');
 
-  // Der Name des Rechners ist ein brauchbarer erster Vorschlag.
+  // The computer's name is a usable first suggestion.
   onMount(() => void appInfo().then((info) => info?.device && !device && (device = info.device)));
 
   const existing = $derived(fresh || mode === 'existing');
   const ready = $derived(!busy && server.trim() !== '' && /^[a-z0-9._-]{3,32}$/.test(username.trim()) && password !== '' && (existing || code.trim() !== ''));
 
-  // Eine andere Adresse ist ein anderer Server: Was über den alten bekannt war, gilt nicht mehr.
+  // Another address is another server: what was known about the old one no longer applies.
   $effect(() => {
     void server;
     info = null;
@@ -64,7 +64,7 @@
     }
   }
 
-  /** Eingabetaste im Feld der Adresse: prüfen, solange der Rest des Formulars noch nicht ausgefüllt ist. */
+  /** Enter in the address field: check, as long as the rest of the form is not filled in yet. */
   function serverKey(event: KeyboardEvent) {
     if (event.key !== 'Enter' || ready) return;
     event.preventDefault();
@@ -87,14 +87,14 @@
       } else {
         applySync(await syncConnect({ ...account, local: askLocal ? local : undefined }));
       }
-      // Das Passwort bleibt keinen Augenblick länger in der Oberfläche als nötig.
+      // The password does not stay in the interface a moment longer than necessary.
       password = '';
       toast(t('sync.setup.done'), 'ok');
     } catch (e) {
-      // Der Tresor dieses Geräts gehört nicht zu diesem Konto: erst entscheiden, was mit seinen Einträgen geschieht.
+      // This device's vault does not belong to this account: first decide what happens to its entries.
       const reason = (e as Partial<BackendError>)?.code;
       if (reason === 'other_account' && !askLocal) askLocal = true;
-      // Beim Anlegen eines Kontos ist das Passwort des Tresors auf diesem Gerät gemeint, kein frei gewähltes.
+      // When creating an account, the password of the vault on this device is meant, not a freely chosen one.
       else if (reason === 'wrong_password' && !existing) error = t('sync.setup.password.wrong');
       else error = errorText(e);
     } finally {

@@ -14,8 +14,8 @@
   import SnippetBar from './SnippetBar.svelte';
 
   /**
-   * Seitenleiste rechts neben dem Terminal: Auslastung des Servers, Snippets und, wo der Server sie hergibt,
-   * Docker, Dienste und Prozesse für den Bereich mit der Tastatur.
+   * Sidebar right of the terminal: server load, snippets and, where the server provides them,
+   * Docker, services and processes for the pane with the keyboard.
    */
   let { pane }: { pane: Pane } = $props();
 
@@ -27,17 +27,17 @@
     { id: 'processes', icon: 'list', label: 'side.processes' },
   ];
   const session = $derived(pane.kind === 'ssh' && pane.phase === 'connected' ? pane.sessionId : null);
-  // Was es auf dem Server gibt, wird einmal nachgesehen, sobald die Verbindung steht.
+  // What exists on the server is checked once as soon as the connection is up.
   $effect(() => {
     if (session !== null) probe(session);
   });
   const able = $derived(abilitiesOf(session));
-  // Alles außer den Snippets kommt über SSH vom Server. Bei Telnet, serieller Leitung und lokalem Terminal bleiben
-  // die Snippets; Docker, Dienste und Prozesse gibt es nur, wo der Server sie hergibt.
+  // Everything except snippets comes from the server over SSH. For Telnet, serial line and local terminal
+  // the snippets stay; Docker, services and processes only exist where the server provides them.
   const tabs = $derived(ALL.filter((tab) => tab.id === 'snip' || (pane.kind === 'ssh' && (tab.id === 'info' || !!able?.[tab.id]))));
   const shown = $derived(tabs.some((tab) => tab.id === settings.sideTab) ? settings.sideTab : pane.kind === 'ssh' ? 'info' : 'snip');
 
-  /** Zieht die Breite der Leiste an ihrem linken Rand. */
+  /** Drags the bar's width at its left edge. */
   function resize(event: PointerEvent) {
     if (event.button !== 0) return;
     event.preventDefault();

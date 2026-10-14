@@ -5,7 +5,7 @@
   import OsIcon from './OsIcon.svelte';
   import ShellIcon from './ShellIcon.svelte';
 
-  /** Das Zeichen für das Ziel einer Sitzung: das System des Hosts, die Shell oder das Protokoll. */
+  /** The symbol for a session's destination: the host's system, the shell or the protocol. */
   let { target, size = 'md', bare = false }: { target: Target; size?: 'sm' | 'md' | 'lg'; bare?: boolean } = $props();
 
   const host = $derived(target.kind === 'host' ? hostById(target.id) : undefined);

@@ -1,6 +1,6 @@
 import type { Mode } from './state.svelte';
 
-/** Helligkeit nach WCAG, 0 (schwarz) bis 1 (weiß). */
+/** Luminance according to WCAG, 0 (black) to 1 (white). */
 function luminance(hex: string): number {
   const n = parseInt(hex.slice(1), 16);
   const f = (v: number) => {
@@ -16,6 +16,6 @@ export function applyTheme(mode: Mode, accent: string, systemDark: boolean) {
   const root = document.documentElement;
   root.dataset.mode = mode === 'system' ? (systemDark ? 'dark' : 'light') : mode;
   root.style.setProperty('--accent', accent);
-  // Schrift auf der Akzentfläche: dunkel auf hellen, weiß auf dunklen Farben.
+  // Text on the accent area: dark on light colors, white on dark ones.
   root.style.setProperty('--accent-ink', luminance(accent) > 0.4 ? '#17120a' : '#ffffff');
 }

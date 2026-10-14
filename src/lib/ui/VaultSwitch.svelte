@@ -4,13 +4,13 @@
   import { scope, vaultColor, vaultLabel } from '../sync.svelte';
   import Icon from './Icon.svelte';
 
-  // Den gezeigten Tresor gibt es nicht mehr (verlassen, entfernt): zurück zu allen.
+  // The vault shown no longer exists (left, removed): back to all.
   $effect(() => {
     if (scope.vault !== 'all' && !vault.vaults.some((v) => v.id === scope.vault)) scope.vault = 'all';
   });
 </script>
 
-<!-- Ohne geteilte Tresore gibt es nichts umzuschalten. -->
+<!-- Without shared vaults there is nothing to switch. -->
 {#if vault.vaults.length > 1}
   <div class="seg vsw" role="radiogroup" aria-label={t('vault.switch')}>
     <button type="button" role="radio" aria-checked={scope.vault === 'all'} class:on={scope.vault === 'all'} onclick={() => (scope.vault = 'all')}>{t('vault.all')}</button>

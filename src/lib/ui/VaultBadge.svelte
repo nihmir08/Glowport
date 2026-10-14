@@ -6,7 +6,7 @@
   const home = $derived(vaultOf(entry));
 </script>
 
-<!-- Die Marke sagt, in welchem Tresor ein Eintrag liegt. Ohne geteilte Tresore wäre sie überall dieselbe. -->
+<!-- The badge says which vault an entry is in. Without shared vaults it would be the same everywhere. -->
 {#if vault.vaults.length > 1}
   <i class="chip vault" style="--vc:{vaultColor(home)}"><i class="vdot"></i>{vaultLabel(home)}</i>
 {/if}

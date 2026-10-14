@@ -3,8 +3,8 @@
   import type { Action } from '../quick.svelte';
 
   /**
-   * Auswahlfeld, an dessen Ende Einträge wie „Neuer Schlüssel …“ stehen können. Sie wählen nichts aus,
-   * sondern öffnen einen Dialog; die Auswahl bleibt so lange, wie sie war.
+   * Select field that can have entries like “New key …” at its end. They select nothing
+   * but open a dialog; meanwhile the selection stays as it was.
    */
   let {
     value = $bindable(''),

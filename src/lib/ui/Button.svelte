@@ -24,7 +24,7 @@
   } = $props();
 </script>
 
-<!-- type="button": In einem Formular wäre der Knopf sonst ein Absende-Knopf und würde beim Klick speichern. -->
+<!-- type="button": in a form the button would otherwise be a submit button and save on click. -->
 <button type="button" class="btn {variant} {size}" class:act={active} class:ico={!children} {disabled} {title} aria-label={children ? undefined : title} {onclick}>
   {#if icon}<Icon name={icon} size={size === 'sm' ? 13 : 15} />{/if}{@render children?.()}
 </button>

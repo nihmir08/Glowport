@@ -5,11 +5,11 @@
   import Icon from './Icon.svelte';
 
   /**
-   * Feld für einen vererbbaren Wert. Leer heißt: Der Wert kommt von weiter oben.
-   * `inherited.source` ist der Name der Gruppe, die ihn festlegt; null bedeutet die feste Vorgabe des Programms.
-   * `inherited.from` ersetzt die Herkunftsangabe, wenn der Wert nicht aus einer Gruppe stammt (etwa aus einer Identität).
-   * Mit `options` wird daraus ein Auswahlfeld, dessen erster Eintrag „geerbt“ ist. `actions` hängt Einträge an,
-   * die etwas Neues anlegen statt etwas auszuwählen.
+   * Field for an inheritable value. Empty means: the value comes from further up.
+   * `inherited.source` is the name of the group that sets it; null means the program's fixed default.
+   * `inherited.from` replaces the origin note if the value does not come from a group (e.g. from an identity).
+   * With `options` it becomes a select field whose first entry is “inherited”. `actions` appends entries
+   * that create something new instead of selecting something.
    */
   let {
     value = $bindable(''),

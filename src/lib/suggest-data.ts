@@ -1,16 +1,16 @@
-// Was Glowport beim Tippen vorschlägt: gängige Befehle, ihre Unterbefehle und Optionen, je mit kurzer Beschreibung
-// auf Deutsch und Englisch. Bewusst eine überschaubare Auswahl für die Arbeit an Servern, keine vollständige Liste.
+// What Glowport suggests while typing: common commands, their subcommands and options, each with a short description
+// in German and English. Deliberately a manageable selection for working on servers, not a complete list.
 
 /** Text, deutsche Beschreibung, englische Beschreibung. */
 export type Item = [text: string, de: string, en: string];
 
 export interface Spec {
-  /** Unterbefehle an erster Stelle nach dem Befehl. */
+  /** Subcommands in first position after the command. */
   subs?: Item[];
   options?: Item[];
-  /** Unterbefehle, die selbst wieder welche haben (`docker compose …`). */
+  /** Subcommands that have subcommands themselves (`docker compose …`). */
   nested?: Record<string, Spec>;
-  /** Erwartet der Befehl Pfade? `dir`: nur Ordner. */
+  /** Does the command expect paths? `dir`: only folders. */
   paths?: 'any' | 'dir';
 }
 
@@ -439,5 +439,5 @@ export const SPECS: Record<string, Spec> = {
   uname: { options: [['-a', 'Alles', 'Everything'], ['-r', 'Nur die Kernel-Version', 'Kernel release only']] },
 };
 
-/** Wörter, die vor dem eigentlichen Befehl stehen dürfen. */
+/** Words that may come before the actual command. */
 export const PREFIXES = new Set(['sudo', 'doas', 'time', 'nohup', 'watch', 'exec']);

@@ -1,114 +1,114 @@
-// Formen der Daten, die zwischen Oberfläche und Kern wandern. Gegenstück: crates/core/src/directory.rs.
+// Shapes of the data travelling between interface and core. Counterpart: crates/core/src/directory.rs.
 
 export type Reconnect = 'notice' | 'auto';
 
-/** Vererbbare Werte. Fehlt ein Feld, kommt der Wert von weiter oben. */
+/** Inheritable values. If a field is missing, the value comes from further up. */
 export interface Fields {
   user?: string;
   port?: number;
-  /** Kennung des Sprung-Servers; leer = ausdrücklich keiner. */
+  /** Jump host ID; empty = explicitly none. */
   jump?: string;
   startcmd?: string;
   reconnect?: Reconnect;
-  /** Pfad einer Schlüsseldatei auf diesem Rechner. */
+  /** Path of a key file on this computer. */
   keyFile?: string;
-  /** Kennung einer Identität; leer = ausdrücklich keine. */
+  /** An identity's ID; empty = explicitly none. */
   identity?: string;
-  /** Kennung eines Schlüssels im Tresor; leer = ausdrücklich keiner. */
+  /** ID of a key in the vault; empty = explicitly none. */
   key?: string;
-  /** Umgebungsvariablen wie bei `SetEnv`: `NAME=wert`, mehrere durch Leerzeichen getrennt. */
+  /** Environment variables as with `SetEnv`: `NAME=value`, several separated by spaces. */
   env?: string;
-  /** Schlüssel aus einem SSH-Agenten dieses Rechners anbieten. */
+  /** Offer keys from an SSH agent on this computer. */
   agent?: boolean;
-  /** Den Agenten an den Server weiterreichen. Wirkt nur zusammen mit `agent`. */
+  /** Forward the agent to the server. Only works together with `agent`. */
   agentForward?: boolean;
-  /** `http://adresse:port` oder `socks5://adresse:port`; leer = ausdrücklich keiner. */
+  /** `http://address:port` or `socks5://address:port`; empty = explicitly none. */
   proxy?: string;
-  /** Sekunden zwischen Lebenszeichen; 0 = aus. */
+  /** Seconds between keepalives; 0 = off. */
   keepalive?: number;
-  /** Sekunden, die auf die Verbindung gewartet wird. */
+  /** Seconds to wait for the connection. */
   timeout?: number;
   term?: string;
   charset?: string;
-  /** Auch alte, heute schwache Verfahren anbieten. */
+  /** Also offer old algorithms that are weak today. */
   legacy?: boolean;
-  /** Kennung eines Farbschemas für das Terminal. */
+  /** ID of a color scheme for the terminal. */
   scheme?: string;
-  /** Das Terminal über Mosh statt über SSH führen. Angemeldet wird weiter per SSH. */
+  /** Run the terminal over Mosh instead of SSH. Signing in still happens over SSH. */
   mosh?: boolean;
-  /** Lokales Echo von Mosh: zeigt Getipptes, bevor der Server es bestätigt. */
+  /** Mosh's local echo: shows what is typed before the server confirms it. */
   moshPredict?: MoshPredict;
-  /** UDP-Port oder Bereich für `mosh-server`, etwa `60001` oder `60001:60010`. */
+  /** UDP port or range for `mosh-server`, e.g. `60001` or `60001:60010`. */
   moshPort?: string;
-  /** Pfad zu `mosh-server` auf dem Server, wenn er nicht im Suchpfad liegt. */
+  /** Path to `mosh-server` on the server, if it is not in the search path. */
   moshServer?: string;
 }
 
 export type MoshPredict = 'adaptive' | 'always' | 'never';
-/** Warum eine Sitzung statt über Mosh per SSH läuft. */
+/** Why a session runs over SSH instead of Mosh. */
 export type MoshFallback = 'missing' | 'ipv6' | 'udp' | 'server';
 
 export type FieldKey = keyof Fields;
 
 export interface Group {
   id: string;
-  /** Kennung des Tresors, in dem der Eintrag liegt. Fehlt sie, ist es der persönliche. */
+  /** ID of the vault the entry is in. If missing, it is the personal one. */
   vault?: string;
   name: string;
   parent: string | null;
   color: string | null;
   defs: Fields;
-  /** Ist für den Proxy der Gruppe ein Passwort hinterlegt? Es selbst verlässt den Kern nicht. */
+  /** Is a password stored for the group's proxy? The password itself never leaves the core. */
   hasProxyPassword?: boolean;
 }
 
-/** Wie ein Host angesprochen wird. Fehlt etwas Unbekanntes aus einer neueren Fassung, gilt es als `ssh`. */
+/** How a host is addressed. If missing or unknown from a newer version, it counts as `ssh`. */
 export type Protocol = 'ssh' | 'telnet' | 'serial' | 'ftp';
 
 /**
- * Einstellungen eines FTP-Hosts. `explicit` beginnt offen und schaltet vor der Anmeldung auf TLS um (Port 21),
- * `implicit` spricht von Anfang an TLS (Port 990), `none` bleibt unverschlüsselt.
+ * An FTP host's settings. `explicit` starts in the clear and switches to TLS before signing in (port 21),
+ * `implicit` speaks TLS from the start (port 990), `none` stays unencrypted.
  */
 export interface FtpSettings {
   security: 'explicit' | 'implicit' | 'none';
-  /** Ohne Benutzer und Passwort anmelden. */
+  /** Sign in without user and password. */
   anonymous: boolean;
-  /** Ordner, in dem der Dateimanager beginnt; leer ist der, den der Server vorgibt. */
+  /** Folder the file manager starts in; empty is the one the server sets. */
   dir?: string;
-  /** Die Rückfrage vor einer unverschlüsselten Verbindung ist für diesen Host abbestellt. */
+  /** The prompt before an unencrypted connection is dismissed for this host. */
   plainOk?: boolean;
 }
 
-/** Einstellungen einer seriellen Leitung. Das übliche „9600 8N1“ sind 9600 Baud, 8 Datenbits, keine Parität, 1 Stoppbit. */
+/** A serial line's settings. The usual “9600 8N1” means 9600 baud, 8 data bits, no parity, 1 stop bit. */
 export interface SerialSettings {
   baud: number;
   dataBits: 5 | 6 | 7 | 8;
   parity: 'none' | 'odd' | 'even';
   stopBits: 1 | 2;
-  /** Flusskontrolle: keine, XON/XOFF oder RTS/CTS. */
+  /** Flow control: none, XON/XOFF or RTS/CTS. */
   flow: 'none' | 'software' | 'hardware';
 }
 
 export interface Host {
   id: string;
-  /** Kennung des Tresors, in dem der Eintrag liegt. Fehlt sie, ist es der persönliche. */
+  /** ID of the vault the entry is in. If missing, it is the personal one. */
   vault?: string;
   name: string;
-  /** Adresse des Servers; bei `serial` der Name des Ports (`COM3`). */
+  /** Address of the server; for `serial` the port's name (`COM3`). */
   address: string;
   group: string | null;
   protocol: string;
-  /** Nur bei `serial`. */
+  /** Only for `serial`. */
   serial?: SerialSettings | null;
-  /** Nur bei `ftp`. */
+  /** Only for `ftp`. */
   ftp?: FtpSettings | null;
   color: string | null;
   os: string | null;
   own: Fields;
-  /** Das Passwort selbst verlässt den Kern nicht. */
+  /** The password itself never leaves the core. */
   hasPassword: boolean;
   hasProxyPassword?: boolean;
-  /** Die Maschine in Proxmox, zu der dieser Host gehört. Glowport hält seine Adresse und seinen Namen danach aktuell. */
+  /** The machine in Proxmox this host belongs to. Glowport keeps its address and name up to date from it. */
   proxmox?: ProxmoxLink;
 }
 
@@ -124,17 +124,17 @@ export interface KnownHost {
 
 export type KeyKind = 'ed25519' | 'ecdsa' | 'rsa';
 
-/** Ein Schlüsselpaar im Tresor. Der private Teil verlässt den Kern nur beim ausdrücklichen Export. */
+/** A key pair in the vault. The private part only leaves the core on explicit export. */
 export interface SshKey {
   id: string;
-  /** Kennung des Tresors, in dem der Eintrag liegt. Fehlt sie, ist es der persönliche. */
+  /** ID of the vault the entry is in. If missing, it is the personal one. */
   vault?: string;
   name: string;
   kind: KeyKind;
-  /** Länge in Bit: Ed25519 256, ECDSA 256/384/521, RSA 3072/4096. */
+  /** Length in bits: Ed25519 256, ECDSA 256/384/521, RSA 3072/4096. */
   bits: number;
   fingerprint: string;
-  /** Eine Zeile im OpenSSH-Format, so wie sie in `authorized_keys` steht. */
+  /** A line in OpenSSH format, as it appears in `authorized_keys`. */
   publicKey: string;
   origin: 'generated' | 'imported';
   /** Millisekunden seit 1970. */
@@ -142,73 +142,73 @@ export interface SshKey {
   certificate?: KeyCertificate | null;
 }
 
-/** Benutzer-Zertifikat zu einem Schlüssel: Eine Zertifizierungsstelle bestätigt, wem er gehört. Zeiten in Sekunden seit 1970. */
+/** User certificate for a key: a certificate authority confirms whom it belongs to. Times in seconds since 1970. */
 export interface KeyCertificate {
   text: string;
   keyId: string;
-  /** Benutzernamen, für die es gilt; leer = für jeden. */
+  /** User names it applies to; empty = for everyone. */
   principals: string[];
   validAfter: number;
-  /** Fehlt, wenn es nicht abläuft. */
+  /** Missing if it does not expire. */
   validBefore?: number | null;
-  /** Fingerabdruck der Zertifizierungsstelle. */
+  /** Fingerprint of the certificate authority. */
   authority: string;
 }
 
-/** Benutzer plus Schlüssel und/oder Passwort, für viele Hosts verwendbar. */
+/** User plus key and/or password, usable for many hosts. */
 export interface Identity {
   id: string;
-  /** Kennung des Tresors, in dem der Eintrag liegt. Fehlt sie, ist es der persönliche. */
+  /** ID of the vault the entry is in. If missing, it is the personal one. */
   vault?: string;
   name: string;
   user: string;
-  /** Kennung eines Schlüssels im Tresor. */
+  /** ID of a key in the vault. */
   key: string | null;
-  /** Das Passwort selbst verlässt den Kern nicht. */
+  /** The password itself never leaves the core. */
   hasPassword: boolean;
 }
 
-/** Eine Zertifizierungsstelle, deren Zertifikate für Server gelten. */
+/** A certificate authority whose certificates apply to servers. */
 export interface Authority {
   id: string;
   name: string;
-  /** Adressen, für die sie gilt: Muster mit `*` und `?`, mehrere durch Komma getrennt. */
+  /** Addresses it applies to: patterns with `*` and `?`, several separated by commas. */
   pattern: string;
-  /** Art des Schlüssels zum Anzeigen. */
+  /** Key type for display. */
   kind: string;
   fingerprint: string;
   /** Millisekunden seit 1970. */
   addedAt: number;
 }
 
-/** Eine laufende Sitzung, die mit ihrem Bereich in ein anderes Fenster umzieht. */
+/** A running session that moves into another window with its pane. */
 export interface Moving {
-  /** Nummer der Sitzung im Kern. */
+  /** The session's number in the core. */
   session: number;
-  /** Bisheriger Inhalt des Terminals als Folge von Steuerzeichen, die ihn wieder aufbaut. */
+  /** The terminal's previous content as a sequence of control characters that rebuilds it. */
   content: string;
 }
 
-/** Ein Bereich eines gespeicherten Tabs: sein Ziel und, nur beim Umzug in ein anderes Fenster, seine laufende Sitzung. */
+/** A pane of a saved tab: its destination and, only when moving to another window, its running session. */
 export interface SavedPane {
   pane: Target;
   moving?: Moving;
   recording?: boolean;
 }
 
-/** Was ein gespeicherter Tab zeigt: seine Bereiche in ihrer Anordnung, jeder mit seinem Ziel. */
+/** What a saved tab shows: its panes in their layout, each with its destination. */
 export type SavedLayout = SavedPane | { dir: 'row' | 'col'; ratio: number; a: SavedLayout; b: SavedLayout };
 
-/** Ein Tab, wie er sich wieder öffnen lässt: nach einem Abbruch, in einem eigenen Fenster oder als Arbeitsbereich. */
+/** A tab as it can be opened again: after a crash, in a window of its own or as a workspace. */
 export interface SavedTab {
   name: string | null;
   color: string | null;
-  /** Multi-Exec: Eingaben gehen an alle Bereiche des Tabs. */
+  /** Multi-exec: input goes to all panes of the tab. */
   multi: boolean;
   layout: SavedLayout;
 }
 
-/** Mehrere Hosts in fester Anordnung, mit einem Klick zu öffnen. Liegt im Tresor. */
+/** Several hosts in a fixed layout, opened with one click. Stored in the vault. */
 export interface Workspace {
   id: string;
   name: string;
@@ -223,24 +223,24 @@ export interface WorkspaceInput {
   layout: SavedLayout;
 }
 
-/** Ein Mitschnitt: die Ausgabe einer Sitzung als Datei auf diesem Rechner. Zeiten in Millisekunden seit 1970. */
+/** A recording: a session's output as a file on this computer. Times in milliseconds since 1970. */
 export interface Recording {
   id: string;
-  /** Name des Hosts oder die eingetippte Adresse. */
+  /** Name of the host or the typed address. */
   name: string;
-  /** Eigener Name, den der Nutzer dem Mitschnitt nachträglich gegeben hat. */
+  /** Name of its own the user gave the recording afterwards. */
   title?: string | null;
   address: string;
   startedAt: number;
-  /** Fehlt, solange der Mitschnitt läuft. */
+  /** Missing while the recording runs. */
   endedAt: number | null;
   bytes: number;
-  /** Pfad der Datei. */
+  /** Path of the file. */
   file: string;
 }
 
 export interface Snapshot {
-  /** Laufende Nummer des Stands: Ein später erzeugter hat die höhere. Die Vorschau im Browser kennt sie nicht. */
+  /** Sequence number of the state: one created later has the higher one. The browser preview does not know it. */
   seq?: number;
   groups: Group[];
   hosts: Host[];
@@ -252,11 +252,11 @@ export interface Snapshot {
   workspaces: Workspace[];
   forwards: Forward[];
   snippets: Snippet[];
-  /** Alle Tresore dieses Geräts, der persönliche zuerst. */
+  /** All vaults of this device, the personal one first. */
   vaults?: VaultInfo[];
-  /** Verbindungen zu Proxmox. Sie liegen im persönlichen Tresor. */
+  /** Connections to Proxmox. They are in the personal vault. */
   proxmox?: ProxmoxConnection[];
-  /** Für jeden Eintrag, der in einem geteilten Tresor liegt: dessen Kennung. Alles andere liegt im persönlichen. */
+  /** For every entry in a shared vault: that vault's ID. Everything else is in the personal one. */
   homes?: Record<string, string>;
 }
 
@@ -266,25 +266,25 @@ export interface VaultMember {
   account: string;
   name: string;
   role: VaultRole;
-  /** Das eigene Konto. */
+  /** Your own account. */
   me: boolean;
-  /** Eingeladen, hat aber noch nicht angenommen. */
+  /** Invited, but has not accepted yet. */
   invited: boolean;
-  /** Sicherheitscode des Kontos: sechs Wörter aus einem Prüfwert seiner Schlüssel. */
+  /** The account's safety code: six words from a checksum of its keys. */
   code: string;
 }
 
 export interface VaultInfo {
   id: string;
   kind: 'personal' | 'shared';
-  /** Name des Tresors; beim persönlichen leer. */
+  /** Name of the vault; empty for the personal one. */
   name: string;
-  /** Die eigene Rolle. */
+  /** Your own role. */
   role: VaultRole;
   members: VaultMember[];
-  /** Der Server hat einen älteren Stand als dieses Gerät; der Tresor ruht, bis jemand entscheidet. */
+  /** The server has an older state than this device; the vault rests until someone decides. */
   rolledBack?: boolean;
-  /** Ein eigener Tresor, den der Server nicht mehr kennt. */
+  /** An own vault the server no longer knows. */
   orphaned?: boolean;
 }
 
@@ -295,38 +295,38 @@ export interface SyncInvitation {
   name: string | null;
   owner: string;
   role: VaultRole;
-  /** Sicherheitscode des Besitzers. */
+  /** The owner's safety code. */
   code: string;
   known: 'new' | 'same' | 'changed';
 }
 
-/** Stand des Abgleichs. Nicht verbunden: `linked` ist false, der Rest leer. */
+/** State of syncing. Not linked: `linked` is false, the rest empty. */
 export interface SyncState {
   linked: boolean;
   server: string;
   username: string;
-  /** Verwaltet dieses Konto den Server? */
+  /** Does this account administer the server? */
   admin: boolean;
   phase: SyncPhase;
-  /** Grund, wenn `phase` „error“ oder „signedOut“ ist. */
+  /** Reason when `phase` is “error” or “signedOut”. */
   error?: string;
-  /** Änderungen, die noch nicht beim Server sind. */
+  /** Changes that have not reached the server yet. */
   pending: number;
   /** Wann zuletzt alles abgeglichen war, in Millisekunden seit 1970. */
   syncedAt: number | null;
-  /** Der eigene Sicherheitscode. */
+  /** Your own safety code. */
   code: string;
   invitations: SyncInvitation[];
-  /** Zahl der Hinweise aus dem Abgleich. */
+  /** Number of notices from syncing. */
   notices: number;
-  /** Das Master-Passwort wurde auf einem anderen Gerät geändert. */
+  /** The master password was changed on another device. */
   passwordChanged: boolean;
 }
 
 export interface SyncServerInfo {
-  /** Die Adresse in fester Form. */
+  /** The address in normalised form. */
   server: string;
-  /** Der Server wartet auf sein erstes Konto (es wird Verwalter und braucht den Einrichtungscode). */
+  /** The server is waiting for its first account (it becomes the administrator and needs the setup code). */
   fresh: boolean;
 }
 
@@ -349,13 +349,13 @@ export interface SyncNotice {
   id: number;
   at: number;
   kind: 'clash' | 'restored' | 'discarded' | 'vault_removed' | 'rejected';
-  /** Name des Tresors, soweit noch bekannt. */
+  /** Name of the vault, as far as still known. */
   vaultName: string;
-  /** Name des betroffenen Eintrags, soweit noch bekannt. */
+  /** Name of the affected entry, as far as still known. */
   recordName?: string;
-  /** Das Feld, um das es ging, etwa `own.port`. */
+  /** The field concerned, e.g. `own.port`. */
   path?: string;
-  /** Der eigene Wert gilt. */
+  /** Your own value applies. */
   mine?: boolean;
   count?: number;
 }
@@ -379,7 +379,7 @@ export interface SyncAccount {
 
 export interface SyncRegister {
   server: string;
-  /** Einladungscode, beim ersten Konto der Einrichtungscode. */
+  /** Invite code; for the first account the setup code. */
   code: string;
   username: string;
   password: string;
@@ -391,36 +391,36 @@ export interface SyncLogin {
   username: string;
   password: string;
   device: string;
-  /** Nur auf einem Gerät, das schon einen Tresor hat: Was geschieht mit dessen Einträgen? */
+  /** Only on a device that already has a vault: what happens to its entries? */
   local?: 'keep' | 'discard';
 }
 
 /**
- * Wohin eine Sitzung führt: zu einem gespeicherten Host (SSH, Telnet oder seriell), zu einer eingetippten Adresse
- * (`direct` = SSH, `telnet`) oder in eine Shell dieses PCs (`local`, `shell` ist die Kennung aus `LocalShell`).
+ * Where a session leads: to a saved host (SSH, Telnet or serial), to a typed address
+ * (`direct` = SSH, `telnet`) or into a shell of this PC (`local`, `shell` is the ID from `LocalShell`).
  */
 export type Target =
   | { kind: 'host'; id: string }
-  // `identity` und `key`: Identität oder Schlüssel aus dem Tresor, mit denen sich die Schnellverbindung anmeldet.
+  // `identity` and `key`: identity or key from the vault the quick connection signs in with.
   | { kind: 'direct'; user: string; host: string; port: number; identity?: string; key?: string; mosh?: boolean }
   | { kind: 'telnet'; host: string; port: number }
   | { kind: 'local'; shell: string };
 
-/** Eine Shell, die Glowport auf diesem PC gefunden hat und als lokales Terminal öffnen kann. */
+/** A shell Glowport found on this PC and can open as a local terminal. */
 export interface LocalShell {
-  /** Bleibt über Neustarts gleich: `pwsh`, `powershell`, `cmd`, `gitbash`, `wsl:Ubuntu`. */
+  /** Stays the same across restarts: `pwsh`, `powershell`, `cmd`, `gitbash`, `wsl:Ubuntu`. */
   id: string;
   name: string;
   kind: 'pwsh' | 'powershell' | 'cmd' | 'gitbash' | 'wsl';
-  /** Zum Anzeigen: Pfad des Programms oder Name der Distribution. */
+  /** For display: path of the program or name of the distribution. */
   detail: string;
 }
 
-/** Ein serieller Port dieses PCs. */
+/** A serial port of this PC. */
 export interface SerialPortInfo {
   /** `COM3` */
   name: string;
-  /** Was daran hängt, soweit Windows es nennt: „USB-SERIAL CH340“. */
+  /** What is attached to it, as far as Windows names it: “USB-SERIAL CH340”. */
   label: string;
 }
 
@@ -433,7 +433,7 @@ export interface HostKeyPrompt {
   algorithm: string;
   fingerprint: string;
   changed: boolean;
-  /** Fingerabdrücke, die bisher für diese Adresse hinterlegt waren. */
+  /** Fingerprints previously stored for this address. */
   known: string[];
 }
 
@@ -443,7 +443,7 @@ export interface SecretPrompt {
   attempt: number;
   file: string | null;
   canSave: boolean;
-  /** Gesetzt, wenn ein Sprung-Server fragt und nicht das Ziel: `benutzer@adresse`. */
+  /** Set if a jump host asks and not the destination: `user@address`. */
   station?: string | null;
 }
 
@@ -455,22 +455,22 @@ export interface InteractivePrompt {
   station?: string | null;
 }
 
-/** Das Zertifikat eines FTP-Servers, dem dieser Rechner nicht von sich aus traut. `changed`: Es ist ein anderes als das bestätigte. */
+/** The certificate of an FTP server this computer does not trust on its own. `changed`: it differs from the confirmed one. */
 export interface CertificatePrompt {
   type: 'certificate';
   host: string;
   port: number;
-  /** SHA-256 über das Zertifikat, wie Browser ihn zeigen: `5F:1A:…`. */
+  /** SHA-256 over the certificate, as browsers show it: `5F:1A:…`. */
   fingerprint: string;
   changed: boolean;
 }
 
-/** Vor einer unverschlüsselten FTP-Verbindung. `offersTls`: Der Server könnte TLS. */
+/** Before an unencrypted FTP connection. `offersTls`: the server could do TLS. */
 export interface PlainPrompt {
   type: 'plain';
   host: string;
   offersTls: boolean;
-  /** Die Frage lässt sich für diesen Host abbestellen; bei einer Schnellverbindung gibt es dafür keinen Host. */
+  /** The question can be dismissed for this host; for a quick connection there is no host for that. */
   canRemember: boolean;
 }
 
@@ -488,15 +488,15 @@ export type SessionEvent = { id: number } & (
   | { type: 'phase'; phase: SessionPhase }
   | { type: 'banner'; text: string }
   | { type: 'notice'; code: string; message: string }
-  /** Der Ordner, in dem die Shell gerade steht. */
+  /** The folder the shell is currently in. */
   | { type: 'cwd'; path: string }
-  /** Das Terminal läuft über Mosh. */
+  /** The terminal runs over Mosh. */
   | { type: 'mosh'; state: 'active' }
-  /** Mosh kam nicht zustande; die Sitzung läuft per SSH weiter. `detail`: erste Zeile einer Fehlermeldung des Servers. */
+  /** Mosh did not come about; the session continues over SSH. `detail`: first line of an error message from the server. */
   | { type: 'mosh'; state: 'fallback'; reason: MoshFallback; detail?: string }
-  /** Mosh: Sekunden ohne Nachricht vom Server; null, sobald er wieder antwortet. */
+  /** Mosh: seconds without a message from the server; null as soon as it answers again. */
   | { type: 'reach'; silent: number | null }
-  /** Mosh: Steht die SSH-Verbindung daneben für Seitenleiste und Dateien? */
+  /** Mosh: is the SSH connection next to it up for sidebar and files? */
   | { type: 'side'; linked: boolean }
   | Prompt
   | SessionEnd
@@ -507,7 +507,7 @@ export type Answer =
   | { kind: 'secret'; value?: string; save?: boolean }
   | { kind: 'interactive'; values?: string[] }
   | { kind: 'certificate'; accept: boolean }
-  /** `remember` bestellt die Rückfrage für diesen Host ab; `secure` stellt ihn stattdessen auf FTPS um. */
+  /** `remember` dismisses the prompt for this host; `secure` moves it to FTPS instead. */
   | { kind: 'plain'; accept: boolean; remember?: boolean; secure?: boolean };
 
 export interface BackendError {
@@ -522,7 +522,7 @@ export interface Status {
   state: VaultState;
   data?: Snapshot;
   error?: BackendError;
-  /** Ob der Tresor beim Start ohne Master-Passwort geöffnet wird. */
+  /** Whether the vault is opened on start without a master password. */
   startUnlock?: boolean;
 }
 
@@ -532,29 +532,29 @@ export interface Changed {
 }
 
 export interface HostInput {
-  /** Nur beim Anlegen: der Tresor, in den der Eintrag kommt. Fehlt er, ist es der persönliche. */
+  /** Only when creating: the vault the entry goes into. If missing, it is the personal one. */
   vault?: string;
   id?: string;
   name: string;
   address: string;
-  /** Fehlt = bleibt, wie es ist; bei einem neuen Host `ssh`. */
+  /** Missing = stays as it is; for a new host `ssh`. */
   protocol?: Protocol;
-  /** Fehlt = bleibt, wie es ist. Zählt nur bei `serial`. */
+  /** Missing = stays as it is. Only counts for `serial`. */
   serial?: SerialSettings;
-  /** Fehlt = bleibt, wie es ist. Zählt nur bei `ftp`. */
+  /** Missing = stays as it is. Only counts for `ftp`. */
   ftp?: FtpSettings;
   group: string | null;
   color: string | null;
   os: string | null;
   own: Fields;
-  /** Fehlt = unverändert, null = entfernen, Text = setzen. */
+  /** Missing = unchanged, null = remove, text = set. */
   password?: string | null;
-  /** Passwort für den Proxy des Hosts, mit denselben Regeln. */
+  /** Password for the host's proxy, with the same rules. */
   proxyPassword?: string | null;
 }
 
 export interface GroupInput {
-  /** Nur beim Anlegen: der Tresor, in den der Eintrag kommt. Fehlt er, ist es der persönliche. */
+  /** Only when creating: the vault the entry goes into. If missing, it is the personal one. */
   vault?: string;
   id?: string;
   name: string;
@@ -565,7 +565,7 @@ export interface GroupInput {
 }
 
 export interface KeyGenerate {
-  /** Nur beim Anlegen: der Tresor, in den der Eintrag kommt. Fehlt er, ist es der persönliche. */
+  /** Only when creating: the vault the entry goes into. If missing, it is the personal one. */
   vault?: string;
   name: string;
   kind: KeyKind;
@@ -573,17 +573,17 @@ export interface KeyGenerate {
 }
 
 export interface KeyImport {
-  /** Nur beim Anlegen: der Tresor, in den der Eintrag kommt. Fehlt er, ist es der persönliche. */
+  /** Only when creating: the vault the entry goes into. If missing, it is the personal one. */
   vault?: string;
   name: string;
-  /** Inhalt der Schlüsseldatei: OpenSSH, PEM oder PuTTY (.ppk). */
+  /** Content of the key file: OpenSSH, PEM or PuTTY (.ppk). */
   text: string;
   passphrase?: string;
 }
 
-/** Was der Kern in einer Schlüsseldatei erkennt, bevor sie importiert wird. */
+/** What the core recognises in a key file before it is imported. */
 export interface KeyInfo {
-  /** Art, Länge und Fingerabdruck fehlen, solange die Datei verschlüsselt ist und ihr Format sie nicht offen nennt. */
+  /** Type, length and fingerprint are missing as long as the file is encrypted and its format does not state them openly. */
   kind: KeyKind | null;
   bits: number | null;
   fingerprint: string | null;
@@ -592,40 +592,40 @@ export interface KeyInfo {
   comment: string;
 }
 
-/** Eine vom Nutzer gewählte Schlüsseldatei samt Inhalt. */
+/** A key file chosen by the user, with its content. */
 export interface KeyFile {
   path: string;
   text: string;
 }
 
 export interface IdentityInput {
-  /** Nur beim Anlegen: der Tresor, in den der Eintrag kommt. Fehlt er, ist es der persönliche. */
+  /** Only when creating: the vault the entry goes into. If missing, it is the personal one. */
   vault?: string;
   id?: string;
   name: string;
   user: string;
   key: string | null;
-  /** Fehlt = unverändert, null = entfernen, Text = setzen. */
+  /** Missing = unchanged, null = remove, text = set. */
   password?: string | null;
 }
 
-/** Ergebnis je Host beim Kopieren eines öffentlichen Schlüssels. */
+/** Result per host when copying a public key. */
 export interface DeployResult {
   host: string;
-  /** added = eingetragen, present = stand schon dort, failed = siehe `message` */
+  /** added = added, present = was already there, failed = see `message` */
   outcome: 'added' | 'present' | 'failed';
   message?: string | null;
 }
 
-/** Ein SSH-Agent auf diesem Rechner und die Schlüssel, die er anbietet. */
+/** An SSH agent on this computer and the keys it offers. */
 export interface Agent {
   kind: 'openssh' | 'pageant';
   running: boolean;
   keys: { comment: string; kind: string; fingerprint: string }[];
 }
 
-/** Wo Dateien liegen: auf diesem PC, auf einem gespeicherten Host oder am Server einer laufenden Sitzung. */
-/** Ein FTP-Server aus der Schnellverbindung, den der Tresor nicht kennt. Ein leerer Benutzer meldet anonym an. */
+/** Where files are: on this PC, on a saved host or on a running session's server. */
+/** An FTP server from quick connect the vault does not know. An empty user signs in anonymously. */
 export interface FtpPlace {
   kind: 'ftp';
   host: string;
@@ -640,40 +640,40 @@ export type FileKind = 'dir' | 'file' | 'link';
 
 export interface FileEntry {
   name: string;
-  /** Voller Pfad, wie ihn der Kern versteht. Die Oberfläche setzt Pfade nie selbst zusammen. */
+  /** Full path as the core understands it. The interface never assembles paths itself. */
   path: string;
   kind: FileKind;
   size: number;
-  /** Zeitpunkt der letzten Änderung in Millisekunden. */
+  /** Time of the last change in milliseconds. */
   modified: number;
-  /** Rechte als Zahl (0o755); null, wo es keine gibt (Windows). */
+  /** Permissions as a number (0o755); null where there are none (Windows). */
   mode: number | null;
   owner: string;
   group: string;
-  /** Ziel einer Verknüpfung. */
+  /** Target of a link. */
   target?: string;
-  /** Bei einer Verknüpfung: Führt sie zu einem Ordner? */
+  /** For a link: does it lead to a folder? */
   linksToDir?: boolean;
-  /** Versteckt: Der Name beginnt mit einem Punkt, oder Windows führt die Datei als versteckt. */
+  /** Hidden: the name starts with a dot, or Windows marks the file as hidden. */
   hidden?: boolean;
 }
 
-/** Inhalt eines Ordners samt dem Weg dorthin. */
+/** A folder's content together with the path there. */
 export interface Listing {
   path: string;
-  /** Der Weg von der Wurzel bis hierher, jedes Stück mit seinem Pfad. Die Wurzel dieses PCs hat keinen Namen. */
+  /** The path from the root to here, every piece with its path. This PC's root has no name. */
   crumbs: { name: string; path: string }[];
   parent: string | null;
   entries: FileEntry[];
-  /** Darf hier geschrieben werden? */
+  /** May one write here? */
   writable: boolean;
-  /** Nur bei FTP: was dieser Server über das hinaus kann, was jeder kann. Suche im Inhalt und „Folgen“ gibt es dort nie. */
+  /** Only for FTP: what this server can do beyond what every one can. Content search and “Follow” never exist there. */
   ftp?: { chmod: boolean };
 }
 
 /**
- * Inhalt einer Datei für Editor und Vorschau. `editable` ist falsch, wenn Speichern die Datei beschädigen würde
- * (nur der Anfang geladen oder kein UTF-8).
+ * A file's content for editor and preview. `editable` is false if saving would damage the file
+ * (only the beginning loaded or not UTF-8).
  */
 export type FileContent = { kind: 'text'; text: string; truncated: boolean; editable: boolean } | { kind: 'image'; url: string } | { kind: 'binary' };
 
@@ -681,10 +681,10 @@ export type TransferState = 'queued' | 'running' | 'paused' | 'done' | 'failed' 
 
 export interface Transfer {
   id: number;
-  /** Datei oder Ordner, um den es geht. */
+  /** File or folder concerned. */
   name: string;
   direction: 'upload' | 'download' | 'remote';
-  /** Quelle und Ziel zum Anzeigen: „web-01:/var/www/app“. */
+  /** Source and destination for display: “web-01:/var/www/app”. */
   source: string;
   dest: string;
   bytes: number;
@@ -692,15 +692,15 @@ export interface Transfer {
   files: number;
   filesDone: number;
   state: TransferState;
-  /** Bytes je Sekunde, solange er läuft. */
+  /** Bytes per second while it runs. */
   speed: number;
-  /** Fehlercode, wenn er gescheitert ist. */
+  /** Error code if it failed. */
   error?: string;
-  /** Wurde nach einem Abbruch oder Neustart fortgesetzt. */
+  /** Was resumed after a cancellation or restart. */
   resumed?: boolean;
 }
 
-/** Was geschieht, wenn es am Ziel schon etwas unter dem Namen gibt: ersetzen, auslassen oder daneben legen („name (2)“). */
+/** What happens if something with that name already exists at the destination: replace, skip or put it beside (“name (2)”). */
 export type Policy = 'overwrite' | 'skip' | 'rename';
 
 export interface TransferRequest {
@@ -710,11 +710,11 @@ export interface TransferRequest {
   /** Zielordner. */
   dest: string;
   policy: Policy;
-  /** Wie viele Dateien gleichzeitig laufen dürfen. */
+  /** How many files may run at the same time. */
   parallel: number;
 }
 
-/** Eine Datei, die in einem anderen Programm offen ist und bei jedem Speichern hochgeladen wird. */
+/** A file open in another program and uploaded on every save. */
 export interface Watched {
   id: number;
   name: string;
@@ -722,27 +722,27 @@ export interface Watched {
   origin: string;
   uploads: number;
   uploadedAt: number | null;
-  /** Fehlercode, wenn das letzte Hochladen gescheitert ist. */
+  /** Error code if the last upload failed. */
   error?: string;
 }
 
 export interface SearchHit {
   path: string;
   name: string;
-  /** Ordner, in dem der Treffer liegt. */
+  /** Folder the hit is in. */
   dir: string;
   kind: FileKind;
   size: number;
-  /** Bei der Suche im Inhalt: Zeilennummer und Zeile. */
+  /** For content search: line number and line. */
   line?: number;
   text?: string;
 }
 
 export type DiffState = 'left' | 'right' | 'newerLeft' | 'newerRight' | 'same';
 
-/** Eine Zeile des Ordner-Abgleichs: derselbe Pfad unterhalb beider Ordner. */
+/** A row of the folder sync: the same path below both folders. */
 export interface DiffEntry {
-  /** Pfad unterhalb der verglichenen Ordner. */
+  /** Path below the compared folders. */
   rel: string;
   kind: FileKind;
   state: DiffState;
@@ -752,7 +752,7 @@ export interface DiffEntry {
 
 export interface ChmodRequest {
   paths: string[];
-  /** Neue Rechte; null lässt sie, wie sie sind. */
+  /** New permissions; null leaves them as they are. */
   mode: number | null;
   owner: string | null;
   group: string | null;
@@ -761,28 +761,28 @@ export interface ChmodRequest {
 
 // ---------- Port-Forwarding ----------
 
-/** local: Port dieses PCs führt zum Server. remote: Port des Servers führt hierher. dynamic: SOCKS-Proxy auf diesem PC. */
+/** local: a port of this PC leads to the server. remote: a port of the server leads here. dynamic: SOCKS proxy on this PC. */
 export type ForwardKind = 'local' | 'remote' | 'dynamic';
 
-/** Eine gespeicherte Port-Regel. Liegt im Tresor; ob sie läuft, steht in `ForwardState`. */
+/** A saved port rule. Stored in the vault; whether it runs is in `ForwardState`. */
 export interface Forward {
   id: string;
-  /** Kennung des Tresors, in dem der Eintrag liegt. Fehlt sie, ist es der persönliche. */
+  /** ID of the vault the entry is in. If missing, it is the personal one. */
   vault?: string;
   name: string;
   kind: ForwardKind;
-  /** Kennung des Hosts, über den die Regel läuft. */
+  /** ID of the host the rule runs through. */
   host: string;
-  /** Adresse, an der gelauscht wird: auf diesem PC (local, dynamic) oder am Server (remote). */
+  /** Address that is listened on: on this PC (local, dynamic) or on the server (remote). */
   bindAddress: string;
   bindPort: number;
-  /** Wohin die Verbindungen gehen, vom anderen Ende aus gesehen. Bei `dynamic` leer. */
+  /** Where the connections go, seen from the other end. Empty for `dynamic`. */
   destHost: string;
   destPort: number;
 }
 
 export interface ForwardInput {
-  /** Nur beim Anlegen: der Tresor, in den der Eintrag kommt. Fehlt er, ist es der persönliche. */
+  /** Only when creating: the vault the entry goes into. If missing, it is the personal one. */
   vault?: string;
   id?: string;
   name: string;
@@ -796,54 +796,54 @@ export interface ForwardInput {
 
 export type ForwardPhase = 'starting' | 'running' | 'retrying' | 'failed';
 
-/** Stand einer eingeschalteten Regel. Ausgeschaltete Regeln haben keinen. */
+/** State of a rule switched on. Rules switched off have none. */
 export interface ForwardState {
   id: string;
   phase: ForwardPhase;
-  /** Fehlercode, wenn sie gescheitert ist oder gerade neu verbindet. */
+  /** Error code if it failed or is currently reconnecting. */
   error?: string | null;
   message?: string | null;
-  /** Gerade offene Verbindungen und alle seit dem Einschalten. */
+  /** Connections open right now and all since switching on. */
   open: number;
   total: number;
-  /** Bytes zum Ziel und zurück. */
+  /** Bytes to the destination and back. */
   sent: number;
   received: number;
-  /** Seit wann sie läuft, in Millisekunden seit 1970. */
+  /** Since when it has been running, in milliseconds since 1970. */
   since: number | null;
-  /** Sekunden bis zum nächsten Versuch, solange sie neu verbindet. */
+  /** Seconds until the next attempt while it reconnects. */
   retryIn?: number | null;
 }
 
-// ---------- Snippets und Makros ----------
+// ---------- Snippets and macros ----------
 
-/** Ein Schritt eines Makros: so lange warten, dann diese Tasten schicken. */
+/** A macro step: wait this long, then send these keys. */
 export interface MacroStep {
-  /** Millisekunden seit dem vorigen Schritt. */
+  /** Milliseconds since the previous step. */
   wait: number;
   keys: string;
 }
 
 /**
- * Ein gespeicherter Befehl (`command`, mit Variablen wie `{{name}}`) oder ein aufgezeichnetes Makro (`steps`).
- * Liegt im Tresor.
+ * A saved command (`command`, with variables like `{{name}}`) or a recorded macro (`steps`).
+ * Stored in the vault.
  */
 export interface Snippet {
   id: string;
-  /** Kennung des Tresors, in dem der Eintrag liegt. Fehlt sie, ist es der persönliche. */
+  /** ID of the vault the entry is in. If missing, it is the personal one. */
   vault?: string;
   name: string;
-  /** Name des Pakets, in dem es liegt; leer = keines. */
+  /** Name of the package it is in; empty = none. */
   package: string;
   kind: 'command' | 'macro';
   command: string;
   steps: MacroStep[];
-  /** Tastenkürzel wie „Alt+1“ oder null. */
+  /** Shortcut like “Alt+1” or null. */
   hotkey: string | null;
 }
 
 export interface SnippetInput {
-  /** Nur beim Anlegen: der Tresor, in den der Eintrag kommt. Fehlt er, ist es der persönliche. */
+  /** Only when creating: the vault the entry goes into. If missing, it is the personal one. */
   vault?: string;
   id?: string;
   name: string;
@@ -854,15 +854,15 @@ export interface SnippetInput {
   hotkey: string | null;
 }
 
-/** Ergebnis eines Befehls auf einem Host. */
+/** Result of a command on a host. */
 export interface RunResult {
   host: string;
-  /** done = gelaufen (siehe `exit`), failed = nicht zustande gekommen (siehe `error`). */
+  /** done = ran (see `exit`), failed = did not come about (see `error`). */
   state: 'running' | 'done' | 'failed';
   exit: number | null;
-  /** Ausgabe des Befehls, Fehlerausgabe eingeschlossen. */
+  /** The command's output, error output included. */
   output: string;
-  /** Wurde die Ausgabe gekürzt, weil sie zu lang war? */
+  /** Was the output shortened because it was too long? */
   truncated?: boolean;
   error?: string | null;
   /** Dauer in Millisekunden. */
@@ -872,31 +872,31 @@ export interface RunResult {
 // ---------- Server-Info ----------
 
 /**
- * Eine Messung am Server. Zähler (`cpu`, `net`) laufen seit dem Start des Servers hoch; die Auslastung ergibt sich
- * aus zwei Messungen nacheinander.
+ * A measurement on the server. Counters (`cpu`, `net`) count up since the server started; the load follows
+ * from two successive measurements.
  */
 export interface StatsSample {
-  /** Zeitpunkt der Messung in Millisekunden. */
+  /** Time of the measurement in milliseconds. */
   at: number;
-  /** Rechenzeit in Ticks: alle zusammen und davon untätig. */
+  /** CPU time in ticks: all together and the idle part of it. */
   cpu: { total: number; idle: number };
   cores: number;
   /** Speicher in Bytes. */
   mem: { total: number; available: number; swapTotal: number; swapFree: number };
   load: [number, number, number];
   disks: { mount: string; device: string; total: number; used: number }[];
-  /** Bytes über alle Netzwerkkarten außer der Schleife. */
+  /** Bytes over all network cards except loopback. */
   net: { rx: number; tx: number };
-  /** Sekunden seit dem Start. */
+  /** Seconds since start. */
   uptime: number;
   system: string;
   kernel: string;
   hostname: string;
 }
 
-// ---------- Import und Export ----------
+// ---------- Import and export ----------
 
-/** Programme und Dateiformate, aus denen Glowport importiert. */
+/** Programs and file formats Glowport imports from. */
 export type ImportSource =
   | 'sshconfig'
   | 'putty'
@@ -912,16 +912,16 @@ export type ImportSource =
   | 'csv'
   | 'glowport';
 
-/** Eine Quelle, die auf diesem PC gefunden wurde. */
+/** A source found on this PC. */
 export interface ImportFound {
   source: ImportSource;
-  /** Wo sie liegt: Pfad einer Datei oder eines Ordners; leer, wenn sie in der Registry steht. */
+  /** Where it is: path of a file or folder; empty if it is in the registry. */
   where: string;
-  /** Wie viele Einträge dort liegen; null, wenn das erst das Lesen zeigt. */
+  /** How many entries are there; null if only reading shows that. */
   count: number | null;
 }
 
-/** Hinweis zu einem Eintrag: Was nicht übernommen wird oder worauf zu achten ist. Der Text entsteht aus `code`. */
+/** Note on an entry: what is not taken over or what to watch out for. The text is derived from `code`. */
 export interface ImportNote {
   code: string;
   detail?: string | null;
@@ -930,48 +930,48 @@ export interface ImportNote {
 export interface DraftGroup {
   ref: string;
   name: string;
-  /** Verweis auf die übergeordnete Gruppe im selben Entwurf. */
+  /** Reference to the parent group in the same draft. */
   parent: string | null;
 }
 
-/** Ein Host, wie ihn die Quelle hergibt. Verweise (`group`, `key`, `jump`) zeigen auf Einträge desselben Entwurfs. */
+/** A host as the source provides it. References (`group`, `key`, `jump`) point to entries of the same draft. */
 export interface DraftHost {
   ref: string;
   name: string;
-  /** Adresse des Servers; bei `serial` der Name des Ports. */
+  /** Address of the server; for `serial` the port's name. */
   address: string;
-  /** `ssh`, `telnet` oder `serial`. Fehlt bei SSH. */
+  /** `ssh`, `telnet` or `serial`. Missing for SSH. */
   protocol?: string;
   group: string | null;
   user: string | null;
   port: number | null;
   os: string | null;
-  /** Womit er sich anmeldet, zum Anzeigen: Schlüssel, Passwort, Agent oder nichts davon. */
+  /** What it signs in with, for display: key, password, agent or none of them. */
   auth: 'key' | 'password' | 'agent' | 'none';
   hasPassword: boolean;
   key: string | null;
   jump: string | null;
   notes: ImportNote[];
-  /** Kennung eines Hosts im Tresor mit derselben Adresse, demselben Port und Benutzer. */
+  /** ID of a host in the vault with the same address, port and user. */
   existing: string | null;
 }
 
 /**
- * Ein Schlüssel der Quelle. `ready`: lässt sich in den Tresor holen. `encrypted`: braucht eine Passphrase und bleibt
- * deshalb als Schlüsseldatei eingetragen. `missing`: Die Datei gibt es nicht mehr.
+ * A key of the source. `ready`: can be taken into the vault. `encrypted`: needs a passphrase and therefore stays
+ * entered as a key file. `missing`: the file no longer exists.
  */
 export interface DraftKey {
   ref: string;
   name: string;
-  /** Pfad der Datei auf diesem PC; fehlt, wenn der Schlüssel in der Quelle selbst steckt. */
+  /** Path of the file on this PC; missing if the key is inside the source itself. */
   path: string | null;
   kind: KeyKind | null;
   bits: number | null;
   fingerprint: string | null;
   state: 'ready' | 'encrypted' | 'missing' | 'unreadable';
-  /** Kennung eines Schlüssels im Tresor mit demselben Fingerabdruck. */
+  /** ID of a key in the vault with the same fingerprint. */
   existing: string | null;
-  /** Wie viele Hosts des Entwurfs ihn benutzen. */
+  /** How many hosts of the draft use it. */
   uses: number;
 }
 
@@ -979,7 +979,7 @@ export interface DraftForward {
   ref: string;
   name: string;
   kind: ForwardKind;
-  /** Verweis auf den Host des Entwurfs, über den die Regel läuft. */
+  /** Reference to the draft's host the rule runs through. */
   host: string;
   bindAddress: string;
   bindPort: number;
@@ -992,7 +992,7 @@ export interface DraftSnippet {
   name: string;
   package: string;
   command: string;
-  /** Gibt es im Tresor schon ein Snippet mit demselben Befehl? */
+  /** Is there already a snippet with the same command in the vault? */
   existing: boolean;
 }
 
@@ -1002,16 +1002,16 @@ export interface DraftKnownHost {
   port: number;
   algorithm: string;
   fingerprint: string;
-  /** Steht dieser Schlüssel schon im Tresor? */
+  /** Is this key already in the vault? */
   existing: boolean;
 }
 
-/** Was eine Quelle hergibt, bevor irgendetwas gespeichert ist. Passwörter und private Schlüssel bleiben im Kern. */
+/** What a source provides before anything is saved. Passwords and private keys stay in the core. */
 export interface ImportDraft {
-  /** Nummer, unter der der Kern den Entwurf bereithält. */
+  /** Number under which the core keeps the draft ready. */
   token: number;
   source: ImportSource;
-  /** Woher: Pfad der Datei oder leer für die Registry. */
+  /** From where: path of the file or empty for the registry. */
   origin: string;
   groups: DraftGroup[];
   hosts: DraftHost[];
@@ -1019,24 +1019,24 @@ export interface ImportDraft {
   forwards: DraftForward[];
   snippets: DraftSnippet[];
   knownHosts: DraftKnownHost[];
-  /** Einträge, die Glowport nicht übernehmen kann, mit dem Grund als Code. */
+  /** Entries Glowport cannot take over, with the reason as a code. */
   skipped: { name: string; reason: string }[];
 }
 
 export type ImportExisting = 'skip' | 'add' | 'update';
 
 export interface ImportOptions {
-  /** Verweise auf das, was übernommen wird. */
+  /** References to what is taken over. */
   hosts: string[];
   keys: string[];
   forwards: string[];
   snippets: string[];
   knownHosts: string[];
-  /** Wohin die Hosts kommen: null = oberste Ebene, `id` = vorhandene Gruppe, `name` = neue Gruppe. */
+  /** Where the hosts go: null = top level, `id` = existing group, `name` = new group. */
   into: { id: string } | { name: string } | null;
-  /** Was mit Hosts geschieht, die es schon gibt. */
+  /** What happens to hosts that already exist. */
   existing: ImportExisting;
-  /** Schlüsseldateien in den Tresor holen, statt nur auf die Datei zu verweisen. */
+  /** Take key files into the vault instead of only referring to the file. */
   keysToVault: boolean;
   passwords: boolean;
 }
@@ -1048,11 +1048,11 @@ export interface ImportReport {
   forwards: number;
   snippets: number;
   knownHosts: number;
-  /** Vorhandene Hosts, die aktualisiert wurden. */
+  /** Existing hosts that were updated. */
   updated: number;
-  /** Ausgelassen, weil schon vorhanden. */
+  /** Skipped because they already exist. */
   skipped: number;
-  /** Schlüssel, die als Schlüsseldatei eingetragen bleiben. */
+  /** Keys that stay entered as key files. */
   keyFiles: number;
   failed: { name: string; reason: string }[];
 }
@@ -1061,7 +1061,7 @@ export type ExportFormat = 'glowport' | 'sshconfig' | 'csv';
 
 export interface ExportRequest {
   format: ExportFormat;
-  /** Kennung einer Gruppe: nur sie samt Untergruppen; null = alles. */
+  /** ID of a group: only it including subgroups; null = everything. */
   group: string | null;
   snippets: boolean;
   forwards: boolean;
@@ -1070,53 +1070,53 @@ export interface ExportRequest {
 
 // ---------- Updates ----------
 
-/** Eine neuere Version, die sich installieren lässt. */
+/** A newer version that can be installed. */
 export interface UpdateInfo {
   version: string;
-  /** Was sich geändert hat, als schlichter Text. */
+  /** What changed, as plain text. */
   notes: string;
-  /** Tag der Veröffentlichung in Millisekunden seit 1970; null, wenn unbekannt. */
+  /** Day of release in milliseconds since 1970; null if unknown. */
   date: number | null;
 }
 
 export interface UpdateProgress {
-  /** Geladene Bytes und Größe; die Größe fehlt, wenn der Server sie nicht nennt. */
+  /** Downloaded bytes and size; the size is missing if the server does not state it. */
   done: number;
   total: number | null;
 }
 
-// ── Verwaltung in der Seitenleiste: Docker, Dienste, Prozesse (docs/verwaltung.md) ─────────────────────
+// ── Management in the sidebar: Docker, services, processes (docs/management.md) ─────────────────────
 
-/** Was es auf dem Server einer Sitzung zu verwalten gibt. */
+/** What there is to manage on a session's server. */
 export interface ManageAbilities {
-  /** Die Sitzung ist als root angemeldet. */
+  /** The session is signed in as root. */
   root: boolean;
   docker: boolean;
   services: boolean;
   processes: boolean;
-  /** sudo geht ohne Passwort. */
+  /** sudo works without a password. */
   sudo: boolean;
 }
 
 /**
- * Eine Liste vom Server, oder warum es sie nicht gibt: `password` heißt, sie ginge nur mit sudo, und sudo will
- * ein Passwort; `failed` trägt die Meldung des Servers. `sudo`: Die Liste kam nur mit sudo zustande.
+ * A list from the server, or why there is none: `password` means it would only work with sudo, and sudo wants
+ * a password; `failed` carries the server's message. `sudo`: the list only came about with sudo.
  */
 export type Listed<T> = { state: 'ok'; items: T; sudo: boolean } | { state: 'password' } | { state: 'failed'; message: string };
 
-/** Ausgang einer Aktion. `password`: sudo will ein Passwort; `command` gehört ins Terminal, der Nutzer schickt ihn ab. */
+/** Outcome of an action. `password`: sudo wants a password; `command` belongs in the terminal, the user sends it. */
 export type ManageDone = { outcome: 'done' } | { outcome: 'password'; command: string };
 
 export interface DockerContainer {
-  /** Die volle Kennung; nur sie geht in Befehle. */
+  /** The full ID; only it goes into commands. */
   id: string;
   name: string;
   image: string;
   state: 'running' | 'paused' | 'restarting' | 'exited' | 'created' | 'dead' | 'other';
   health?: 'healthy' | 'unhealthy' | 'starting';
-  /** Veröffentlichte Ports, etwa `8080->80/tcp`. */
+  /** Published ports, e.g. `8080->80/tcp`. */
   ports: string[];
-  /** Sekunden, die er läuft; bei einem beendeten die Sekunden seit dem Ende. */
+  /** Seconds it has been running; for an exited one the seconds since the end. */
   since?: number;
   exitCode?: number;
   /** Prozent eines Kerns. */
@@ -1125,13 +1125,13 @@ export interface DockerContainer {
 }
 
 export interface ServiceUnit {
-  /** Der volle Name, etwa `cron.service`. */
+  /** The full name, e.g. `cron.service`. */
   unit: string;
   description: string;
   active: 'active' | 'inactive' | 'failed' | 'activating' | 'deactivating' | 'other';
-  /** Der feinere Zustand von systemd: `running`, `exited`, `dead` … */
+  /** systemd's finer state: `running`, `exited`, `dead` … */
   sub: string;
-  /** Ob er beim Start des Servers mitläuft. */
+  /** Whether it starts along with the server. */
   enabled: 'enabled' | 'disabled' | 'static' | 'masked' | 'other';
 }
 
@@ -1139,23 +1139,23 @@ export interface ProcessInfo {
   pid: number;
   parent: number;
   user: string;
-  /** Das Programm ohne Pfad und Argumente. */
+  /** The program without path and arguments. */
   name: string;
   command: string;
   /** Arbeitsspeicher in Bytes. */
   memory: number;
-  /** Sekunden, die er läuft. */
+  /** Seconds it has been running. */
   elapsed: number;
   /** Verbrauchte Rechenzeit seit seinem Start, in Ticks. */
   ticks: number;
-  /** Ein Faden des Kerns, kein Programm. */
+  /** A kernel thread, not a program. */
   kernel: boolean;
 }
 
-/** Eine Messung der Prozesse. Die Auslastung ergibt sich aus zwei Messungen. */
+/** A measurement of the processes. The load follows from two measurements. */
 export interface ProcessSample {
   ticksPerSecond: number;
-  /** Sekunden seit dem Start des Servers. */
+  /** Seconds since the server started. */
   uptime: number;
   memoryTotal: number;
   processes: ProcessInfo[];
@@ -1163,7 +1163,7 @@ export interface ProcessSample {
 
 // ── Proxmox (docs/verwaltung.md) ───────────────────────────────────────────────────────────────────────
 
-/** Eine Verbindung zu einem Proxmox-Server. Das Geheimnis des Tokens verlässt den Kern nicht. */
+/** A connection to a Proxmox server. The token's secret never leaves the core. */
 export interface ProxmoxConnection {
   id: string;
   name: string;
@@ -1171,9 +1171,9 @@ export interface ProxmoxConnection {
   address: string;
   /** `benutzer@realm!name` */
   tokenId: string;
-  /** Der bestätigte Fingerabdruck eines selbst erstellten Zertifikats. Fehlt er, muss das Zertifikat anerkannt sein. */
+  /** The confirmed fingerprint of a self-signed certificate. If missing, the certificate must be trusted. */
   fingerprint?: string;
-  /** Die Identität, mit der sich Glowport an den Maschinen anmeldet, für die Cloud-Init keinen Schlüssel aus dem Tresor nennt. */
+  /** The identity Glowport signs in to the machines with for which Cloud-Init names no key from the vault. */
   identity?: string;
 }
 
@@ -1182,31 +1182,31 @@ export interface ProxmoxInput {
   name: string;
   address: string;
   tokenId: string;
-  /** Fehlt = bleibt, wie es ist. */
+  /** Missing = stays as it is. */
   secret?: string;
   fingerprint?: string;
-  /** Fehlt = keine. */
+  /** Missing = none. */
   identity?: string;
 }
 
 /**
- * Was eine Prüfung der Angaben ergab. Sie läuft in zwei Schritten: Bei einem selbst erstellten Zertifikat nennt der
- * erste nur den Fingerabdruck (`version` ist leer, der Token ist noch nicht hinausgegangen). Erst wenn die Eingabe
- * genau diesen Fingerabdruck mitbringt, weil der Nutzer ihn bestätigt hat, liest der zweite Version und Rechte.
+ * What a check of the details found. It runs in two steps: for a self-signed certificate the
+ * first only names the fingerprint (`version` is empty, the token has not gone out yet). Only when the input
+ * brings exactly this fingerprint along, because the user confirmed it, does the second read version and permissions.
  */
 export interface ProxmoxProbe {
   version: string;
-  /** Das Zertifikat ist von sich aus anerkannt (etwa von Let's Encrypt). */
+  /** The certificate is trusted on its own (e.g. from Let's Encrypt). */
   trusted: boolean;
-  /** SHA-256 des Zertifikats, zum Vergleichen mit der Proxmox-Oberfläche. */
+  /** SHA-256 of the certificate, for comparing with the Proxmox interface. */
   fingerprint: string;
-  /** Was dem Token fehlt: sehen, ein- und ausschalten, den Gastagenten fragen. */
+  /** What the token lacks: seeing, switching on and off, asking the guest agent. */
   missing: ('audit' | 'power' | 'agent')[];
-  /** Der Server zeigt ein anderes Zertifikat als das bisher bestätigte. */
+  /** The server shows a different certificate than the one confirmed so far. */
   changed?: boolean;
 }
 
-/** Zu welcher Maschine ein Host gehört. */
+/** Which machine a host belongs to. */
 export interface ProxmoxLink {
   connection: string;
   node: string;
@@ -1217,7 +1217,7 @@ export interface ProxmoxLink {
 export interface ProxmoxNode {
   node: string;
   online: boolean;
-  /** 0 bis 1 */
+  /** 0 to 1 */
   cpu?: number;
   cores?: number;
   memory?: { used: number; total: number };
@@ -1227,26 +1227,26 @@ export interface ProxmoxNode {
 export interface ProxmoxGuest {
   node: string;
   vmid: number;
-  /** `qemu`: eine VM. `lxc`: ein Container. */
+  /** `qemu`: a VM. `lxc`: a container. */
   kind: 'qemu' | 'lxc';
   name: string;
   status: 'running' | 'stopped' | 'paused' | 'unknown';
   template: boolean;
-  /** 0 bis 1 */
+  /** 0 to 1 */
   cpu?: number;
   cores?: number;
   memory?: { used: number; total: number };
   uptime?: number;
   tags: string[];
-  /** Die Adresse, unter der Glowport die Maschine erreicht, und woher es sie weiß. */
+  /** The address at which Glowport reaches the machine, and where it knows it from. */
   address?: string;
   source?: 'cloudinit' | 'agent' | 'config' | 'guest';
   user?: string;
-  /** Der Schlüssel im Tresor, zu dem ein in Cloud-Init hinterlegter öffentlicher Schlüssel gehört. */
+  /** The key in the vault that a public key stored in Cloud-Init belongs to. */
   key?: string;
   keyName?: string;
   os?: string;
-  /** Kennung des Hosts, der zu dieser Maschine gehört. */
+  /** ID of the host that belongs to this machine. */
   host?: string;
 }
 
