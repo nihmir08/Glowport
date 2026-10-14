@@ -7,8 +7,8 @@
   import ShellIcon from './ui/ShellIcon.svelte';
 
   /**
-   * Menü am „+“ der Tab-Leiste: einen Host suchen und verbinden oder ein lokales Terminal öffnen, mit einer der
-   * Shells, die es auf diesem PC gibt. `onhosts` führt zur Übersicht der Hosts; ein eigenes Fenster hat keine.
+   * Menu at the tab bar's “+”: search a host and connect, or open a local terminal with one of the
+   * shells available on this PC. `onhosts` leads to the hosts overview; a window of its own has none.
    */
   let { x, y, onclose, onhosts }: { x: number; y: number; onclose: () => void; onhosts?: () => void } = $props();
 

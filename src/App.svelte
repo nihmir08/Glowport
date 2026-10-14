@@ -75,26 +75,26 @@
   const systemQuery = matchMedia('(prefers-color-scheme: dark)');
   let systemDark = $state(systemQuery.matches);
   let closing = $state(false);
-  /** Sitzungen, die beim Schließen getrennt würden. Im Hauptfenster zählen die aller Fenster. */
+  /** Sessions that would be disconnected on closing. In the main window those of all windows count. */
   let closingCount = $state(0);
-  /** Transfers, die beim Schließen unterbrochen und zum Fortsetzen vorgemerkt würden. */
+  /** Transfers that would be interrupted on closing and noted for resuming. */
   let closingTransfers = $state(0);
-  /** Port-Regeln, die beim Schließen enden würden. */
+  /** Port rules that would end on closing. */
   let closingForwards = $state(0);
-  /** Häkchen „Bei offenen Sitzungen nicht erneut fragen“. */
+  /** Checkbox “Don't ask again with open sessions”. */
   let closingNever = $state(false);
-  /** Über dem Fenster schweben gerade Dateien aus dem Explorer: als Schlüssel für den Tresor oder zum Hochladen. */
+  /** Files from Explorer are hovering over the window right now: as keys for the vault or for uploading. */
   let dropping = $state<'keys' | 'upload' | false>(false);
-  /** Waagerechte Stelle des Mauszeigers beim Ablegen; auf der Seite „Dateien“ entscheidet sie über die Spalte. */
+  /** Horizontal position of the mouse pointer when dropping; on the Files page it decides the column. */
   let dropX = $state(0);
-  /** Tabs vom letzten Mal, falls Glowport nicht ordentlich beendet wurde und die Rückfrage noch aussteht. */
+  /** Tabs from last time, in case Glowport was not quit properly and the prompt is still pending. */
   let crashed = $state<SavedTab[] | null>(null);
-  /** Erst wenn feststeht, was mit den Tabs vom letzten Mal geschieht, wird der neue Stand festgehalten. */
+  /** Only once it is settled what happens with the tabs from last time is the new state recorded. */
   let tracking = $state(false);
 
   const inRange = (value: unknown, min: number, max: number): value is number => typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
 
-  /** Übernimmt nur gültige Werte, damit eine beschädigte oder alte Datei das Programm nicht aus dem Tritt bringt. */
+  /** Takes only valid values, so a damaged or old file does not throw the program off its stride. */
   function merge(s: Partial<Settings>) {
     if (s.mode === 'dark' || s.mode === 'light' || s.mode === 'system') settings.mode = s.mode;
     if (isHexColor(s.accent)) settings.accent = s.accent;
@@ -135,11 +135,11 @@
     if (typeof s.updateCheck === 'boolean') settings.updateCheck = s.updateCheck;
     if (inRange(s.updateChecked, 0, Number.MAX_SAFE_INTEGER)) settings.updateChecked = s.updateChecked;
     if (typeof s.lastVersion === 'string' && s.lastVersion.length <= 40) settings.lastVersion = s.lastVersion;
-    // Einstellungen einer Fassung, die sich ihre Version noch nicht merkte: Auch das ist ein Update.
+    // Settings of a version that did not remember its version yet: that is an update too.
     else if (typeof s.updateCheck === 'boolean') settings.lastVersion = 'älter';
   }
 
-  // Der Kern erfährt höchstens alle 15 Sekunden von Eingaben; genauer muss die Auto-Sperre es nicht wissen.
+  // The core learns about input at most every 15 seconds; the auto-lock does not need to know more precisely.
   let lastTouch = 0;
   function activity() {
     if (vault.state !== 'open' || Date.now() - lastTouch < 15_000) return;
@@ -147,13 +147,13 @@
     void vaultTouch();
   }
 
-  /** Wechselt reihum durch Start-Tab und Sitzungen. */
+  /** Cycles through the start tab and sessions. */
   function cycle(step: number) {
     const order = [...(detached ? [] : ['home']), ...tabs.map((tab) => tab.key)];
     view.active = order[(order.indexOf(view.active) + step + order.length) % order.length];
   }
 
-  /** Gibt die Tastatur dem Bereich, der in Pfeilrichtung am nächsten liegt. */
+  /** Gives the keyboard to the pane that is closest in the arrow's direction. */
   function focusNeighbour(dx: number, dy: number) {
     const tab = activeTab();
     if (!tab) return;
@@ -177,7 +177,7 @@
     activity();
     const key = event.key.toLowerCase();
     const tab = activeTab();
-    // Tastenkürzel eines Snippets: Es läuft im Bereich mit der Tastatur. Solange ein Dialog zu Snippets offen ist, ruht das.
+    // A snippet's shortcut: it runs in the pane with the keyboard. While a snippet dialog is open, this rests.
     const hotkey = tab && !snipUi.asking && !snipUi.editing && !snipUi.naming && !ui.palette ? hotkeyOf(event) : null;
     const snippet = hotkey ? snippetForHotkey(hotkey) : undefined;
     if (snippet && tab) {
@@ -194,19 +194,19 @@
     }
     if (event.ctrlKey && event.shiftKey && !event.altKey && tab) {
       const split = leaves(tab.layout).length > 1;
-      // Strg+Umschalt+W schließt den Bereich mit der Tastatur; ist er der einzige, den Tab.
+      // Ctrl+Shift+W closes the pane with the keyboard; if it is the only one, the tab.
       const action = { w: () => (split ? closePane(tab.focus) : closeTab(tab.key)), d: () => splitPane(tab.focus, 'right'), e: () => splitPane(tab.focus, 'bottom'), m: () => split && (tab.multi = !tab.multi) }[key];
       if (action) {
         event.preventDefault();
         return void action();
       }
     }
-    // Strg+Umschalt+T öffnet ein lokales Terminal mit der eingestellten Shell. Solange nur die Sperre zu sehen ist, nicht.
+    // Ctrl+Shift+T opens a local terminal with the configured shell. Not while only the lock screen is visible.
     if (event.ctrlKey && event.shiftKey && !event.altKey && key === 't' && (vault.state === 'open' || tabs.length)) {
       event.preventDefault();
       return openLocal();
     }
-    // Strg+K öffnet die Suche, außer im Terminal: Dort gehört es der Sitzung (nano, bash). Strg+Umschalt+K geht überall.
+    // Ctrl+K opens search, except in the terminal: there it belongs to the session (nano, bash). Ctrl+Shift+K works everywhere.
     const inTerminal = event.target instanceof Element && !!event.target.closest('.xterm');
     if ((event.ctrlKey || event.metaKey) && !event.altKey && key === 'k' && (event.shiftKey || !inTerminal) && (vault.state === 'open' || tabs.length)) {
       event.preventDefault();
@@ -216,7 +216,7 @@
 
   const quit = () => void getCurrentWindow().destroy();
 
-  /** Schließt nach der Rückfrage. Das Häkchen muss gespeichert sein, bevor das Fenster verschwindet. */
+  /** Closes after the prompt. The checkbox must be saved before the window disappears. */
   async function confirmQuit() {
     if (closingNever && settings.closePrompt) {
       settings.closePrompt = false;
@@ -225,10 +225,10 @@
     quit();
   }
 
-  /** Schlüsseldateien nimmt der Start-Tab an, solange der Tresor offen ist. Auf der Seite „Dateien“ und in Sitzungen bedeutet Ablegen Hochladen. */
+  /** The start tab accepts key files as long as the vault is open. On the Files page and in sessions, dropping means uploading. */
   const acceptsKeys = () => !detached && vault.state === 'open' && view.active === 'home' && ui.page !== 'files';
 
-  /** Der Ordner, in den abgelegte Dateien hochgeladen würden: die Spalte unter dem Mauszeiger oder die Dateileiste des Bereichs mit der Tastatur. */
+  /** The folder dropped files would be uploaded to: the column under the mouse pointer or the file bar of the pane with the keyboard. */
   function uploadTarget(): Browser | null {
     const usable = (browser: Browser) => !!browser.place && browser.place.kind !== 'local' && !!browser.listing?.writable;
     if (view.active === 'home') {
@@ -240,11 +240,11 @@
     const bar = settings.fileBar && focus ? barFor(focus) : null;
     return bar && usable(bar) ? bar : null;
   }
-  /** Wie der Ort eines Blicks heißt; bei der Dateileiste ist es der Name des Bereichs. */
+  /** What a view's location is called; for the file bar it is the pane's name. */
   const targetName = (browser: Browser) => (browser.place?.kind === 'session' ? paneTitle(paneByKey(activeTab()?.focus)!) : placeName(browser.place));
   const dropKind = () => (acceptsKeys() ? 'keys' : uploadTarget() ? 'upload' : false);
 
-  /** Lädt abgelegte Dateien und Ordner dorthin hoch. */
+  /** Uploads dropped files and folders there. */
   function uploadDropped(paths: string[]) {
     const target = uploadTarget();
     dropping = false;
@@ -252,7 +252,7 @@
     void enqueue({ kind: 'local' }, paths, target.place, target.listing.path);
   }
 
-  /** Liest abgelegte Dateien und importiert, was davon ein Schlüssel ist. Unlesbares zählt als „kein Schlüssel“. */
+  /** Reads dropped files and imports what of them is a key. Unreadable counts as “not a key”. */
   async function dropped(read: Promise<KeyFile>[]) {
     dropping = false;
     if (!acceptsKeys() || !read.length) return;
@@ -260,7 +260,7 @@
     await importDroppedKeys(files);
   }
 
-  /** Dasselbe in der Vorschau im Browser, wo das Ablegen als gewöhnliches Ereignis der Seite ankommt. */
+  /** The same in the browser preview, where dropping arrives as an ordinary page event. */
   function browserDrop(event: DragEvent) {
     event.preventDefault();
     if (inApp) return;
@@ -271,7 +271,7 @@
     void dropped([...(event.dataTransfer?.files ?? [])].map(async (file) => ({ path: file.name, text: await file.text() })));
   }
 
-  /** Holt den Stand des Tresors neu, nachdem er sich geändert hat (auch durch ein anderes Fenster). */
+  /** Fetches the vault's state anew after it has changed (also by another window). */
   const syncVault = () =>
     void vaultStatus()
       .then(applyStatus)
@@ -294,13 +294,13 @@
       .catch((e) => console.error('Einstellungen nicht lesbar', e))
       .finally(() => {
         ui.ready = true;
-        // Nach Updates sieht nur das Hauptfenster nach, und erst, wenn die Einstellungen sagen, ob es das soll.
+        // Only the main window looks for updates, and only once the settings say whether it should.
         if (!detached) void initUpdates();
       });
     const vaultLoaded = vaultStatus()
       .then(applyStatus)
       .catch((e) => console.error('Tresor-Zustand nicht lesbar', e))
-      // Der Tab eines eigenen Fensters nennt Hosts aus dem Tresor; geöffnet wird er, sobald dessen Stand da ist.
+      // The tab of a window of its own names hosts from the vault; it is opened as soon as the vault's state is there.
       .then(() => (detached ? takeDetachedTab() : null))
       .then((tab) => {
         if (!detached) return;
@@ -317,11 +317,11 @@
       .then((info) => info?.effect && (document.documentElement.dataset.effect = info.effect))
       .catch(() => {});
     void loadShells();
-    // Das Fenster ist bis hierher unsichtbar. Zu sehen ist es erst, wenn Sprache, Farbmodus und der Stand des
-    // Tresors feststehen und die Seite dazu gezeichnet ist: kein leeres Fenster, kein Umspringen von dunkel auf hell.
+    // The window is invisible up to here. It only becomes visible once language, color mode and the state of the
+    // vault are settled and the page for it is drawn: no empty window, no jumping from dark to light.
     void Promise.allSettled([settingsLoaded, vaultLoaded, infoLoaded]).then(async () => {
       await tick();
-      // Zwei Bilder später ist gezeichnet, was eben entstanden ist. Die Frist greift, wo ein Fenster vorher keine zeichnet.
+      // Two frames later what just came into being is drawn. The deadline applies where a window draws none before.
       await new Promise<void>((done) => {
         const late = setTimeout(done, 300);
         requestAnimationFrame(() => requestAnimationFrame(() => (clearTimeout(late), done())));
@@ -343,7 +343,7 @@
         if (!detached) toast(t('lock.autolocked', { n: settings.autoLockMinutes }));
       }),
     ];
-    // Dateien aus dem Explorer: Im Programm meldet Tauri sie mit ihrem Pfad, gelesen werden sie im Kern.
+    // Files from Explorer: in the program Tauri reports them with their path, they are read in the core.
     if (inApp) {
       const stop = getCurrentWebview().onDragDropEvent((event) => {
         const payload = event.payload;
@@ -355,15 +355,15 @@
       });
       stops.push(() => void stop.then((off) => off()));
     }
-    // Beim Schließen mit laufenden Sitzungen erst nachfragen. Das Hauptfenster nimmt alle anderen Fenster mit.
+    // When closing with running sessions, ask first. The main window takes all other windows along.
     if (inApp) {
       const stop = getCurrentWindow().onCloseRequested(async (event) => {
         const count = detached ? liveCount() : await sessionCount().catch(liveCount);
-        // Laufende Transfers gehören dem Programm; nur das Hauptfenster nimmt sie beim Schließen mit.
+        // Running transfers belong to the program; only the main window takes them along when closing.
         closingTransfers = detached ? 0 : activeTransfers().length;
-        // Port-Regeln gehören ebenfalls dem Programm und enden mit dem Hauptfenster.
+        // Port rules belong to the program as well and end with the main window.
         closingForwards = detached ? 0 : activeForwards().length;
-        // Offene Sitzungen allein fragen nur, solange der Nutzer das nicht abgeschaltet hat.
+        // Open sessions alone only ask as long as the user has not switched that off.
         if ((count > 0 && settings.closePrompt) || closingTransfers > 0 || closingForwards > 0) {
           event.preventDefault();
           closingCount = count;
@@ -388,22 +388,22 @@
   $effect(() => {
     const snapshot = $state.snapshot(settings);
     if (!ui.ready) return;
-    // Kurz warten: Die Farbauswahl feuert beim Ziehen viele Änderungen.
+    // Wait briefly: the color picker fires many changes while dragging.
     const timer = setTimeout(() => saveSettings(snapshot).catch((e) => console.error('Einstellungen nicht speicherbar', e)), 250);
     return () => clearTimeout(timer);
   });
 
-  // Die Auto-Sperre läuft im Kern; er braucht die Einstellung nach jedem Entsperren und bei jeder Änderung.
+  // The auto-lock runs in the core; it needs the setting after every unlock and on every change.
   $effect(() => {
     if (vault.state === 'open' && ui.ready) void vaultSetAutoLock(settings.autoLockMinutes);
   });
 
-  // Die Rückfrage nach einem Abbruch braucht den offenen Tresor (die Tabs nennen Hosts daraus). Ist sie abgeschaltet, wird nie wiederhergestellt.
+  // The prompt after a crash needs the open vault (the tabs name hosts from it). If it is switched off, nothing is ever restored.
   $effect(() => {
     if (crashed && ui.ready && !settings.restorePrompt) restore(false);
   });
 
-  // Das Hintergrundbild: In den Einstellungen steht nur, welches es ist; hier entsteht die Adresse zum Anzeigen.
+  // The background image: the settings only say which one it is; the address for display is created here.
   $effect(() => {
     const saved = settings.termBackground;
     let current = true;
@@ -418,7 +418,7 @@
     };
   });
 
-  // Hält fest, welche Tabs offen sind, damit sie sich nach einem Abbruch anbieten lassen. Jedes Fenster meldet seine.
+  // Records which tabs are open, so they can be offered after a crash. Every window reports its own.
   $effect(() => {
     const open = tabs.map(savedTab);
     if (!tracking) return;
@@ -426,8 +426,8 @@
     return () => clearTimeout(timer);
   });
 
-  // Transfers, die beim letzten Mal unterbrochen wurden, stehen angehalten in der Liste. Darauf weist das Hauptfenster
-  // einmal hin, sobald der Tresor offen ist; vorher ließen sie sich nicht fortsetzen.
+  // Transfers interrupted last time are in the list, paused. The main window points that out
+  // once, as soon as the vault is open; before that they could not be resumed.
   let hinted = false;
   $effect(() => {
     if (hinted || detached || vault.state !== 'open' || !transfers.loaded) return;
@@ -438,7 +438,7 @@
     showTransfers(true);
   });
 
-  // Ein eigenes Fenster hat ohne Tabs nichts mehr zu zeigen.
+  // A window of its own has nothing left to show without tabs.
   let hadTabs = false;
   $effect(() => {
     if (tabs.length) hadTabs = true;
@@ -449,7 +449,7 @@
   const closeText = $derived(t(detached ? 'close.text.window' : 'close.text', { n: closingCount }));
 </script>
 
-<!-- Das Kontextmenü von WebView2 („Zurück“, „Neu laden“) gibt es nirgends; im Terminal kopiert oder fügt der Rechtsklick ein. -->
+<!-- WebView2's context menu (“Back”, “Reload”) appears nowhere; in the terminal right-click copies or pastes. -->
 <svelte:window
   onpointerdown={activity}
   onkeydown={keydown}
@@ -465,9 +465,9 @@
 <div class="win" class:sess-on={!home}>
   <TitleBar />
 
-  <!-- Der Start-Tab bleibt eingehängt, wenn eine Sitzung vorn ist: So bleiben Gruppe, Auswahl und Editor erhalten. -->
+  <!-- The start tab stays mounted when a session is in front: that way group, selection and editor are kept. -->
   {#if detached}
-    <!-- kein Start-Tab -->
+    <!-- no start tab -->
   {:else if vault.state === 'open'}
     <div class="home-view" class:off={!home}>
       <NavRail />
@@ -501,7 +501,7 @@
     <LockScreen />
   {/if}
 
-  <!-- Sitzungen laufen weiter, auch wenn der Tresor gesperrt ist. Jede behält ihr Terminal, sichtbar sind nur die des vorderen Tabs. -->
+  <!-- Sessions keep running even when the vault is locked. Each keeps its terminal; only those of the front tab are visible. -->
   <SessionArea hidden={home} />
 
   <StatusBar />
@@ -512,7 +512,7 @@
 {#if !detached}<ImportDialog /><UpdateDialog />{/if}
 <FileDialogs />
 <SnippetDialogs />
-<!-- Eine Port-Regel, die beim Einschalten erst eine Antwort braucht: dieselbe Rückfrage wie bei einem Terminal. -->
+<!-- A port rule that first needs an answer when switched on: the same prompt as for a terminal. -->
 {#if forwards.asking}
   {@const rule = forwardById(forwards.asking.rule)}
   <SessionPrompt prompt={forwards.asking.prompt} name={hostById(rule?.host ?? null)?.name ?? rule?.name ?? ''} onanswer={answerForward} />

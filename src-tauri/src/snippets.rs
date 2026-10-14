@@ -1,7 +1,7 @@
-//! Snippets: speichern, löschen und auf mehreren Hosts ausführen. Dazu die Messung für die Server-Info.
+//! Snippets: save, delete and run on several hosts. Plus the measurement for the server info.
 //!
-//! Im Terminal tippt die Oberfläche ein Snippet einfach in die Sitzung; dafür braucht es hier nichts. „Auf Hosts
-//! ausführen“ dagegen läuft ohne Terminal: Je Host eine eigene Verbindung, ohne Rückfragen, ein Befehl, trennen.
+//! In the terminal the interface simply types a snippet into the session; nothing is needed here for that. “Run on
+//! hosts”, however, runs without a terminal: per host a connection of its own, no prompts, one command, disconnect.
 
 use std::{
     collections::HashMap,
@@ -21,14 +21,14 @@ use crate::{
     sessions::connect_chain,
 };
 
-/// So viele Hosts werden gleichzeitig bedient.
+/// This many hosts are served at the same time.
 const PARALLEL: usize = 4;
-/// So lange darf der Befehl auf einem Host laufen.
+/// This long the command may run on a host.
 const RUN_LIMIT: Duration = Duration::from_secs(600);
-/// So viel Ausgabe je Host wird gezeigt.
+/// This much output per host is shown.
 const MAX_OUTPUT: usize = 256 * 1024;
 
-/// Laufende Aufträge „auf Hosts ausführen“, damit sie sich abbrechen lassen: Nummer des Laufs → Abbruchsignal.
+/// Running “run on hosts” jobs, so they can be cancelled: number of the run → cancel signal.
 #[derive(Default)]
 pub struct Runs(Mutex<HashMap<u64, watch::Sender<bool>>>);
 
@@ -46,16 +46,16 @@ pub fn snippet_delete(state: State<'_, AppState>, id: String) -> CmdResult<Chang
     session.changed(None)
 }
 
-/// Stand oder Ergebnis eines Befehls auf einem Host.
+/// State or result of a command on a host.
 #[derive(Clone, Serialize)]
 pub struct RunResult {
     host: String,
-    /// `running`, `done` (siehe `exit`) oder `failed` (siehe `error`).
+    /// `running`, `done` (see `exit`) or `failed` (see `error`).
     state: &'static str,
     exit: Option<u32>,
     output: String,
     truncated: bool,
-    /// Grund des Scheiterns als Code, den die Oberfläche übersetzt.
+    /// Reason for the failure as a code the interface translates.
     error: Option<&'static str>,
     ms: u64,
 }
@@ -66,14 +66,14 @@ impl RunResult {
     }
 }
 
-/// Ausgabe eines Befehls als Text zum Anzeigen: Zeilenenden vereinheitlicht, ohne Farben und Steuerzeichen.
+/// A command's output as text for display: line ends unified, without colors and control characters.
 fn readable(bytes: &[u8]) -> String {
     let text = String::from_utf8_lossy(bytes).replace("\r\n", "\n");
     let mut out = String::with_capacity(text.len());
     let mut chars = text.chars().peekable();
     while let Some(c) = chars.next() {
         match c {
-            // Farben und Cursor-Befehle: `ESC [ … Buchstabe`. Alles andere nach ESC fällt mit ihm weg.
+            // Colors and cursor commands: `ESC [ … letter`. Everything else after ESC is dropped with it.
             '\x1b' => {
                 if chars.next_if_eq(&'[').is_some() {
                     while chars.next_if(|c| !c.is_ascii_alphabetic()).is_some() {}
@@ -81,7 +81,7 @@ fn readable(bytes: &[u8]) -> String {
                 }
             }
             '\n' | '\t' => out.push(c),
-            // Ein einzelner Wagenrücklauf zeichnet die Zeile neu (Fortschrittsanzeigen); hier beginnt eine neue.
+            // A lone carriage return redraws the line (progress bars); here a new one begins.
             '\r' => out.push('\n'),
             c if c.is_control() => {}
             c => out.push(c),
@@ -90,8 +90,8 @@ fn readable(bytes: &[u8]) -> String {
     out
 }
 
-/// Führt den Befehl auf einem Host aus. Angemeldet wird mit dem, was für den Host hinterlegt ist, ohne Rückfragen;
-/// der Schlüssel jedes Servers auf dem Weg muss schon bekannt sein.
+/// Runs the command on a host. It signs in with what is stored for the host, without prompts;
+/// the key of every server on the way must already be known.
 async fn run_on(app: &AppHandle, host: &str, command: &str) -> Result<net::Output, &'static str> {
     let state = app.state::<AppState>();
     let connect = match state.session().directory() {
@@ -108,8 +108,8 @@ async fn run_on(app: &AppHandle, host: &str, command: &str) -> Result<net::Outpu
     }
 }
 
-/// Führt einen Befehl auf mehreren Hosts aus, einige zugleich, und meldet über `results` jeden Host, sobald er
-/// beginnt und sobald er fertig ist. `run` ist die Nummer, unter der `snippet_cancel` den Lauf abbricht.
+/// Runs a command on several hosts, some at once, and reports every host through `results` as soon as it
+/// starts and as soon as it is done. `run` is the number under which `snippet_cancel` cancels the run.
 #[tauri::command]
 pub async fn snippet_run(app: AppHandle, run: u64, command: String, hosts: Vec<String>, results: Channel<RunResult>) -> CmdResult<()> {
     let (cancel, cancelled) = watch::channel(false);
@@ -180,10 +180,10 @@ pub struct Net {
     tx: u64,
 }
 
-/// Eine Messung in der Form, die die Oberfläche liest (`StatsSample` in `types.ts`).
+/// A measurement in the form the interface reads (`StatsSample` in `types.ts`).
 #[derive(Serialize)]
 pub struct StatsView {
-    /// Zeitpunkt der Messung in Millisekunden seit 1970.
+    /// Time of the measurement in milliseconds since 1970.
     at: u64,
     cpu: Cpu,
     cores: u32,
@@ -213,8 +213,8 @@ fn view(sample: stats::Sample, at: u64) -> StatsView {
     }
 }
 
-/// Misst den Server einer Sitzung über einen zusätzlichen Kanal ihrer Verbindung. `None`, wenn er die Zahlen
-/// nicht hergibt (kein Linux) oder die Sitzung nicht verbunden ist.
+/// Measures a session's server over an additional channel of its connection. `None` if it does not provide the
+/// numbers (not Linux) or the session is not connected.
 #[tauri::command]
 pub async fn session_stats(app: AppHandle, id: u64) -> Option<StatsView> {
     let output = files::run_at(&app, &Place::Session { id }, stats::COMMAND).await.ok()?;

@@ -1,6 +1,6 @@
-//! Einstellungen ohne Geheimniswert (Aussehen, Sprache, Ansicht) als JSON-Datei im Datenordner.
+//! Settings without secret value (appearance, language, view) as a JSON file in the data folder.
 //!
-//! Die Oberfläche bestimmt den Inhalt und prüft ihn beim Laden; hier geht es nur um sicheres Lesen und Schreiben.
+//! The interface decides the content and checks it when loading; this is only about safe reading and writing.
 
 use std::{
     fs,
@@ -14,8 +14,8 @@ const FILE: &str = "settings.json";
 const TEMP: &str = "settings.json.neu";
 const BROKEN: &str = "settings.json.defekt";
 
-/// Liest die Einstellungen. `None`, wenn es noch keine gibt oder die Datei unlesbar war.
-/// Eine kaputte Datei wird beiseitegelegt statt überschrieben, damit nichts stillschweigend verloren geht.
+/// Reads the settings. `None` if there are none yet or the file was unreadable.
+/// A broken file is put aside instead of overwritten, so nothing gets lost silently.
 pub fn load(dir: &Path) -> io::Result<Option<Value>> {
     let path = dir.join(FILE);
     let text = match fs::read_to_string(&path) {
@@ -32,8 +32,8 @@ pub fn load(dir: &Path) -> io::Result<Option<Value>> {
     }
 }
 
-/// Deutsch oder Englisch zu einer Sprachkennung von Windows. Die unteren zehn Bit nennen die Sprache; 7 ist Deutsch
-/// in jeder Spielart (Deutschland, Österreich, Schweiz). Alles andere bekommt Englisch.
+/// German or English for a Windows language ID. The lower ten bits name the language; 7 is German
+/// in every variant (Germany, Austria, Switzerland). Everything else gets English.
 fn language_of(id: u32) -> &'static str {
     if id & 0x3ff == 0x07 {
         "de"
@@ -42,15 +42,15 @@ fn language_of(id: u32) -> &'static str {
     }
 }
 
-/// Die Sprache für den allerersten Start, solange es keine Einstellungen gibt: die im Installer gewählte
-/// (`installer`, eine Sprachkennung als Text wie „1033“), sonst die der Oberfläche von Windows (`system`).
-/// Ist beides unbekannt, Englisch.
+/// The language for the very first start, as long as there are no settings: the one chosen in the installer
+/// (`installer`, a language ID as text like “1033”), otherwise that of Windows' interface (`system`).
+/// If both are unknown, English.
 pub fn first_language(installer: Option<&str>, system: Option<u32>) -> &'static str {
     installer.and_then(|text| text.trim().parse().ok()).or(system).map_or("en", language_of)
 }
 
-/// Die Sprache, die im Installer gewählt wurde. Er hinterlegt sie für den angemeldeten Benutzer in der Registry,
-/// unter Herausgeber und Name des Programms.
+/// The language chosen in the installer. It stores it for the signed-in user in the registry,
+/// under the program's publisher and name.
 #[cfg(windows)]
 pub fn installer_language(publisher: &str, product: &str) -> Option<String> {
     use winreg::{enums::HKEY_CURRENT_USER, RegKey};
@@ -62,10 +62,10 @@ pub fn installer_language(_publisher: &str, _product: &str) -> Option<String> {
     None
 }
 
-/// Die Sprache, in der Windows seine Oberfläche zeigt.
+/// The language Windows shows its interface in.
 #[cfg(windows)]
 pub fn system_language() -> Option<u32> {
-    // SAFETY: Der Aufruf nimmt nichts entgegen und liefert eine Zahl.
+    // SAFETY: The call takes nothing and returns a number.
     Some(u32::from(unsafe { windows_sys::Win32::Globalization::GetUserDefaultUILanguage() }))
 }
 
@@ -75,7 +75,7 @@ pub fn system_language() -> Option<u32> {
     Some(if lang.to_lowercase().starts_with("de") { 0x07 } else { 0x09 })
 }
 
-/// Schreibt atomar: erst eine Nachbardatei, dann umbenennen. Ein Absturz mittendrin lässt die alte Datei heil.
+/// Writes atomically: first a neighbouring file, then rename. A crash midway leaves the old file intact.
 pub fn save(dir: &Path, settings: &Value) -> io::Result<()> {
     fs::create_dir_all(dir)?;
     let temp = dir.join(TEMP);
@@ -92,7 +92,7 @@ mod tests {
     use serde_json::json;
     use std::path::PathBuf;
 
-    /// Eigener leerer Ordner je Test, damit parallele Tests sich nicht stören.
+    /// An empty folder of its own per test, so parallel tests do not disturb each other.
     fn temp_dir(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("glowport-test-{}-{name}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
@@ -101,24 +101,24 @@ mod tests {
 
     #[test]
     fn first_start_follows_the_installer_then_windows() {
-        // 1031 Deutsch (Deutschland), 3079 Österreich, 2055 Schweiz; 1033 und 2057 Englisch; 1036 Französisch.
+        // 1031 German (Germany), 3079 Austria, 2055 Switzerland; 1033 and 2057 English; 1036 French.
         for german in [1031, 3079, 2055] {
             assert_eq!(language_of(german), "de");
         }
         for other in [1033, 2057, 1036, 0] {
             assert_eq!(language_of(other), "en");
         }
-        // Die Wahl im Installer geht vor, auch gegen die Sprache von Windows.
+        // The choice in the installer comes first, even against the language of Windows.
         assert_eq!(first_language(Some("1033"), Some(1031)), "en");
         assert_eq!(first_language(Some(" 1031 "), Some(2057)), "de");
-        // Ohne Installer (portable Fassung) oder mit einem unlesbaren Eintrag zählt Windows.
+        // Without an installer (portable version) or with an unreadable entry, Windows counts.
         assert_eq!(first_language(None, Some(3079)), "de");
         assert_eq!(first_language(Some("kaputt"), Some(1031)), "de");
         assert_eq!(first_language(None, Some(2057)), "en");
         assert_eq!(first_language(None, None), "en");
     }
 
-    /// Liest, was auf diesem PC wirklich hinterlegt ist, und gibt nur die Kennungen aus.
+    /// Reads what is really stored on this PC and only prints the IDs.
     /// `cargo test -p glowport reads_the_languages_of_this_pc -- --ignored --nocapture`
     #[test]
     #[ignore = "liest Registry und Sprache dieses PCs"]

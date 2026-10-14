@@ -17,9 +17,9 @@
   import TargetIcon from './ui/TargetIcon.svelte';
 
   /**
-   * Alle Sitzungen: die Leiste des vorderen Tabs und darunter die Bereiche.
-   * Die Bereiche sämtlicher Tabs liegen nebeneinander in einer Fläche und werden nur ein- und ausgeblendet.
-   * So behält jedes Terminal seinen Inhalt, auch wenn es den Platz oder den Tab wechselt.
+   * All sessions: the front tab's bar and the panes below it.
+   * The panes of all tabs lie side by side in one area and are only shown and hidden.
+   * That way every terminal keeps its content, even when it changes place or tab.
    */
   let { hidden }: { hidden: boolean } = $props();
 
@@ -29,13 +29,13 @@
   const inside = $derived(tab ? leaves(tab.layout) : []);
   const split = $derived(inside.length > 1);
   const focused = $derived(paneByKey(tab?.focus));
-  /** Dateileiste und Server-Info hängen an SSH; bei Telnet, serieller Leitung und lokalem Terminal gibt es sie nicht. */
+  /** File bar and server info depend on SSH; for Telnet, serial line and local terminal they do not exist. */
   const ssh = $derived(focused?.kind === 'ssh');
   const live = $derived(focused?.sessionId != null);
   const asking = $derived(tab ? askingPane(tab) : undefined);
   const lines = $derived(tab ? dividers(tab.layout) : []);
 
-  /** Platz jedes Bereichs in seinem Tab. */
+  /** Place of every pane in its tab. */
   const places = $derived.by(() => {
     const out = new Map<string, { rect: Rect; tab: string; split: boolean; focus: boolean; multi: boolean }>();
     for (const pane of panes) {
@@ -47,7 +47,7 @@
     return out;
   });
 
-  /** Die Fläche, die beim Ablegen neu belegt würde. */
+  /** The area that would be newly occupied when dropping. */
   const preview = $derived.by((): Rect | null => {
     const drop = drag.item ? drag.drop : null;
     if (drop?.kind !== 'pane') return null;
@@ -72,7 +72,7 @@
   const lineStyle = (d: Divider) =>
     d.dir === 'row' ? `left:${pct(d.area.x + d.area.w * d.ratio)};top:${pct(d.area.y)};height:${pct(d.area.h)}` : `top:${pct(d.area.y + d.area.h * d.ratio)};left:${pct(d.area.x)};width:${pct(d.area.w)}`;
 
-  /** Zieht eine Trennlinie: Das Verhältnis folgt der Maus innerhalb der Fläche, die die Linie teilt. */
+  /** Drags a divider: the ratio follows the mouse within the area the divider splits. */
   function resize(event: PointerEvent, d: Divider) {
     if (event.button !== 0 || !area || !tab) return;
     event.preventDefault();
@@ -96,7 +96,7 @@
     grip.addEventListener('pointercancel', stop);
   }
 
-  /** Nach einer Schnellverbindung: die Adresse als Host in den Tresor legen. Der Bereich gehört danach zu diesem Host. */
+  /** After a quick connection: put the address into the vault as a host. The pane then belongs to this host. */
   async function saveAsHost() {
     const pane = focused;
     const target = pane?.target;

@@ -14,8 +14,8 @@
   import { toast } from './state.svelte';
 
   /**
-   * Ein Terminal-Bereich an seinem Platz im Tab. `rect` ist sein Platz in Anteilen der Fläche;
-   * `split` sagt, ob der Tab mehrere Bereiche hat (dann bekommt jeder eine Kopfzeile zum Greifen).
+   * A terminal pane in its place in the tab. `rect` is its place in fractions of the area;
+   * `split` says whether the tab has several panes (then each gets a header row to grab).
    */
   let { pane, rect, visible, focused, split, multi }: { pane: Pane; rect: Rect; visible: boolean; focused: boolean; split: boolean; multi: boolean } = $props();
 
@@ -28,7 +28,7 @@
     if (tab) tab.focus = pane.key;
   }
 
-  /** Befehl zum Installieren von mosh, soweit das System des Servers bekannt ist. */
+  /** Command to install mosh, as far as the server's system is known. */
   const install = $derived(pane.moshFallback?.reason === 'missing' ? moshInstall(pane.target.kind === 'host' ? hostById(pane.target.id)?.os : null) : null);
 
   async function copyInstall() {
@@ -37,7 +37,7 @@
     toast(t('logs.copied'), 'ok');
   }
 
-  /** Schließt den Bereich; ist er der einzige, schließt das den Tab. */
+  /** Closes the pane; if it is the only one, that closes the tab. */
   function close() {
     const tab = tabOf(pane.key);
     if (tab && !split) closeTab(tab.key);

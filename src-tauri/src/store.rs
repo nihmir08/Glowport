@@ -1,5 +1,5 @@
-//! Dateien auf einem Server, über SFTP oder FTP. Der Dateimanager und die Übertragungen sprechen mit dieser einen
-//! Form; was FTP nicht kann (Befehle ausführen, Besitzer ändern), meldet es als „nicht unterstützt“.
+//! Files on a server, over SFTP or FTP. The file manager and the transfers talk to this one
+//! form; what FTP cannot do (run commands, change owner) it reports as “not supported”.
 
 use std::{
     future::Future,
@@ -13,13 +13,13 @@ use glowport_net::{
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 
-// Je verbundenem Ort gibt es eine davon; die größere Form eigens auszulagern lohnt nicht.
+// There is one of these per connected location; moving the larger form out separately is not worth it.
 #[allow(clippy::large_enum_variant)]
 pub enum Store {
     Sftp(glowport_net::files::Remote),
     Ftp {
         remote: glowport_ftp::Remote,
-        /// Ob der Server Rechte ändern kann, weiß erst der Versuch. Nach einem „kann ich nicht“ fehlt der Menüpunkt.
+        /// Whether the server can change permissions only the attempt tells. After a “cannot do” the menu item is missing.
         chmod: AtomicBool,
     },
 }
@@ -29,7 +29,7 @@ impl Store {
         Store::Ftp { remote, chmod: AtomicBool::new(true) }
     }
 
-    /// Bei FTP: ob der Server (soweit bekannt) Rechte ändern kann. `None` bei SFTP.
+    /// For FTP: whether the server (as far as known) can change permissions. `None` for SFTP.
     pub fn ftp_chmod(&self) -> Option<bool> {
         match self {
             Store::Sftp(_) => None,
@@ -37,7 +37,7 @@ impl Store {
         }
     }
 
-    /// Führt einen Befehl aus. FTP kennt keine Befehle.
+    /// Runs a command. FTP knows no commands.
     pub async fn run(&self, command: &str) -> Result<Output, FileError> {
         match self {
             Store::Sftp(remote) => remote.run(command).await,
@@ -52,7 +52,7 @@ impl Store {
         }
     }
 
-    /// Bringt einen Pfad in die Form des Servers. SFTP fragt ihn; für FTP wird er hier bereinigt.
+    /// Brings a path into the server's form. SFTP asks it; for FTP it is cleaned up here.
     pub async fn resolve(&self, path: &str) -> Result<String, FileError> {
         match self {
             Store::Sftp(remote) => remote.resolve(path).await,
@@ -95,7 +95,7 @@ impl Store {
         }
     }
 
-    /// Ändert Rechte und Besitz. FTP kann höchstens die Rechte, und auch die nur, wenn der Server es anbietet.
+    /// Changes permissions and ownership. FTP can at most do the permissions, and only if the server offers it.
     pub fn change<'a>(&'a self, path: &'a str, change: &'a Change, recursive: bool) -> Pin<Box<dyn Future<Output = Result<(), FileError>> + Send + 'a>> {
         Box::pin(async move {
             match self {
@@ -106,7 +106,7 @@ impl Store {
                     }
                     let Some(mode) = change.mode else { return Ok(()) };
                     let entry = remote.stat(path, false).await?;
-                    // Wie bei SFTP bleiben Ordner betretbar, wenn die Rechte für ihren Inhalt gelten sollen.
+                    // As with SFTP, folders stay enterable when the permissions are meant for their content.
                     let own = if entry.kind == Kind::Dir && recursive { mode | (mode & 0o444) >> 2 } else { mode };
                     if let Err(error) = remote.chmod(path, own).await {
                         if error == FileError::Unsupported {
@@ -148,7 +148,7 @@ impl Store {
         })
     }
 
-    /// Bei FTP ist die Datei erst nach `shutdown` fertig: Erst dann bestätigt der Server sie.
+    /// With FTP the file is only finished after `shutdown`: only then does the server confirm it.
     pub async fn writer(&self, path: &str, offset: u64) -> Result<Box<dyn AsyncWrite + Unpin + Send>, FileError> {
         Ok(match self {
             Store::Sftp(remote) => Box::new(remote.writer(path, offset).await?),
@@ -164,7 +164,7 @@ impl Store {
     }
 }
 
-/// Ein Pfad ohne doppelte Striche, `.` und `..`; ein Pfad ohne Strich am Anfang gilt ab `home`.
+/// A path without double slashes, `.` and `..`; a path without a leading slash counts from `home`.
 fn tidy(home: &str, path: &str) -> String {
     let whole = if path.starts_with('/') { path.to_string() } else { format!("{}/{path}", home.trim_end_matches('/')) };
     let mut parts: Vec<&str> = Vec::new();

@@ -13,9 +13,9 @@
   import ShellIcon from './ui/ShellIcon.svelte';
 
   /**
-   * Suche über alle Hosts und die Shells dieses PCs, dazu die Schnellverbindung mit `ssh user@host`,
-   * `user@host:port`, `user@host -p port`, `telnet host [port]` oder `ftps://user@host` (öffnet den Dateimanager).
-   * Ist ein Terminal vorn, findet sie auch Snippets und führt sie dort aus.
+   * Search across all hosts and this PC's shells, plus quick connect with `ssh user@host`,
+   * `user@host:port`, `user@host -p port`, `telnet host [port]` or `ftps://user@host` (opens the file manager).
+   * If a terminal is in front, it also finds snippets and runs them there.
    */
   let query = $state('');
   let index = $state(0);
@@ -29,9 +29,9 @@
     detail: string;
     os: string | null;
     protocol?: string;
-    /** Ein Eintrag verbindet zu einem Ziel oder führt ein Snippet im Terminal aus. */
+    /** An entry connects to a destination or runs a snippet in the terminal. */
     target?: Target;
-    /** Ein FTP-Server aus der Schnellverbindung: Er öffnet sich im Dateimanager, wahlweise in einem Ordner. */
+    /** An FTP server from quick connect: it opens in the file manager, optionally in a folder. */
     place?: FtpPlace;
     path?: string;
     snippet?: Snippet;
@@ -40,16 +40,16 @@
 
   const validPort = (port: number) => Number.isInteger(port) && port >= 1 && port <= 65535;
 
-  /** Erkennt eine eingetippte Adresse. Geprüft wird sie beim Verbinden noch einmal im Kern. */
+  /** Recognises a typed address. It is checked once more in the core when connecting. */
   function direct(text: string): Target | null {
-    // Eine Adresse mit Schema (`ftp://…`) ist keine SSH-Adresse, auch wenn ein `@` darin steht.
+    // An address with a scheme (`ftp://…`) is not an SSH address, even if it contains an `@`.
     if (/^[a-z][a-z0-9+.-]*:\/\//i.test(text.trim())) return null;
     const telnet = /^telnet\s+([^\s:@]+)(?:[\s:]+(\d+))?$/i.exec(text.trim());
     if (telnet) {
       const port = Number(telnet[2] ?? DEFAULT_TELNET_PORT);
       return validPort(port) ? { kind: 'telnet', host: telnet[1], port } : null;
     }
-    // `mosh benutzer@host` meldet sich per SSH an und führt das Terminal danach über Mosh.
+    // `mosh user@host` signs in over SSH and then runs the terminal over Mosh.
     const match = /^(?:(ssh|mosh)\s+)?(?:-p\s+(\d+)\s+)?([^@\s]+)@([^\s:]+)(?::(\d+))?(?:\s+-p\s+(\d+))?$/i.exec(text.trim());
     if (!match) return null;
     const port = Number(match[2] ?? match[5] ?? match[6] ?? 22);
@@ -58,9 +58,9 @@
   }
 
   /**
-   * Erkennt `ftp://`, `ftps://` und `ftpes://`, mit Benutzer, Port und Ordner: `ftps://web1@ftp.example.org:2121/htdocs`.
-   * `ftp` ist unverschlüsselt (davor warnt der Dateimanager), `ftps` verschlüsselt und auf Port 990 von Anfang an.
-   * Ein Passwort in der Adresse wird nicht angenommen: Es stünde lesbar im Suchfeld.
+   * Recognises `ftp://`, `ftps://` and `ftpes://`, with user, port and folder: `ftps://web1@ftp.example.org:2121/htdocs`.
+   * `ftp` is unencrypted (the file manager warns about that), `ftps` encrypted and on port 990 from the start.
+   * A password in the address is not accepted: it would be readable in the search field.
    */
   function directFtp(text: string): { place: FtpPlace; path?: string } | null {
     const match = /^(ftp|ftps|ftpes):\/\/(?:([^@\/\s:]+)@)?([^\s:\/@]+)(?::(\d+))?(\/\S*)?$/i.exec(text.trim());
@@ -72,7 +72,7 @@
     return { place: { kind: 'ftp', host: match[3], port, user: match[2] ?? '', security }, path: match[5] && match[5] !== '/' ? match[5] : undefined };
   }
 
-  /** Wörter, bei denen alle Shells erscheinen, auch wenn keine so heißt. */
+  /** Words for which all shells appear, even if none is called that. */
   const LOCAL_WORDS = ['lokal', 'local', 'terminal', 'shell'];
 
   const entries = $derived.by((): Entry[] => {
@@ -86,11 +86,11 @@
     }
     const files = directFtp(query);
     if (files) found.push({ key: 'direct', label: `${files.place.security === 'none' ? 'ftp' : 'ftps'}://${ftpPlaceName(files.place)}${files.path ?? ''}`, detail: t(files.place.security === 'none' ? 'palette.direct.ftp.open' : 'palette.direct.ftp'), os: null, place: files.place, path: files.path });
-    // Ohne Tresor gibt es nur die Schnellverbindung und das lokale Terminal.
+    // Without a vault there is only quick connect and the local terminal.
     const open = vault.state === 'open';
-    // Snippets nur, wenn es ein Terminal gibt, in dem sie laufen können, und erst ab einem Suchwort.
+    // Snippets only if there is a terminal they can run in, and only from a search word on.
     const snippets = open && needle && activeTab() ? vault.snippets.filter((s) => [s.name, s.package].some((text) => text.toLowerCase().includes(needle))).slice(0, 4) : [];
-    // Shells erst ab einem Suchwort: Ohne stehen dort die Hosts.
+    // Shells only from a search word on: without one, the hosts are listed there.
     const every = needle.length >= 3 && LOCAL_WORDS.some((word) => word.startsWith(needle) || needle.startsWith(word));
     const shells = needle ? local.shells.filter((s) => every || [shellName(s), s.name, s.id, s.kind].some((text) => text.toLowerCase().includes(needle))).slice(0, every ? 6 : 3) : [];
     const room = 9 - snippets.length - shells.length;

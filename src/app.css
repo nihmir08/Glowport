@@ -18,7 +18,7 @@
   --ok: #3ecf8e;
   --warn: #f5b83d;
   --err: #ff5d6c;
-  /* Akzent wird zur Laufzeit aus den Einstellungen gesetzt (siehe theme.ts). */
+  /* Accent is set at runtime from the settings (see theme.ts). */
   --accent: #fe9803;
   --accent-ink: #17120a;
   --accent-soft: color-mix(in srgb, var(--accent) 15%, transparent);
@@ -121,9 +121,9 @@ svg {
   user-select: text;
   cursor: text;
 }
-/* In Eingabefeldern steht, was getippt wurde, Zeichen für Zeichen: Die Festbreitenschrift zöge sonst etwa `://` zu
-   einem Zeichen zusammen, und aus `https://` würde beim Lesen `https: /`. `!important`, weil jede Regel mit der
-   Kurzform `font` die Ligaturen wieder einschaltet. */
+/* Input fields show what was typed, character by character: the monospace font would otherwise merge e.g. `://` into
+   one glyph, and `https://` would read as `https: /`. `!important`, because every rule with the
+   `font` shorthand switches the ligatures back on. */
 input,
 textarea {
   font-variant-ligatures: none !important;
@@ -142,7 +142,7 @@ textarea {
   background: transparent;
 }
 
-/* Durchscheinendes Fenster (Mica, Acryl): Der Grund wird halb durchsichtig, damit der Effekt von Windows zu sehen ist. */
+/* Translucent window (Mica, Acrylic): the base becomes half-transparent so the Windows effect can be seen. */
 :root[data-effect] body {
   background: transparent;
 }
@@ -751,7 +751,7 @@ kbd {
   white-space: nowrap;
 }
 
-/* Hosts und Gruppen: Karten oder Zeilen */
+/* Hosts and groups: cards or rows */
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(232px, 1fr));
@@ -810,7 +810,7 @@ kbd {
   height: 48px;
   font-size: 14px;
 }
-/* Logo eines Betriebssystems in seiner Kachel; `bare` ist das Logo allein, ohne Kachel. */
+/* An operating system's logo in its tile; `bare` is the logo alone, without a tile. */
 .os.logo svg {
   width: 56%;
   height: 56%;
@@ -1046,7 +1046,7 @@ kbd {
   color: var(--text);
 }
 
-/* Tresor anlegen und entsperren */
+/* Create and unlock the vault */
 .lock {
   grid-column: 1 / -1;
   grid-row: 2;
@@ -1186,7 +1186,7 @@ kbd {
   font-size: 11.5px;
 }
 
-/* Start-Tab und Sitzungen teilen sich den Platz unter der Titelleiste; sichtbar ist immer nur eines. */
+/* Start tab and sessions share the space below the title bar; only one of them is ever visible. */
 .off {
   display: none !important;
 }
@@ -1426,7 +1426,7 @@ div.tab {
 }
 
 /* ===== Geteilte Terminals ===== */
-/* Die Bereiche aller Tabs liegen in einer Fläche; jeder kennt seinen Platz in Prozent. */
+/* The panes of all tabs lie in one area; each knows its place in percent. */
 .panes {
   flex: 1;
   min-height: 0;
@@ -1527,7 +1527,7 @@ div.tab {
   box-shadow: 0 0 8px var(--err);
   animation: pulse 1.4s ease-in-out infinite;
 }
-/* Die Klassen heißen bewusst nicht `row` und `col`: `.row` gehört den Listenzeilen und brächte deren Innenabstand mit. */
+/* The classes are deliberately not called `row` and `col`: `.row` belongs to the list rows and would bring their padding along. */
 .divider {
   position: absolute;
   z-index: 3;
@@ -1633,7 +1633,7 @@ div.tab {
   font-size: 11.5px;
 }
 
-/* Menü eines Tabs */
+/* A tab's menu */
 .menu-ov {
   position: fixed;
   inset: 0;
@@ -1684,7 +1684,7 @@ div.tab {
   font-size: 12.5px;
 }
 
-/* Abbild einer Anordnung */
+/* Image of a layout */
 .lprev {
   position: relative;
   width: 100%;
@@ -1739,7 +1739,7 @@ div.tab {
   border-color: var(--accent-line);
   background: var(--accent-soft);
 }
-/* Ziel beim Verschieben eines Hosts per Ziehen */
+/* Target when moving a host by dragging */
 .group.drop,
 .crumbs button.drop {
   border-color: var(--accent);
@@ -1765,7 +1765,7 @@ div.tab {
   border-radius: 6px;
 }
 
-/* Rückfrage nach einem Abbruch */
+/* Prompt after a crash */
 .rlist {
   display: flex;
   flex-direction: column;
@@ -2009,7 +2009,7 @@ div.tab {
   max-width: 46ch;
 }
 
-/* Schlüssel und Identitäten */
+/* Keys and identities */
 .fld textarea {
   min-height: 112px;
   padding: 9px 11px;
@@ -2201,7 +2201,7 @@ div.tab {
   margin-top: 20px;
 }
 
-/* Anlegen an Ort und Stelle: Die Editoren für Schlüssel und Identität erscheinen hier als Dialog statt als Seitenleiste. */
+/* Creating in place: the editors for key and identity appear here as a dialog instead of a sidebar. */
 .ov.quick {
   z-index: 55;
 }
@@ -2216,7 +2216,7 @@ div.tab {
     0 0 60px -24px var(--accent);
   animation: pop 0.22s var(--ease);
 }
-/* Dateien aus dem Explorer schweben über dem Fenster. */
+/* Files from Explorer hover over the window. */
 .dropzone {
   position: fixed;
   inset: 0;
@@ -2344,7 +2344,7 @@ div.tab {
   --code-function: #6f3fc4;
 }
 
-/* Dateiliste: in den Spalten der Seite „Dateien“ mit Kopfzeile, in der Dateileiste am Terminal schmal */
+/* File list: in the columns of the Files page with a header row, in the file bar at the terminal narrow */
 .flist {
   flex: 1;
   min-height: 0;
@@ -2504,7 +2504,7 @@ div.tab {
   max-width: 44ch;
 }
 
-/* Werkzeuge, Pfad und Fußzeile über und unter einer Liste */
+/* Tools, path and footer above and below a list */
 .ftools {
   display: flex;
   align-items: center;
@@ -2598,7 +2598,7 @@ div.tab {
   font-variant-numeric: tabular-nums;
 }
 
-/* Dateileiste neben dem Terminal */
+/* File bar next to the terminal */
 .fbar {
   flex: none;
   position: relative;
@@ -2636,7 +2636,7 @@ div.tab {
   background: var(--accent-line);
 }
 
-/* Seite „Dateien“: zwei Spalten, dazwischen die Pfeile, darunter die Transfers */
+/* Files page: two columns, the arrows between them, the transfers below */
 .fpage {
   flex: 1;
   min-width: 0;
@@ -2875,7 +2875,7 @@ div.tab {
   background: var(--accent);
 }
 
-/* Editor und Vorschau */
+/* Editor and preview */
 .fview {
   width: min(1080px, 94vw);
   height: min(780px, 88vh);
@@ -3022,7 +3022,7 @@ div.tab {
   color: var(--warn);
 }
 
-/* Rechte und Besitzer */
+/* Permissions and owner */
 .perm-what {
   font: 600 13px var(--font-mono);
   color: var(--text);
@@ -3089,7 +3089,7 @@ div.tab {
   letter-spacing: 0.06em;
 }
 
-/* Suche am Server und Ordner-Abgleich */
+/* Server search and folder sync */
 .dlg:has(.fsearch-r),
 .dlg:has(.cmp-l) {
   width: min(900px, 94vw);
@@ -3281,7 +3281,7 @@ div.tab {
     0 0 40px -16px var(--accent);
 }
 
-/* ===== Seitenleiste rechts am Terminal: Server-Info und Snippets ===== */
+/* ===== Sidebar right of the terminal: server info and snippets ===== */
 .side {
   flex: none;
   position: relative;
@@ -3342,7 +3342,7 @@ div.tab {
   background: var(--accent-line);
 }
 
-/* Auslastung: Balken und Kurven */
+/* Load: bars and curves */
 .meter-l {
   display: flex;
   align-items: baseline;
@@ -3559,7 +3559,7 @@ div.tab {
   white-space: nowrap;
 }
 
-/* Vorschläge beim Tippen im Terminal */
+/* Suggestions while typing in the terminal */
 .hints {
   position: absolute;
   z-index: 6;
@@ -3748,7 +3748,7 @@ div.tab {
   padding: 8px 10px;
 }
 
-/* ===== Snippets: Editor und Ausführen auf Hosts ===== */
+/* ===== Snippets: editor and running on hosts ===== */
 .fld textarea.codearea {
   min-height: 128px;
   font-size: 12px;
@@ -3855,7 +3855,7 @@ button.chip.pickchip:hover {
   width: min(680px, 94vw);
 }
 
-/* ===== Import aus anderen Programmen ===== */
+/* ===== Import from other programs ===== */
 .dlg.imp {
   width: min(940px, 94vw);
   display: flex;
@@ -3922,11 +3922,11 @@ button.chip.pickchip:hover {
   min-height: 0;
   overflow: auto;
   color: var(--text-2);
-  /* Platz für den Leuchtrand der Felder, den das Scrollen sonst abschneidet. */
+  /* Room for the fields' glow, which scrolling would otherwise cut off. */
   padding: 3px;
   margin: -3px;
 }
-/* Nichts im Dialog schrumpft: Passt es nicht, rollt der Inhalt. */
+/* Nothing in the dialog shrinks: if it does not fit, the content scrolls. */
 .imp-body > * {
   flex: none;
 }
@@ -4182,7 +4182,7 @@ button.chip.pickchip:hover {
   max-width: 600px;
 }
 
-/* Export und Updates */
+/* Export and updates */
 .exp-what {
   display: flex;
   flex-direction: column;
@@ -4260,7 +4260,7 @@ button.chip.pickchip:hover {
   color: color-mix(in srgb, var(--warn) 58%, #000);
 }
 
-/* Menü am Plus der Tab-Leiste: Host verbinden oder lokales Terminal */
+/* Menu at the tab bar's plus: connect a host or local terminal */
 .tab-add.on {
   background: var(--card-h);
   color: var(--text);
@@ -4289,20 +4289,20 @@ button.chip.pickchip:hover {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* Zwei Felder nebeneinander, etwa Baudrate und Datenbits */
+/* Two fields side by side, e.g. baud rate and data bits */
 .fld-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
 
-/* Auswahl des Protokolls im Host-Editor: so breit wie ihre Einträge, nicht wie das Feld */
+/* Protocol choice in the host editor: as wide as its entries, not as the field */
 .fld > .seg {
   width: fit-content;
 }
 
-/* ===== Sync und geteilte Tresore ===== */
-/* Farbpunkt eines Tresors: am Umschalter, an der Marke eines Eintrags, im Detail. */
+/* ===== Sync and shared vaults ===== */
+/* A vault's color dot: at the switcher, at an entry's badge, in the details. */
 .vdot {
   width: 7px;
   height: 7px;
@@ -4353,7 +4353,7 @@ button.chip.pickchip:hover {
   gap: 4px;
 }
 
-/* Die Maschine in Proxmox, zu der ein Host gehört: ihr Zustand und die Knöpfe zum Schalten. */
+/* The machine in Proxmox a host belongs to: its state and the buttons to switch it. */
 .d-pve {
   margin-top: 12px;
   padding: 8px 10px;
@@ -4388,7 +4388,7 @@ button.chip.pickchip:hover {
   margin-top: 8px;
 }
 
-/* Stand des Abgleichs: grün abgeglichen, Akzent in Arbeit, gelb ohne Verbindung, rot abgemeldet oder gescheitert. */
+/* Sync state: green synced, accent in progress, yellow without connection, red signed out or failed. */
 .sdot {
   width: 8px;
   height: 8px;
@@ -4440,7 +4440,7 @@ button.chip.pickchip:hover {
   color: var(--ok);
 }
 
-/* Sicherheitscode: sechs Wörter, die zwei Leute über einen anderen Weg vergleichen. */
+/* Safety code: six words two people compare over another channel. */
 .codewords {
   font: 600 13px var(--font-mono);
   padding: 10px 12px;
@@ -4546,7 +4546,7 @@ button.chip.pickchip:hover {
   width: min(480px, 100%);
 }
 
-/* Überschrift eines Abschnitts mit einem Knopf am rechten Rand. */
+/* A section's heading with a button at the right edge. */
 .sec.sec-a {
   display: flex;
   align-items: center;
@@ -4577,7 +4577,7 @@ button.chip.pickchip:hover {
   font-weight: 500;
 }
 
-/* Tresor im Detail: Mitglieder mit Rolle. */
+/* Vault in detail: members with role. */
 .vault-detail {
   width: 372px;
 }
@@ -4645,7 +4645,7 @@ button.chip.pickchip:hover {
   margin-top: 6px;
 }
 
-/* ── Verwaltung in der Seitenleiste: Docker, Dienste, Prozesse ─────────────────────────────────────── */
+/* ── Management in the sidebar: Docker, services, processes ─────────────────────────────────────── */
 .stab {
   display: inline-flex;
   align-items: center;
@@ -4940,7 +4940,7 @@ button.chip.pickchip:hover {
 }
 .pve-row .os,
 .pve-prow .os {
-  /* Die Kachel bringt einen Platz für die Host-Karte mit; hier steht sie einfach in ihrer Spalte. */
+  /* The tile brings a slot for the host card along; here it simply stands in its column. */
   grid-area: auto;
 }
 .pve-row.muted .pve-name b {

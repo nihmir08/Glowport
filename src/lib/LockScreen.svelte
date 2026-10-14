@@ -16,9 +16,9 @@
   let busy = $state(false);
   let error = $state('');
   let dataDir = $state('');
-  /** Statt einen Tresor anzulegen: mit einem bestehenden Konto anmelden; der Tresor entsteht daraus. */
+  /** Instead of creating a vault: sign in with an existing account; the vault is created from it. */
   let joining = $state(false);
-  /** Abmelden und den Tresor hier löschen, ohne ihn öffnen zu können. */
+  /** Sign out and delete the vault here without being able to open it. */
   let wiping = $state(false);
 
   onMount(() => void appInfo().then((info) => (dataDir = info?.dataDir ?? '')));
@@ -38,14 +38,14 @@
     } catch (e) {
       error = errorText(e);
     } finally {
-      // Das Passwort bleibt keinen Augenblick länger in der Oberfläche als nötig.
+      // The password does not stay in the interface a moment longer than necessary.
       password = '';
       repeat = '';
       busy = false;
     }
   }
 
-  /** Wer von einem anderen PC kommt, bringt seinen Tresor als Sicherung mit, statt einen neuen anzulegen. */
+  /** Whoever comes from another PC brings their vault along as a backup instead of creating a new one. */
   async function restore() {
     error = '';
     try {

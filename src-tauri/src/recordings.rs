@@ -1,12 +1,12 @@
-//! Mitschnitte: die Ausgabe einer Sitzung als lesbare Textdatei im Ordner `logs` des Datenordners.
+//! Recordings: a session's output as a readable text file in the data folder's `logs` folder.
 //!
-//! Geschrieben wird, was ein Mensch am Bildschirm lesen würde: ohne Farben und Steuerzeichen, Zeile für Zeile.
-//! Programme, die den ganzen Bildschirm übernehmen (Editoren, `htop`), werden übersprungen. Was sie zeichnen,
-//! ergäbe als Text keinen Sinn. Die Dateien sind nicht verschlüsselt.
+//! What a human would read on screen is written: without colors and control characters, line by line.
+//! Programs that take over the whole screen (editors, `htop`) are skipped. What they draw
+//! would make no sense as text. The files are not encrypted.
 //!
-//! Jede Datei beginnt mit Kopfzeilen (Host, Adresse, Beginn, nach dem Umbenennen auch ein Titel) und einer Leerzeile.
-//! Daraus und aus Größe und Änderungszeit entsteht die Liste; eine eigene Verzeichnisdatei gibt es nicht. Wer Dateien
-//! von Hand löscht, bringt deshalb nichts durcheinander.
+//! Every file starts with header lines (host, address, start, after renaming also a title) and an empty line.
+//! The list is built from them plus size and modification time; there is no index file of its own. Whoever deletes files
+//! by hand therefore mixes nothing up.
 
 use std::{
     fs::{self, File},
@@ -23,9 +23,9 @@ const EXTENSION: &str = "log";
 const HEADER: &str = "# Glowport-Mitschnitt";
 const TITLE: &str = "# Titel: ";
 const TEMP: &str = "umbenennen.neu";
-/// Mehr Text zeigt die Oberfläche nicht auf einmal; bei größeren Dateien das Ende.
+/// The interface shows no more text than this at once; for larger files the end.
 const MAX_READ: u64 = 4 * 1024 * 1024;
-/// Eine einzelne Zeile ohne Ende (etwa ein Binärstrom) wird spätestens hier umbrochen.
+/// A single line without an end (e.g. a binary stream) is wrapped here at the latest.
 const MAX_LINE: usize = 16 * 1024;
 
 pub fn folder(data_dir: &Path) -> PathBuf {
@@ -35,46 +35,46 @@ pub fn folder(data_dir: &Path) -> PathBuf {
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Recording {
-    /// Dateiname; zugleich die Kennung.
+    /// File name; at the same time the ID.
     pub id: String,
-    /// Name des Hosts oder die eingetippte Adresse.
+    /// Name of the host or the typed address.
     pub name: String,
-    /// Eigener Name, den der Nutzer dem Mitschnitt nachträglich gegeben hat.
+    /// Name of its own the user gave the recording afterwards.
     pub title: Option<String>,
     pub address: String,
     /// Millisekunden seit 1970.
     pub started_at: i64,
-    /// Fehlt, solange der Mitschnitt läuft.
+    /// Missing while the recording runs.
     pub ended_at: Option<i64>,
     pub bytes: u64,
     pub file: String,
 }
 
-/// Wo der Leser der Ausgabe gerade steht.
+/// Where the output reader currently stands.
 #[derive(Clone, Copy, PartialEq)]
 enum State {
     Text,
-    /// Nach ESC.
+    /// After ESC.
     Escape,
-    /// In einer Folge `ESC [ … Buchstabe`.
+    /// In a sequence `ESC [ … letter`.
     Csi,
-    /// In einer Folge `ESC ] … BEL` oder `… ESC \` (Fenstertitel und Ähnliches), ebenso bei `ESC P`, `ESC _`, `ESC ^`.
+    /// In a sequence `ESC ] … BEL` or `… ESC \` (window title and similar), likewise for `ESC P`, `ESC _`, `ESC ^`.
     String,
-    /// Nach ESC innerhalb einer solchen Folge.
+    /// After ESC inside such a sequence.
     StringEscape,
-    /// Nach `ESC (` und Verwandten folgt genau ein Zeichen.
+    /// After `ESC (` and relatives exactly one character follows.
     Skip,
 }
 
-/// Macht aus dem Strom des Terminals lesbare Zeilen.
+/// Turns the terminal's stream into readable lines.
 struct Plain {
     state: State,
-    /// Die bisher gelesenen Parameter einer `ESC [`-Folge.
+    /// The parameters of an `ESC [` sequence read so far.
     params: Vec<u8>,
     line: Vec<u8>,
-    /// Nach einem Wagenrücklauf ohne Zeilenende beginnt die Zeile von vorn (Fortschrittsbalken, neu gezeichnete Eingabe).
+    /// After a carriage return without line end the line starts over (progress bars, redrawn input).
     restart: bool,
-    /// Ein Programm hat den ganzen Bildschirm übernommen.
+    /// A program has taken over the whole screen.
     full_screen: bool,
 }
 
@@ -83,7 +83,7 @@ impl Plain {
         Self { state: State::Text, params: Vec::new(), line: Vec::new(), restart: false, full_screen: false }
     }
 
-    /// Liest ein Stück Ausgabe und übergibt jede fertige Zeile (ohne Zeilenende) an `emit`.
+    /// Reads a piece of output and hands every finished line (without line end) to `emit`.
     fn feed(&mut self, bytes: &[u8], mut emit: impl FnMut(&[u8])) {
         for &byte in bytes {
             match self.state {
@@ -98,7 +98,7 @@ impl Plain {
                     }
                     b'\r' => self.restart = true,
                     0x08 => {
-                        // Rückschritt: das letzte Zeichen samt seiner Folgebytes entfernen.
+                        // Backspace: remove the last character with its continuation bytes.
                         while let Some(last) = self.line.pop() {
                             if last & 0xC0 != 0x80 {
                                 break;
@@ -148,7 +148,7 @@ impl Plain {
             self.restart = false;
         }
         self.line.push(byte);
-        // Nur an einer Zeichengrenze umbrechen, damit kein Zeichen aus mehreren Bytes zerrissen wird.
+        // Only wrap at a character boundary, so no multi-byte character is torn apart.
         if self.line.len() >= MAX_LINE && byte & 0x80 == 0 {
             if !self.full_screen {
                 emit(&self.line);
@@ -157,7 +157,7 @@ impl Plain {
         }
     }
 
-    /// Wertet das Ende einer `ESC [`-Folge aus. Von Belang ist nur das Umschalten auf den zweiten Bildschirm.
+    /// Evaluates the end of an `ESC [` sequence. Only switching to the alternate screen matters.
     fn csi(&mut self, last: u8) {
         if (last == b'h' || last == b'l') && self.params.first() == Some(&b'?') {
             let alternate = self.params[1..].split(|b| *b == b';').any(|mode| matches!(mode, b"47" | b"1047" | b"1049"));
@@ -169,13 +169,13 @@ impl Plain {
         }
     }
 
-    /// Der Rest einer Zeile ohne Zeilenende, etwa die Eingabeaufforderung am Schluss.
+    /// The rest of a line without line end, e.g. the prompt at the end.
     fn rest(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.line)
     }
 }
 
-/// Schreibt die Ausgabe einer Sitzung in ihre Datei.
+/// Writes a session's output into its file.
 pub struct Recorder {
     id: String,
     file: BufWriter<File>,
@@ -183,7 +183,7 @@ pub struct Recorder {
     failed: bool,
 }
 
-/// Für Dateinamen: nur Zeichen, die jedes Dateisystem annimmt.
+/// For file names: only characters every file system accepts.
 fn file_part(name: &str) -> String {
     let cleaned: String = name.chars().map(|c| if c.is_alphanumeric() || matches!(c, '-' | '_' | '.') { c } else { '_' }).take(60).collect();
     let cleaned = cleaned.trim_matches(|c| c == '.' || c == '_').to_string();
@@ -194,19 +194,19 @@ fn file_part(name: &str) -> String {
     }
 }
 
-/// Eine Kopfzeile darf keine Zeilenenden tragen.
+/// A header line must not carry line ends.
 fn one_line(text: &str) -> String {
     text.chars().filter(|c| !c.is_control()).take(200).collect()
 }
 
 impl Recorder {
-    /// Legt die Datei an und schreibt den Kopf. `name` und `address` stehen später in der Liste.
+    /// Creates the file and writes the header. `name` and `address` later appear in the list.
     pub fn start(data_dir: &Path, name: &str, address: &str) -> io::Result<Self> {
         let dir = folder(data_dir);
         fs::create_dir_all(&dir)?;
         let now = Local::now();
         let base = format!("{}_{}", now.format("%Y-%m-%d_%H-%M-%S"), file_part(name));
-        // Zwei Mitschnitte desselben Hosts in derselben Sekunde bekommen eine Zählnummer.
+        // Two recordings of the same host in the same second get a counter.
         let (id, file) = (0..100)
             .find_map(|n| {
                 let id = if n == 0 { format!("{base}.{EXTENSION}") } else { format!("{base}_{n}.{EXTENSION}") };
@@ -227,7 +227,7 @@ impl Recorder {
         &self.id
     }
 
-    /// Nimmt ein Stück Ausgabe (UTF-8) auf. Ein Schreibfehler beendet den Mitschnitt still; die Sitzung läuft weiter.
+    /// Takes a piece of output (UTF-8). A write error ends the recording quietly; the session keeps running.
     pub fn feed(&mut self, bytes: &[u8]) {
         if self.failed {
             return;
@@ -237,7 +237,7 @@ impl Recorder {
         self.plain.feed(bytes, |line| {
             ok &= file.write_all(String::from_utf8_lossy(line).trim_end().as_bytes()).is_ok() && file.write_all(b"\n").is_ok();
         });
-        // Fertige Zeilen sollen gleich in der Datei stehen: Wer mitliest oder nach einem Absturz nachsieht, findet sie.
+        // Finished lines should be in the file right away: whoever reads along or checks after a crash finds them.
         self.failed = !ok || self.file.flush().is_err();
     }
 }
@@ -252,7 +252,7 @@ impl Drop for Recorder {
     }
 }
 
-/// Prüft eine Kennung aus der Oberfläche: ein schlichter Dateiname im Ordner der Mitschnitte, nichts sonst.
+/// Checks an ID from the interface: a plain file name in the recordings folder, nothing else.
 fn path_of(data_dir: &Path, id: &str) -> Option<PathBuf> {
     let plain = !id.is_empty() && id.len() <= 200 && !id.starts_with('.') && id.chars().all(|c| c.is_alphanumeric() || matches!(c, '-' | '_' | '.'));
     (plain && id.ends_with(&format!(".{EXTENSION}"))).then(|| folder(data_dir).join(id))
@@ -262,7 +262,7 @@ fn millis(time: io::Result<std::time::SystemTime>) -> Option<i64> {
     time.ok()?.duration_since(UNIX_EPOCH).ok().map(|d| d.as_millis() as i64)
 }
 
-/// Liest den Kopf einer Datei. `None`, wenn sie kein Mitschnitt von Glowport ist.
+/// Reads a file's header. `None` if it is not a Glowport recording.
 fn describe(path: &Path, running: &[String]) -> Option<Recording> {
     let id = path.file_name()?.to_str()?.to_string();
     let meta = fs::metadata(path).ok()?;
@@ -270,14 +270,14 @@ fn describe(path: &Path, running: &[String]) -> Option<Recording> {
     if lines.next()?.ok()? != HEADER {
         return None;
     }
-    // Der Kopf reicht bis zur ersten Leerzeile; die Reihenfolge seiner Zeilen spielt keine Rolle.
+    // The header reaches up to the first empty line; the order of its lines does not matter.
     let head: Vec<String> = lines.take(8).map_while(Result::ok).take_while(|line| !line.is_empty()).collect();
     let field = |label: &str| head.iter().find_map(|line| line.strip_prefix(label)).map(str::to_string);
     let name = field("# Host: ")?;
     let address = field("# Adresse: ")?;
     let begin = field("# Beginn: ")?;
     let title = field(TITLE).filter(|title| !title.trim().is_empty());
-    // Die Zahl in Klammern ist der Beginn in Millisekunden; fehlt sie, gilt das lesbare Datum davor.
+    // The number in brackets is the start in milliseconds; if it is missing, the readable date before it applies.
     let started_at = begin
         .rsplit_once('(')
         .and_then(|(_, tail)| tail.trim_end_matches(')').parse::<i64>().ok())
@@ -286,7 +286,7 @@ fn describe(path: &Path, running: &[String]) -> Option<Recording> {
     Some(Recording { id, name, title, address, started_at, ended_at, bytes: meta.len(), file: path.display().to_string() })
 }
 
-/// Alle Mitschnitte, der jüngste zuerst. `running` nennt die Dateien, in die gerade geschrieben wird.
+/// All recordings, the newest first. `running` names the files currently being written.
 pub fn list(data_dir: &Path, running: &[String]) -> Vec<Recording> {
     let Ok(entries) = fs::read_dir(folder(data_dir)) else { return Vec::new() };
     let mut found: Vec<Recording> = entries
@@ -299,7 +299,7 @@ pub fn list(data_dir: &Path, running: &[String]) -> Vec<Recording> {
     found
 }
 
-/// Der Text eines Mitschnitts ohne den Kopf. Von sehr großen Dateien das Ende.
+/// A recording's text without the header. For very large files the end.
 pub fn read(data_dir: &Path, id: &str) -> io::Result<String> {
     let path = path_of(data_dir, id).ok_or(io::ErrorKind::NotFound)?;
     let mut file = File::open(path)?;
@@ -308,22 +308,22 @@ pub fn read(data_dir: &Path, id: &str) -> io::Result<String> {
     if size > MAX_READ {
         io::Seek::seek(&mut file, io::SeekFrom::Start(size - MAX_READ))?;
         file.read_to_end(&mut bytes)?;
-        // Ab der ersten vollständigen Zeile.
+        // From the first complete line on.
         let start = bytes.iter().position(|b| *b == b'\n').map_or(0, |i| i + 1);
         return Ok(String::from_utf8_lossy(&bytes[start..]).into_owned());
     }
     file.read_to_end(&mut bytes)?;
     let text = String::from_utf8_lossy(&bytes);
-    // Kopf: alle Zeilen bis einschließlich der ersten Leerzeile.
+    // Header: all lines up to and including the first empty line.
     Ok(match text.strip_prefix(HEADER).and_then(|rest| rest.split_once("\n\n")) {
         Some((_, body)) => body.to_string(),
         None => text.into_owned(),
     })
 }
 
-/// Gibt einem fertigen Mitschnitt einen eigenen Namen; ein leerer nimmt ihn wieder weg. Der Name steht danach im
-/// Kopf der Datei, und die Datei heißt auch so, damit man sie im Dateimanager wiederfindet. Liefert die neue Kennung.
-/// Der Inhalt und der Zeitpunkt des Endes (die Änderungszeit der Datei) bleiben, wie sie sind.
+/// Gives a finished recording a name of its own; an empty one takes it away again. The name is then in the
+/// file's header, and the file is called that too, so it can be found in the file manager. Returns the new ID.
+/// The content and the time of the end (the file's modification time) stay as they are.
 pub fn rename(data_dir: &Path, id: &str, title: &str) -> io::Result<String> {
     let path = path_of(data_dir, id).ok_or(io::ErrorKind::NotFound)?;
     let modified = fs::metadata(&path)?.modified()?;
@@ -338,7 +338,7 @@ pub fn rename(data_dir: &Path, id: &str, title: &str) -> io::Result<String> {
     if !title.is_empty() {
         lines.insert(1, format!("{TITLE}{title}"));
     }
-    // Der Zeitstempel am Anfang des Dateinamens bleibt; dahinter steht der neue Name, sonst wieder der Host.
+    // The timestamp at the start of the file name stays; after it comes the new name, otherwise the host again.
     let stamp = id.get(..19).filter(|stamp| stamp.len() == 19 && stamp.chars().all(|c| c.is_ascii_digit() || c == '-' || c == '_')).unwrap_or("mitschnitt");
     let base = format!("{stamp}_{}", file_part(if title.is_empty() { &host } else { &title }));
     let dir = folder(data_dir);
@@ -364,7 +364,7 @@ pub fn delete(data_dir: &Path, id: &str) -> io::Result<()> {
     fs::remove_file(path_of(data_dir, id).ok_or(io::ErrorKind::NotFound)?)
 }
 
-/// Pfad einer Datei zum Zeigen im Dateimanager; ohne Kennung der Ordner (er wird dafür angelegt).
+/// Path of a file to show in the file manager; without an ID the folder (created for that purpose).
 pub fn reveal_target(data_dir: &Path, id: Option<&str>) -> io::Result<PathBuf> {
     match id {
         Some(id) => path_of(data_dir, id).filter(|path| path.exists()).ok_or_else(|| io::ErrorKind::NotFound.into()),
@@ -404,7 +404,7 @@ mod tests {
     #[test]
     fn a_sequence_split_across_packets_stays_invisible() {
         assert_eq!(plain(&[b"vor\x1b[1;3", b"2mnach\x1b", b"[0m\n"]), ["vornach"]);
-        // Ein Zeichen aus mehreren Bytes, auf zwei Pakete verteilt.
+        // A multi-byte character, spread over two packets.
         let text = "Größe\n".as_bytes();
         assert_eq!(plain(&[&text[..3], &text[3..]]), ["Größe"]);
     }
@@ -443,14 +443,14 @@ mod tests {
         assert!(done[0].ended_at.is_some_and(|end| end >= done[0].started_at));
         assert_eq!(read(&dir, &id).unwrap(), "deploy@web-01:~$ uptime\n 17:42 up 13 days\ndeploy@web-01:~$\n");
 
-        // Fremde Dateien im Ordner und Pfade nach draußen zählen nicht.
+        // Foreign files in the folder and paths outside do not count.
         fs::write(folder(&dir).join("notiz.log"), "kein Mitschnitt").unwrap();
         assert_eq!(list(&dir, &[]).len(), 1);
         assert!(read(&dir, "../vault.db").is_err() && read(&dir, "..\\vault.db").is_err() && delete(&dir, "C:\\Windows\\win.ini").is_err());
         assert_eq!(reveal_target(&dir, Some(&id)).unwrap(), folder(&dir).join(&id));
         assert_eq!(reveal_target(&dir, None).unwrap(), folder(&dir));
 
-        // Umbenennen: Der Name steht in der Liste und im Dateinamen, Inhalt und Zeiten bleiben.
+        // Renaming: the name is in the list and in the file name, content and times stay.
         let before = list(&dir, &[]).remove(0);
         let renamed = rename(&dir, &id, "  Deploy vor dem Release: Größe prüfen  ").unwrap();
         assert!(renamed.starts_with(&id[..19]) && renamed.ends_with("_Deploy_vor_dem_Release__Größe_prüfen.log"), "{renamed}");
@@ -459,7 +459,7 @@ mod tests {
         assert_eq!((after.id.as_str(), after.title.as_deref(), after.name.as_str()), (renamed.as_str(), Some("Deploy vor dem Release: Größe prüfen"), "web/01: prod"));
         assert_eq!((after.started_at, after.ended_at), (before.started_at, before.ended_at), "Beginn und Ende bleiben");
         assert_eq!(read(&dir, &renamed).unwrap(), "deploy@web-01:~$ uptime\n 17:42 up 13 days\ndeploy@web-01:~$\n");
-        // Ein zweites Mal mit demselben Namen ändert nichts; ein leerer Name gibt der Datei wieder den des Hosts.
+        // A second time with the same name changes nothing; an empty name gives the file the host's name again.
         assert_eq!(rename(&dir, &renamed, "Deploy vor dem Release: Größe prüfen").unwrap(), renamed);
         let plain = rename(&dir, &renamed, " ").unwrap();
         assert_eq!((plain.as_str(), list(&dir, &[])[0].title.as_deref()), (id.as_str(), None));

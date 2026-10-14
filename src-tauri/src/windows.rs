@@ -1,5 +1,5 @@
-//! Fenster: das Hauptfenster, eigene Fenster für herausgezogene Tabs, und was sich das Programm über offene Tabs
-//! merkt, um sie nach einem Abbruch wieder anzubieten. Dazu die Dateidialoge für Farbschemata und Hintergrundbild.
+//! Windows: the main window, windows of their own for tabs pulled out, and what the program remembers about open tabs
+//! to offer them again after a crash. Plus the file dialogs for color schemes and background image.
 
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
@@ -32,10 +32,10 @@ pub const MAIN: &str = "main";
 const TAB_PREFIX: &str = "tab-";
 const RESTORE_FILE: &str = "open-tabs.json";
 const RESTORE_TEMP: &str = "open-tabs.json.neu";
-/// Hintergrund des Fensters, bis die Oberfläche geladen ist: dieselbe Farbe wie ihr dunkler Grund.
+/// Background of the window until the interface has loaded: the same color as its dark base.
 const BACKDROP: Color = Color(7, 7, 12, 255);
-/// So lange darf die Oberfläche brauchen, bis sie sich fertig meldet. Danach zeigt sich das Fenster von selbst:
-/// Ein Programm, dessen Oberfläche nicht lädt, soll nicht unsichtbar bleiben.
+/// This long the interface may take until it reports ready. After that the window shows itself:
+/// a program whose interface does not load should not stay invisible.
 const REVEAL_AFTER: Duration = Duration::from_secs(3);
 const MAX_TEXT_FILE: u64 = 2 * 1024 * 1024;
 const MAX_IMAGE: u64 = 24 * 1024 * 1024;
@@ -44,15 +44,15 @@ const IMAGE_TYPES: [(&str, &str); 6] = [("png", "image/png"), ("jpg", "image/jpe
 #[derive(Default)]
 pub struct Desk {
     next: AtomicU64,
-    /// Tabs, die einem neuen Fenster mitgegeben wurden und auf dessen Abholung warten.
+    /// Tabs that were given to a new window and are waiting for it to pick them up.
     payloads: Mutex<HashMap<String, Value>>,
-    /// Offene Tabs je Fenster, so wie sie die Oberfläche zuletzt gemeldet hat.
+    /// Open tabs per window, as the interface last reported them.
     open: Mutex<BTreeMap<String, Vec<Value>>>,
-    /// Die Tabs vom letzten Mal wurden in diesem Lauf schon angeboten.
+    /// The tabs from last time were already offered in this run.
     offered: AtomicBool,
-    /// Durchscheinendes Fenster, mit dem dieser Lauf gestartet ist: „mica“, „acrylic“ oder leer.
+    /// Translucent window this run was started with: “mica”, “acrylic” or empty.
     effect: Mutex<String>,
-    /// Fenster, die schon zu sehen sind. Die übrigen warten darauf, dass ihre Oberfläche steht.
+    /// Windows that can already be seen. The others wait for their interface to be ready.
     revealed: Mutex<HashSet<String>>,
 }
 
@@ -74,8 +74,8 @@ impl Desk {
     }
 }
 
-/// Der Fenster-Effekt aus den Einstellungen. Er gilt ab dem nächsten Start, weil ein Fenster nur beim Anlegen
-/// durchscheinend werden kann.
+/// The window effect from the settings. It applies from the next start, because a window can only become
+/// translucent when it is created.
 fn wanted_effect(dir: &Path) -> Option<Effect> {
     let settings = crate::settings::load(dir).ok().flatten()?;
     match settings.get("windowEffect")?.as_str()? {
@@ -86,42 +86,42 @@ fn wanted_effect(dir: &Path) -> Option<Effect> {
 }
 
 fn window_builder<'a>(app: &'a AppHandle, label: &str, effect: Option<Effect>) -> WebviewWindowBuilder<'a, tauri::Wry, AppHandle> {
-    // Jedes Fenster entsteht unsichtbar und zeigt sich erst, wenn seine Oberfläche steht (siehe `build` und `reveal`).
+    // Every window is created invisible and only shows itself when its interface is ready (see `build` and `reveal`).
     let mut builder = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into())).title(crate::app_name(app)).decorations(false).shadow(true).visible(false);
-    // Die portable Fassung hinterlässt nichts außerhalb ihres Ordners: Auch der Webview legt seine Daten dort ab.
+    // The portable version leaves nothing outside its folder: the webview stores its data there too.
     if let (true, Ok(dir)) = (crate::portable(), crate::data_dir(app)) {
         builder = builder.data_directory(dir.join("webview"));
     }
     match effect {
-        // Durchscheinend geht nur ohne eigene Hintergrundfarbe; die Oberfläche malt dann selbst halb durchsichtig.
+        // Translucency only works without a background color of its own; the interface then paints half-transparent itself.
         Some(effect) => builder.transparent(true).effects(EffectsBuilder::new().effect(effect).build()),
         None => builder.background_color(BACKDROP),
     }
 }
 
-/// Verhüllt ein Fenster oder enthüllt es. Verhüllt gilt es für Windows als sichtbar, wird gezeichnet und
-/// zusammengesetzt, aber nicht angezeigt. Liefert, ob das System mitgemacht hat.
+/// Cloaks or uncloaks a window. Cloaked, it counts as visible for Windows, is drawn and
+/// composited, but not displayed. Returns whether the system went along.
 #[cfg(windows)]
 fn cloak(window: &WebviewWindow, hidden: bool) -> bool {
     use windows_sys::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_CLOAK};
     let Ok(hwnd) = window.hwnd() else { return false };
     let value = i32::from(hidden);
-    // SAFETY: Der Griff gehört einem Fenster dieses Prozesses; übergeben wird ein BOOL samt seiner Größe.
+    // SAFETY: The handle belongs to a window of this process; a BOOL is passed together with its size.
     unsafe { DwmSetWindowAttribute(hwnd.0.cast(), DWMWA_CLOAK as u32, std::ptr::from_ref(&value).cast(), size_of::<i32>() as u32) == 0 }
 }
 
-/// Baut ein Fenster, das erst zu sehen ist, wenn seine Oberfläche steht.
+/// Builds a window that can only be seen once its interface is ready.
 ///
-/// Ein Fenster, das sofort erscheint, ist eine halbe Sekunde lang leer: Windows blendet die leere Fläche über das
-/// ein, was dahinter liegt, dann zeichnet der Webview sein erstes, graues Bild, und erst danach kommt die
-/// Oberfläche. Deshalb wird das Fenster unter Windows verhüllt geöffnet: Der Webview lädt und zeichnet wie in
-/// einem sichtbaren Fenster, und `reveal` nimmt die Hülle ab, sobald alles fertig ist. Anderswo bleibt es bis
-/// dahin versteckt.
+/// A window that appears immediately is empty for half a second: Windows fades the empty area in over
+/// what is behind it, then the webview draws its first grey frame, and only after that comes the
+/// interface. So under Windows the window is opened cloaked: the webview loads and draws as in
+/// a visible window, and `reveal` removes the cloak as soon as everything is ready. Elsewhere it stays
+/// hidden until then.
 fn build(builder: WebviewWindowBuilder<'_, tauri::Wry, AppHandle>) -> tauri::Result<WebviewWindow> {
     let window = builder.build()?;
     #[cfg(windows)]
     {
-        // Lässt sich das Fenster nicht verhüllen, bleibt es versteckt, bis die Oberfläche sich meldet.
+        // If the window cannot be cloaked, it stays hidden until the interface reports.
         if cloak(&window, true) {
             let _ = window.show();
         }
@@ -134,8 +134,8 @@ fn build(builder: WebviewWindowBuilder<'_, tauri::Wry, AppHandle>) -> tauri::Res
     Ok(window)
 }
 
-/// Zeigt ein Fenster, das auf seine Oberfläche gewartet hat. Ein zweiter Aufruf tut nichts mehr: Er würde einem
-/// anderen Programm die Tastatur nehmen.
+/// Shows a window that waited for its interface. A second call does nothing: it would take the keyboard away
+/// from another program.
 fn reveal(window: &WebviewWindow) {
     if !guard(&window.app_handle().state::<Desk>().revealed).insert(window.label().to_string()) {
         return;
@@ -148,13 +148,13 @@ fn reveal(window: &WebviewWindow) {
     }
 }
 
-/// Die Oberfläche eines Fensters steht: Ab jetzt ist es zu sehen.
+/// A window's interface is ready: from now on it can be seen.
 #[tauri::command]
 pub fn window_ready(window: WebviewWindow) {
     reveal(&window);
 }
 
-/// Legt das Hauptfenster an. Es steht nicht in `tauri.conf.json`, weil der Effekt aus den Einstellungen es prägt.
+/// Creates the main window. It is not in `tauri.conf.json`, because the effect from the settings shapes it.
 pub fn create_main(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     let effect = crate::data_dir(app).ok().and_then(|dir| wanted_effect(&dir));
     *guard(&app.state::<Desk>().effect) = match effect {
@@ -165,7 +165,7 @@ pub fn create_main(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     build(window_builder(app, MAIN, effect).inner_size(1360.0, 860.0).min_inner_size(940.0, 600.0).center())
 }
 
-/// Das Fenster unter dem Mauszeiger, außer `except`.
+/// The window under the mouse pointer, except `except`.
 fn window_at_cursor(app: &AppHandle, except: &str) -> Option<String> {
     let cursor = app.cursor_position().ok()?;
     app.webview_windows().into_iter().find_map(|(label, window)| {
@@ -175,7 +175,7 @@ fn window_at_cursor(app: &AppHandle, except: &str) -> Option<String> {
     })
 }
 
-/// Gibt einem anderen Fenster einen Tab samt seiner laufenden Sitzungen.
+/// Gives another window a tab together with its running sessions.
 fn adopt(app: &AppHandle, target: &str, tab: Value, sessions: &[u64]) {
     sessions::hand_over(app, sessions, target);
     let _ = app.emit("adopt-tab", json!({ "window": target, "tab": tab }));
@@ -184,9 +184,9 @@ fn adopt(app: &AppHandle, target: &str, tab: Value, sessions: &[u64]) {
     }
 }
 
-/// Verlegt einen Tab in ein anderes Fenster. `sessions` nennt seine laufenden Sitzungen; sie müssen vorher mit
-/// `session_hold` angehalten sein. `to` bestimmt das Ziel: ein bestimmtes Fenster, sonst (mit `at_cursor`) das
-/// Fenster unter dem Mauszeiger, sonst ein neues.
+/// Moves a tab into another window. `sessions` names its running sessions; they must have been paused
+/// with `session_hold` beforehand. `to` determines the destination: a specific window, otherwise (with `at_cursor`) the
+/// window under the mouse pointer, otherwise a new one.
 #[tauri::command]
 pub async fn window_move(app: AppHandle, window: Window, tab: Value, sessions: Vec<u64>, to: Option<String>, at_cursor: bool) -> CmdResult<()> {
     let source = window.label().to_string();
@@ -206,21 +206,21 @@ pub async fn window_move(app: AppHandle, window: Window, tab: Value, sessions: V
         _ => None,
     };
     let mut builder = window_builder(&app, &label, effect).inner_size(1040.0, 680.0).min_inner_size(640.0, 400.0).initialization_script("window.__GLOWPORT_DETACHED__ = true;");
-    // Beim Herausziehen entsteht das Fenster dort, wo losgelassen wurde; sonst versetzt zum bisherigen.
+    // When pulled out, the window appears where it was dropped; otherwise offset from the previous one.
     let scale = window.scale_factor().unwrap_or(1.0);
     let place = if at_cursor { app.cursor_position().ok().map(|c| (c.x / scale - 120.0, c.y / scale - 24.0)) } else { window.outer_position().ok().map(|p| (f64::from(p.x) / scale + 48.0, f64::from(p.y) / scale + 48.0)) };
     if let Some((x, y)) = place {
         builder = builder.position(x, y);
     }
     build(builder).map(drop).map_err(|e| {
-        // Ohne Fenster bliebe der Tab unsichtbar: zurück an den Absender.
+        // Without a window the tab would stay invisible: back to the sender.
         guard(&desk.payloads).remove(&label);
         sessions::hand_over(&app, &sessions, &source);
         CmdError::new("window_failed", e.to_string())
     })
 }
 
-/// Der Tab, mit dem dieses Fenster geöffnet wurde. Liefert ihn nur einmal.
+/// The tab this window was opened with. Returns it only once.
 #[tauri::command]
 pub fn window_payload(window: Window, desk: State<'_, Desk>) -> Option<Value> {
     guard(&desk.payloads).remove(window.label())
@@ -242,7 +242,7 @@ fn write_restore(dir: &Path, open: &BTreeMap<String, Vec<Value>>) -> io::Result<
     fs::rename(temp, path)
 }
 
-/// Liest die Tabs vom letzten Mal, alle Fenster zusammen, das Hauptfenster zuerst. Eine unlesbare Datei zählt als leer.
+/// Reads the tabs from last time, all windows together, the main window first. An unreadable file counts as empty.
 fn read_restore(dir: &Path) -> Vec<Value> {
     let Ok(text) = fs::read_to_string(dir.join(RESTORE_FILE)) else { return Vec::new() };
     let Ok(mut open) = serde_json::from_str::<BTreeMap<String, Vec<Value>>>(&text) else { return Vec::new() };
@@ -251,8 +251,8 @@ fn read_restore(dir: &Path) -> Vec<Value> {
     tabs
 }
 
-/// Die Tabs, die beim letzten Mal offen waren, falls Glowport nicht ordentlich beendet wurde. Nur das Hauptfenster
-/// bekommt sie, und nur einmal je Lauf.
+/// The tabs that were open last time, in case Glowport was not quit properly. Only the main window
+/// gets them, and only once per run.
 #[tauri::command(async)]
 pub fn restore_load(app: AppHandle, window: Window, desk: State<'_, Desk>) -> CmdResult<Option<Vec<Value>>> {
     if window.label() != MAIN || desk.offered.swap(true, Ordering::Relaxed) {
@@ -262,7 +262,7 @@ pub fn restore_load(app: AppHandle, window: Window, desk: State<'_, Desk>) -> Cm
     Ok((!tabs.is_empty()).then_some(tabs))
 }
 
-/// Merkt sich die offenen Tabs eines Fensters für den Fall eines Abbruchs.
+/// Remembers a window's open tabs in case of a crash.
 #[tauri::command(async)]
 pub fn restore_save(app: AppHandle, window: Window, desk: State<'_, Desk>, tabs: Vec<Value>) -> CmdResult<()> {
     let mut open = guard(&desk.open);
@@ -270,7 +270,7 @@ pub fn restore_save(app: AppHandle, window: Window, desk: State<'_, Desk>, tabs:
     write_restore(&data_dir(&app)?, &open).map_err(io_error)
 }
 
-/// Vergisst die offenen Tabs aller Fenster, damit nach dem Löschen des Tresors nichts mehr angeboten wird.
+/// Forgets the open tabs of all windows, so nothing is offered any more after the vault is deleted.
 pub(crate) fn forget_open_tabs(app: &AppHandle) {
     let desk = app.state::<Desk>();
     let mut open = guard(&desk.open);
@@ -280,8 +280,8 @@ pub(crate) fn forget_open_tabs(app: &AppHandle) {
     }
 }
 
-/// Ein Fenster wurde geschlossen: Seine Sitzungen enden, seine Tabs gelten nicht mehr als offen. Mit dem
-/// Hauptfenster endet das Programm ordentlich; dann gibt es beim nächsten Start nichts wiederherzustellen.
+/// A window was closed: its sessions end, its tabs no longer count as open. With the
+/// main window the program ends properly; then there is nothing to restore on the next start.
 pub fn closed(app: &AppHandle, label: &str) {
     sessions::close_window(app, label);
     let desk = app.state::<Desk>();
@@ -298,7 +298,7 @@ pub fn closed(app: &AppHandle, label: &str) {
     }
     drop(open);
     if label == MAIN {
-        // Laufende Transfers werden angehalten und zum Fortsetzen vorgemerkt.
+        // Running transfers are paused and noted for resuming.
         app.state::<crate::transfers::Queue>().0.shutdown();
         app.exit(0);
     }
@@ -310,7 +310,7 @@ pub struct TextFile {
     text: String,
 }
 
-/// Lässt den Nutzer eine Textdatei wählen und liest sie. `accept` nennt die Endungen wie `.json,.itermcolors`.
+/// Lets the user choose a text file and reads it. `accept` names the extensions like `.json,.itermcolors`.
 #[tauri::command(async)]
 pub fn pick_text_file(app: AppHandle, accept: String) -> CmdResult<Option<TextFile>> {
     let extensions: Vec<&str> = accept.split(',').map(|e| e.trim().trim_start_matches('.')).filter(|e| !e.is_empty()).collect();
@@ -326,13 +326,13 @@ pub fn pick_text_file(app: AppHandle, accept: String) -> CmdResult<Option<TextFi
     Ok(Some(TextFile { name: path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), text }))
 }
 
-/// Dateien, die als Hintergrundbild abgelegt sind: `background-<Zahl>.<Endung>` im Datenordner.
+/// Files stored as background image: `background-<number>.<extension>` in the data folder.
 fn is_background(name: &str) -> bool {
     name.strip_prefix("background-").and_then(|rest| rest.split_once('.')).is_some_and(|(stamp, extension)| !stamp.is_empty() && stamp.chars().all(|c| c.is_ascii_digit()) && IMAGE_TYPES.iter().any(|(known, _)| *known == extension))
 }
 
-/// Lässt den Nutzer ein Bild wählen und legt eine Kopie in den Datenordner. Liefert ihren Dateinamen; ein
-/// früheres Bild wird dabei entfernt.
+/// Lets the user choose an image and puts a copy into the data folder. Returns its file name; an
+/// earlier image is removed in the process.
 #[tauri::command(async)]
 pub fn pick_background(app: AppHandle) -> CmdResult<Option<String>> {
     let extensions: Vec<&str> = IMAGE_TYPES.iter().map(|(extension, _)| *extension).collect();
@@ -355,7 +355,7 @@ pub fn pick_background(app: AppHandle) -> CmdResult<Option<String>> {
     Ok(Some(name))
 }
 
-/// Der Inhalt des Hintergrundbilds als rohe Bytes. Die Oberfläche macht daraus eine Adresse für die Anzeige.
+/// The background image's content as raw bytes. The interface turns it into an address for display.
 #[tauri::command(async)]
 pub fn background_read(app: AppHandle, name: String) -> CmdResult<Response> {
     if !is_background(&name) {

@@ -11,7 +11,7 @@
 </script>
 
 {#if info}
-  <!-- Während des Ladens lässt sich der Dialog nicht wegklicken: Ein halb geladenes Update soll niemand übersehen. -->
+  <!-- While downloading the dialog cannot be dismissed: nobody should overlook a half-downloaded update. -->
   <Dialog bind:open={() => updates.open, (open) => (updates.open = open || busy)} title={t('upd.title', { version: info.version })} wide>
     <p>{t('upd.text', { current: __APP_VERSION__ })}{#if info.date}&nbsp;{t('upd.date', { date: formatDate(info.date) })}{/if}</p>
     {#if info.notes.trim()}

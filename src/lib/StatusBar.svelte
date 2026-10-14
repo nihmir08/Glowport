@@ -11,7 +11,7 @@
   import { sync } from './sync.svelte';
   import { updates } from './updates.svelte';
 
-  // Die Entwicklungsversion nennt sich „Glowport Dev“; so ist im Fenster zu sehen, welche Fassung läuft.
+  // The development version calls itself “Glowport Dev”; that way the window shows which version is running.
   let name = $state(t('app.name'));
   onMount(() => void appInfo().then((info) => info && (name = info.name)));
 </script>
@@ -26,7 +26,7 @@
     <span><i class="d warn"></i>{t('status.missing')}</span>
   {/if}
   {#if vault.state === 'open' && sync.linked}
-    <!-- Stand des Abgleichs; ein Klick führt zur Seite „Sync und Teilen“. -->
+    <!-- Sync state; a click leads to the “Sync and sharing” page. -->
     <button type="button" class="st-x" class:on={ui.page === 'sync' && view.active === 'home'} title={sync.server} onclick={() => ((ui.page = 'sync'), (view.active = 'home'))}>
       <i class="sdot {sync.phase}"></i>
       <span>
@@ -43,7 +43,7 @@
   {/if}
   <span class="grow"></span>
   {#if activeForwards().length}
-    <!-- Port-Regeln laufen ohne Terminal weiter; hier ist zu sehen, dass welche an sind. -->
+    <!-- Port rules keep running without a terminal; here you can see that some are on. -->
     <button type="button" class="st-x" onclick={() => ((ui.page = 'fwd'), (view.active = 'home'))}>
       <Icon name="forward" size={12} /><span>{tn('fwd.status', activeForwards().length)}</span>
     </button>

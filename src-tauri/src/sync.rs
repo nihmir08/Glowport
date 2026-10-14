@@ -1,8 +1,8 @@
-//! Brücke zwischen Oberfläche und Abgleich (`glowport-sync`, `docs/sync.md`).
+//! Bridge between interface and syncing (`glowport-sync`, `docs/sync.md`).
 //!
-//! Der Abgleich greift nur durch [`Gate`] in den Tresor: kurz hinein, wieder heraus, nie während einer Anfrage
-//! an den Server. Er läuft, solange der Tresor offen und mit einem Server verbunden ist ([`ensure`]); beim
-//! Sperren endet er. Was er am Tresor ändert, meldet die Brücke der Oberfläche wie jede andere Änderung.
+//! Syncing only reaches into the vault through [`Gate`]: briefly in, out again, never during a request
+//! to the server. It runs as long as the vault is open and linked to a server ([`ensure`]); on
+//! locking it ends. What it changes in the vault the bridge reports to the interface like any other change.
 
 use std::{
     collections::HashMap,
@@ -26,7 +26,7 @@ use crate::app::{check_password, emit_snapshot_quiet, AppState, CmdError, CmdRes
 
 type Id = [u8; 16];
 
-/// Zugang des Abgleichs zum Tresor des Programms.
+/// Syncing's access to the program's vault.
 pub struct Gate(AppHandle);
 
 impl Door for Gate {
@@ -72,14 +72,14 @@ struct Inner {
     runner: Option<Runner>,
     phase: Phase,
     error: Option<String>,
-    /// Was die letzte gelungene Runde ergab.
+    /// What the last successful round produced.
     report: Report,
     synced_at: Option<i64>,
-    /// Zuletzt gesuchte Konten: „Einladen“ meint genau das Konto, dessen Sicherheitscode gezeigt wurde.
+    /// Accounts looked up last: “Invite” means exactly the account whose safety code was shown.
     candidates: HashMap<String, Candidate>,
 }
 
-/// Der laufende Abgleich dieses Programms. Es gibt höchstens einen.
+/// This program's running sync. There is at most one.
 #[derive(Default)]
 pub struct SyncHost(Mutex<Inner>);
 
@@ -91,7 +91,7 @@ fn now_ms() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64)
 }
 
-/// Gründe, die die Oberfläche kennt und übersetzt. Alles andere zeigt sie als unerwartete Antwort.
+/// Reasons the interface knows and translates. Everything else it shows as an unexpected answer.
 const CODES: [&str; 35] = [
     "offline",
     "protocol",
@@ -145,7 +145,7 @@ fn id(text: &str) -> CmdResult<Id> {
     unhex(text).ok_or_else(|| CmdError::new("not_found", "Unbekannte Kennung"))
 }
 
-/// Stand des Abgleichs, wie ihn die Oberfläche zeigt (`SyncState` in `types.ts`).
+/// State of syncing as the interface shows it (`SyncState` in `types.ts`).
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StateView {
@@ -170,7 +170,7 @@ fn view(app: &AppHandle) -> StateView {
         (inner.engine.as_ref().map(|engine| engine.link().clone()), inner.phase, inner.error.clone(), inner.report.clone(), inner.synced_at)
     };
     let Some(link) = link else { return StateView { phase: Phase::Synced.name(), ..StateView::default() } };
-    // Was wartet und was es an Hinweisen gibt, steht im Tresor und stimmt auch ohne Verbindung.
+    // What is waiting and what notices there are is stored in the vault and is right even without a connection.
     let (pending, notices, code) = app
         .state::<AppState>()
         .session()
@@ -186,7 +186,7 @@ fn view(app: &AppHandle) -> StateView {
         linked: true,
         server: link.server,
         username: link.username,
-        // Nach einer Runde gilt, was der Server gerade sagt; davor die gespeicherte Anmeldung.
+        // After a round, what the server just said applies; before that, the saved sign-in.
         admin: if synced_at.is_some() { report.admin } else { link.admin },
         phase: phase.name(),
         error,
@@ -199,7 +199,7 @@ fn view(app: &AppHandle) -> StateView {
     }
 }
 
-/// Trägt ein, was nur der Abgleich über die Tresore weiß, und meldet der Oberfläche den Stand.
+/// Fills in what only syncing knows across the vaults and reports the state to the interface.
 fn publish(app: &AppHandle) {
     let marks = {
         let inner = lock(app);
@@ -225,7 +225,7 @@ fn on_status(app: &AppHandle, status: RunStatus) {
                 inner.report = report;
             }
             RunStatus::Offline => inner.phase = Phase::Offline,
-            // Gesperrt läuft nichts; der Stand von vorher bleibt stehen, bis wieder entsperrt wird.
+            // Locked, nothing runs; the state from before stays until it is unlocked again.
             RunStatus::Locked => return,
             RunStatus::SignedOut(code) => {
                 inner.phase = Phase::SignedOut;
@@ -240,20 +240,20 @@ fn on_status(app: &AppHandle, status: RunStatus) {
     publish(app);
 }
 
-/// Startet den Hintergrund-Abgleich. Nur aus einer Aufgabe der Laufzeitumgebung heraus zu rufen (ein Befehl mit
-/// `async` oder [`poke`]): Der `Runner` legt dort seine eigenen Aufgaben an.
+/// Starts background syncing. Only to be called from within a task of the runtime (a command with
+/// `async` or [`poke`]): the `Runner` creates its own tasks there.
 fn start(app: &AppHandle, engine: Engine<Gate>) {
     let engine = Arc::new(engine);
     let handle = app.clone();
     let runner = Runner::start(engine.clone(), move |status| on_status(&handle, status));
     let mut inner = lock(app);
-    // Zwei Anläufe zur selben Zeit: Der erste gilt, dieser endet mit seinem `Runner`.
+    // Two attempts at the same time: the first one counts, this one ends with its `Runner`.
     if inner.engine.is_none() {
         *inner = Inner { engine: Some(engine), runner: Some(runner), phase: Phase::Syncing, ..Inner::default() };
     }
 }
 
-/// Sorgt dafür, dass der Abgleich genau dann läuft, wenn der Tresor offen und mit einem Server verbunden ist.
+/// Makes sure syncing runs exactly when the vault is open and linked to a server.
 pub fn ensure(app: &AppHandle) {
     if !app.state::<AppState>().session().is_open() {
         *lock(app) = Inner::default();
@@ -262,14 +262,14 @@ pub fn ensure(app: &AppHandle) {
     if lock(app).engine.is_some() {
         return;
     }
-    // Das Lesen der Anmeldung greift in den Tresor; die eigene Sperre ist dabei frei.
+    // Reading the sign-in reaches into the vault; the lock of our own is free during that.
     if let Ok(Some(engine)) = Engine::open(Arc::new(Gate(app.clone()))) {
         start(app, engine);
     }
 }
 
-/// Der Tresor wurde geöffnet, gesperrt oder geändert. Wird gerufen, während der Zustand des Programms gesperrt
-/// ist, und erledigt deshalb alles Weitere in einer eigenen Aufgabe: Abgleich starten oder beenden, sonst anstoßen.
+/// The vault was opened, locked or changed. Called while the program's state is locked,
+/// so it does everything further in a task of its own: start or stop syncing, otherwise nudge it.
 pub fn poke(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -285,14 +285,14 @@ fn engine(app: &AppHandle) -> CmdResult<Arc<Engine<Gate>>> {
     lock(app).engine.clone().ok_or_else(|| CmdError::new("not_linked", "Der Abgleich ist nicht eingerichtet"))
 }
 
-/// Eine Runde sofort, damit die Oberfläche das Ergebnis einer Änderung gleich sieht.
+/// A round right away, so the interface sees the result of a change immediately.
 async fn round(app: &AppHandle, engine: &Engine<Gate>) -> StateView {
     on_status(app, status_of(engine.sync().await));
     view(app)
 }
 
-// `async`: Der Befehl kann den Hintergrund-Abgleich starten, und der braucht die Laufzeitumgebung der Aufgaben.
-// Ein gewöhnlicher Befehl liefe auf dem Fenster-Thread, wo es sie nicht gibt.
+// `async`: the command can start background syncing, and that needs the tasks' runtime.
+// An ordinary command would run on the window thread, where there is none.
 #[tauri::command]
 pub async fn sync_state(app: AppHandle) -> StateView {
     ensure(&app);
@@ -328,8 +328,8 @@ pub struct LoginRequest {
     password: String,
     #[serde(default)]
     device: String,
-    /// Nur auf einem Gerät mit eigenem Tresor, der nicht zum Konto gehört: `keep` übernimmt dessen Einträge,
-    /// `discard` verwirft sie.
+    /// Only on a device with a vault of its own that does not belong to the account: `keep` takes over its entries,
+    /// `discard` throws them away.
     #[serde(default)]
     local: Option<String>,
 }
@@ -356,12 +356,12 @@ pub async fn sync_connect(app: AppHandle, state: State<'_, AppState>, request: L
     let password = Zeroizing::new(request.password);
     let (username, device) = (request.username.trim().to_string(), device_name(&request.device));
     match request.local.as_deref() {
-        // Der Tresor dieses Geräts gehört schon zum Konto (nach einer Sicherung oder dem Abmelden).
+        // This device's vault already belongs to the account (after a backup or signing out).
         None => {
             let engine = connect(&Arc::new(Gate(app.clone())), &request.server, &username, &password, &device, MIN_KDF).await?;
             start(&app, engine);
         }
-        // Er gehört zu keinem oder einem anderen Konto: Der Tresor des Kontos entsteht daneben und tritt an seine Stelle.
+        // It belongs to no account or another one: the account's vault is created next to it and takes its place.
         Some(choice) => {
             let staged = state.session().path().with_extension("db.konto");
             let _ = std::fs::remove_file(&staged);
@@ -378,7 +378,7 @@ pub async fn sync_connect(app: AppHandle, state: State<'_, AppState>, request: L
     Ok(view(&app))
 }
 
-/// Erster Start ohne Tresor: Der Tresor dieses Geräts entsteht aus einem bestehenden Konto.
+/// First start without a vault: this device's vault is created from an existing account.
 #[tauri::command]
 pub async fn sync_login(app: AppHandle, state: State<'_, AppState>, request: LoginRequest) -> CmdResult<Status> {
     let password = Zeroizing::new(request.password);
@@ -404,7 +404,7 @@ pub async fn sync_unlink(app: AppHandle) -> CmdResult<StateView> {
     Ok(view(&app))
 }
 
-/// Der Server hat einen älteren Stand als dieses Gerät: Was hier neuer ist, geht wieder hinauf.
+/// The server has an older state than this device: what is newer here goes up again.
 #[tauri::command]
 pub async fn sync_resync(app: AppHandle, vault: String) -> CmdResult<StateView> {
     let engine = engine(&app)?;
@@ -412,7 +412,7 @@ pub async fn sync_resync(app: AppHandle, vault: String) -> CmdResult<StateView> 
     Ok(round(&app, &engine).await)
 }
 
-/// Master-Passwort ändern. Mit Abgleich geht die neue Verpackung zuerst zum Server (`docs/sync.md`).
+/// Change the master password. With syncing, the new wrapping goes to the server first (`docs/sync.md`).
 #[tauri::command]
 pub async fn vault_change_password(app: AppHandle, state: State<'_, AppState>, old: String, new: String, logout_others: Option<bool>) -> CmdResult<()> {
     let (old, new) = (Zeroizing::new(old), Zeroizing::new(new));
@@ -428,11 +428,11 @@ pub async fn vault_change_password(app: AppHandle, state: State<'_, AppState>, o
     }
 }
 
-/// Meldet dieses Gerät ab und löscht den Tresor auf diesem PC (`Session::wipe`); danach startet Glowport neu, so
-/// enden alle Sitzungen, Port-Regeln und Transfers. Ist der Tresor offen und mit einem Server verbunden, wird das
-/// Gerät dort zuerst abgemeldet; ist der Server nicht zu erreichen, endet der Befehl mit dessen Fehler, es sei
-/// denn, `force` ist gesetzt. Gesperrt geht das Abmelden nicht (der Zugang liegt verschlüsselt im Tresor): Das
-/// Gerät bleibt in der Geräteliste, bis ein anderes es abmeldet.
+/// Signs this device out and deletes the vault on this PC (`Session::wipe`); then Glowport restarts, so
+/// all sessions, port rules and transfers end. If the vault is open and linked to a server, the
+/// device is signed out there first; if the server cannot be reached, the command ends with its error unless
+/// `force` is set. Locked, signing out does not work (the access is stored encrypted in the vault): the
+/// device stays in the device list until another one signs it out.
 #[tauri::command]
 pub async fn vault_wipe(app: AppHandle, force: bool) -> CmdResult<()> {
     ensure(&app);
@@ -448,13 +448,13 @@ pub async fn vault_wipe(app: AppHandle, force: bool) -> CmdResult<()> {
     }
     *lock(&app) = Inner::default();
     crate::proxmox::forget_all(&app);
-    // Was in der Warteschlange stand, gehört zu Hosts des gelöschten Tresors.
+    // What was in the queue belongs to hosts of the deleted vault.
     let queue = &app.state::<crate::transfers::Queue>().0;
     queue.control(None, "cancel");
     queue.clear();
     queue.shutdown();
     crate::windows::forget_open_tabs(&app);
-    // Blieb etwas liegen, startet Glowport nicht neu: Die Oberfläche zeigt, was.
+    // If something was left behind, Glowport does not restart: the interface shows what.
     app.state::<AppState>().session().wipe()?;
     app.restart()
 }
@@ -482,7 +482,7 @@ pub async fn sync_device_remove(app: AppHandle, id: String) -> CmdResult<Vec<glo
     Ok(engine.devices().await?)
 }
 
-/// Ein Hinweis aus dem Abgleich mit den Namen, die die Oberfläche zeigt (`SyncNotice` in `types.ts`).
+/// A notice from syncing with the names the interface shows (`SyncNotice` in `types.ts`).
 #[derive(Debug, Default, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct NoticeView {
@@ -505,7 +505,7 @@ pub fn sync_notices(state: State<'_, AppState>) -> CmdResult<Vec<NoticeView>> {
     let mut session = state.session();
     let directory = session.directory()?;
     let mut out = Vec::new();
-    // Die neuesten zuerst.
+    // The newest first.
     for stored in directory.vault().notices()?.into_iter().rev() {
         let Ok(notice) = serde_json::from_slice::<Notice>(&stored.data) else { continue };
         let base = |kind, vault: &str| NoticeView { id: stored.id, at: stored.at, kind, vault_name: directory.vault_name(vault), ..NoticeView::default() };
@@ -537,7 +537,7 @@ pub async fn shared_create(app: AppHandle, name: String) -> CmdResult<String> {
     Ok(glowport_core::crypto::hex(&vault))
 }
 
-/// Der Name steht als Datensatz im Tresor und geht mit dem nächsten Abgleich an die anderen.
+/// The name is stored as a record in the vault and goes to the others with the next sync.
 #[tauri::command]
 pub fn shared_rename(state: State<'_, AppState>, vault: String, name: String) -> CmdResult<()> {
     let mut session = state.session();
@@ -564,7 +564,7 @@ pub async fn shared_lookup(app: AppHandle, username: String) -> CmdResult<Candid
 #[tauri::command]
 pub async fn shared_invite(app: AppHandle, vault: String, account: String, role: Role) -> CmdResult<()> {
     let engine = engine(&app)?;
-    // Eingeladen wird genau das Konto mit den Schlüsseln, deren Sicherheitscode eben gezeigt wurde.
+    // Exactly the account is invited whose keys' safety code was just shown.
     let candidate = lock(&app).candidates.get(&account).cloned().ok_or_else(|| CmdError::new("not_found", "Konto nicht gesucht"))?;
     engine.invite(&id(&vault)?, &candidate, role).await?;
     round(&app, &engine).await;
@@ -626,7 +626,7 @@ pub async fn invitation_decline(app: AppHandle, vault: String) -> CmdResult<Stat
     Ok(round(&app, &engine).await)
 }
 
-// ── Verwaltung des Servers ───────────────────────────────────────────────────────────────────────────────
+// ── Server administration ───────────────────────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

@@ -7,15 +7,15 @@
   import Dialog from './ui/Dialog.svelte';
 
   /**
-   * Rückfrage vor „Abmelden und Daten auf diesem PC löschen“. Geht auch gesperrt (vom Sperrbildschirm aus); dann
-   * kann sich Glowport beim Sync-Server nicht abmelden, weil der Zugang verschlüsselt im Tresor liegt.
+   * Prompt before “Sign out and delete data on this PC”. Works locked too (from the lock screen); then
+   * Glowport cannot sign out at the sync server, because the access is stored encrypted in the vault.
    */
   let { open = $bindable(false) }: { open?: boolean } = $props();
 
   let understood = $state(false);
   let busy = $state(false);
   let error = $state('');
-  /** Das Abmelden beim Server ist gescheitert; der nächste Klick löscht trotzdem. */
+  /** Signing out at the server failed; the next click deletes anyway. */
   let force = $state(false);
 
   const linked = $derived(vault.state === 'open' && sync.linked);
@@ -30,11 +30,11 @@
     busy = true;
     error = '';
     try {
-      // Gelingt es, startet Glowport neu; zurück kommt nur ein Fehler.
+      // If it succeeds, Glowport restarts; only an error comes back.
       await vaultWipe(force);
     } catch (e) {
       error = errorText(e);
-      // Was auch immer beim Abmelden schiefging: Löschen darf trotzdem gehen, nur bewusst.
+      // Whatever went wrong while signing out: deleting may still go ahead, only deliberately.
       force = linked;
     } finally {
       busy = false;

@@ -1,6 +1,6 @@
-// Ersatz für lokales Terminal, Telnet und serielle Leitung in der Browser-Vorschau.
-// Nicht Teil des Programms: Im Programmfenster wird diese Datei nie benutzt. Die „Geräte“ hier antworten auf eine
-// Handvoll Befehle, damit ein Terminal in der Vorschau nach etwas aussieht.
+// Stand-in for local terminal, Telnet and serial line in the browser preview.
+// Not part of the program: this file is never used in the program window. The “devices” here answer a
+// handful of commands, so a terminal in the preview looks like something.
 
 import type { LocalShell, SerialPortInfo, SerialSettings } from './types';
 
@@ -19,10 +19,10 @@ export const FAKE_PORTS: SerialPortInfo[] = [
   { name: 'COM1', label: 'Kommunikationsanschluss' },
 ];
 
-/** Was ein Ersatz-Gerät seiner Sitzung meldet. */
+/** What a stand-in device reports to its session. */
 export interface DeviceHost {
   out(text: string): void;
-  /** Die Verbindung steht (bei Telnet nach dem Aufbau, bei einer Shell nach dem Start). */
+  /** The connection is up (for Telnet after setup, for a shell after start). */
   connected(): void;
   end(reason: 'remote' | 'connection_lost' | 'connect_failed', message?: string, exitStatus?: number): void;
 }
@@ -41,8 +41,8 @@ const D = '\x1b[2m';
 const R = '\x1b[0m';
 
 /**
- * Zeilenweise Eingabe wie in einer einfachen Shell: Zeichen erscheinen, Rücktaste löscht, Strg+C verwirft.
- * `secret` unterdrückt die Anzeige (Passwort). Die fertige Zeile geht an `enter`.
+ * Line-by-line input as in a simple shell: characters appear, Backspace deletes, Ctrl+C discards.
+ * `secret` suppresses the display (password). The finished line goes to `enter`.
  */
 function lineInput(host: DeviceHost, enter: (line: string) => void, secret: () => boolean, interrupt: () => void) {
   let line = '';
@@ -242,7 +242,7 @@ function serialDevice(name: string, port: string, settings: SerialSettings, host
     (line) => {
       if (!active) return void ((active = true), host.out(`\r\n\r\nBusyBox v1.36.1 (2026-06-02 09:14:21 UTC) built-in shell (ash)\r\n\r\n${prompt}`));
       const trimmed = line.trim();
-      // „drop“ stellt nach, dass der Adapter abgezogen wird.
+      // “drop” simulates the adapter being unplugged.
       if (trimmed === 'drop') return host.end('connection_lost', `${port} is gone`);
       if (trimmed === 'reboot') return void ((active = false), host.out('\r\n'), boot());
       host.out(`\r\n${reply(trimmed)}${prompt}`);
@@ -254,7 +254,7 @@ function serialDevice(name: string, port: string, settings: SerialSettings, host
     setTimeout(() => {
       if (!FAKE_PORTS.some((p) => p.name.toLowerCase() === port.toLowerCase())) return host.end('connect_failed', `${port}: Das System kann die angegebene Datei nicht finden.`);
       host.connected();
-      // Bei anderer Geschwindigkeit käme nur Zeichensalat; das Beispielgerät spricht 115200.
+      // At a different speed only garbage would arrive; the sample device speaks 115200.
       if (settings.baud !== 115200) return host.out('\x00\ufffd\ufffdx\ufffd\x18\ufffd\ufffd\x00x\ufffd\ufffd\ufffd\x80x\ufffd\r\n');
       boot(12);
     }, 220),

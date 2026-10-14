@@ -1,9 +1,9 @@
-//! Updates: nachsehen, ob es eine neuere Version gibt, und sie nach Rückfrage laden, prüfen und installieren.
+//! Updates: check whether there is a newer version and, after asking, download, verify and install it.
 //!
-//! Ob eine Fassung das kann, entscheidet sich beim Bauen: Nur wenn dabei eine Adresse und der öffentliche Schlüssel
-//! für die Signatur mitgegeben wurden (`GLOWPORT_UPDATE_URL`, `GLOWPORT_UPDATE_PUBKEY`), sucht Glowport je nach
-//! Updates. Ohne beides gibt es in der Oberfläche nichts dazu, und kein Aufruf geht ins Netz. Die portable Fassung
-//! aktualisiert sich nie selbst: Sie hat keinen Installer, der sie ersetzen könnte.
+//! Whether a build can do that is decided at build time: only if an address and the public key
+//! for the signature were given (`GLOWPORT_UPDATE_URL`, `GLOWPORT_UPDATE_PUBKEY`) does Glowport ever look for
+//! updates. Without both there is nothing about it in the interface, and no call goes to the network. The portable version
+//! never updates itself: it has no installer that could replace it.
 
 use serde::Serialize;
 use tauri::{ipc::Channel, AppHandle};
@@ -11,9 +11,9 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 
 use crate::app::{CmdError, CmdResult};
 
-/// Wo die Beschreibung der neuesten Version liegt (`latest.json`), etwa bei den Veröffentlichungen auf GitHub.
+/// Where the description of the newest version is (`latest.json`), for example in the releases on GitHub.
 const URL: Option<&str> = option_env!("GLOWPORT_UPDATE_URL");
-/// Öffentlicher Schlüssel, gegen den jedes geladene Update geprüft wird, bevor es läuft.
+/// Public key every downloaded update is checked against before it runs.
 const PUBKEY: Option<&str> = option_env!("GLOWPORT_UPDATE_PUBKEY");
 
 pub fn enabled() -> bool {
@@ -24,7 +24,7 @@ pub fn enabled() -> bool {
 pub struct Info {
     version: String,
     notes: String,
-    /// Tag der Veröffentlichung in Millisekunden seit 1970.
+    /// Day of release in milliseconds since 1970.
     date: Option<i64>,
 }
 
@@ -47,14 +47,14 @@ async fn newest(app: &AppHandle) -> CmdResult<Option<Update>> {
     updater.check().await.map_err(failed)
 }
 
-/// Fragt nach einer neueren Version; `None`, wenn diese die neueste ist.
+/// Asks for a newer version; `None` if this one is the newest.
 #[tauri::command]
 pub async fn update_check(app: AppHandle) -> CmdResult<Option<Info>> {
     Ok(newest(&app).await?.map(|update| Info { version: update.version.clone(), notes: update.body.clone().unwrap_or_default(), date: update.date.map(|d| d.unix_timestamp() * 1000) }))
 }
 
-/// Lädt die neue Version, prüft ihre Signatur und startet den Installer. Der beendet Glowport und startet es danach
-/// neu; bis dahin meldet `progress`, wie weit das Laden ist.
+/// Downloads the new version, checks its signature and starts the installer. That quits Glowport and starts it again
+/// afterwards; until then `progress` reports how far the download is.
 #[tauri::command]
 pub async fn update_install(app: AppHandle, progress: Channel<Progress>) -> CmdResult<()> {
     let update = newest(&app).await?.ok_or_else(|| failed("keine neuere Version"))?;
@@ -78,7 +78,7 @@ mod tests {
 
     #[test]
     fn stays_off_unless_built_for_it() {
-        // Die Tests werden ohne Adresse und Schlüssel gebaut: Dann darf nichts eingeschaltet sein.
+        // The tests are built without address and key: then nothing may be switched on.
         assert_eq!(enabled(), option_env!("GLOWPORT_UPDATE_URL").is_some() && option_env!("GLOWPORT_UPDATE_PUBKEY").is_some() && !crate::portable());
     }
 }

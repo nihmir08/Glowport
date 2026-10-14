@@ -14,8 +14,8 @@
   import TextField from './ui/TextField.svelte';
 
   /**
-   * Die Dialoge rund um Snippets, die von überall aufgehen können: Werte für Variablen, der Name eines frisch
-   * aufgezeichneten Makros, der Editor aus der Seitenleiste am Terminal und das Ausführen auf vielen Hosts.
+   * The dialogs around snippets that can open from anywhere: values for variables, the name of a freshly
+   * recorded macro, the editor from the sidebar at the terminal and running on many hosts.
    */
   let values = $state<Record<string, string>>({});
   let name = $state('');
@@ -27,7 +27,7 @@
   const variables = $derived(asking ? variablesOf(asking.snippet.command) : []);
   const packs = $derived([...new Set(vault.snippets.map((s) => s.package).filter(Boolean))].sort((a, b) => a.localeCompare(b)));
 
-  // Jede Abfrage beginnt mit den Werten vom letzten Mal; ein neues Makro mit leeren Feldern.
+  // Every query starts with the values from last time; a new macro with empty fields.
   $effect(() => {
     values = asking ? { ...lastValues(asking.snippet.id) } : {};
   });

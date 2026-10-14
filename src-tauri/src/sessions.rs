@@ -1,14 +1,14 @@
-//! Laufende Sitzungen: bringt Verbindungskern (`glowport-net`), die übrigen Terminals (`glowport-extras`: Shells
-//! dieses Rechners, Telnet, serielle Leitung), Tresor und Oberfläche zusammen.
+//! Running sessions: brings together the connection core (`glowport-net`), the other terminals (`glowport-extras`: shells
+//! on this machine, Telnet, serial line), vault and interface.
 //!
-//! Je Sitzung läuft eine Aufgabe, die Ereignisse des Verbindungskerns weiterreicht: Terminal-Ausgabe als rohe
-//! Bytes über einen eigenen Kanal, alles andere als Ereignis `session`. Rückfragen warten hier auf die Antwort
-//! der Oberfläche. Sitzungen überleben das Sperren des Tresors; nur das Speichern von Host-Schlüsseln und
-//! Passwörtern braucht ihn offen.
+//! Per session one task runs that passes on the connection core's events: terminal output as raw
+//! bytes over a channel of its own, everything else as the `session` event. Prompts wait here for the
+//! interface's answer. Sessions survive locking the vault; only saving host keys and
+//! passwords needs it open.
 //!
-//! Jede Sitzung gehört einem Fenster. Zieht ihr Tab in ein anderes Fenster um, wird sie angehalten
-//! (`session_hold`), die Ausgabe so lange gesammelt und vom neuen Fenster wieder aufgenommen (`session_attach`).
-//! Die Verbindung selbst merkt davon nichts.
+//! Every session belongs to a window. If its tab moves into another window, it is paused
+//! (`session_hold`), the output collected meanwhile and picked up again by the new window (`session_attach`).
+//! The connection itself notices nothing.
 
 use std::{
     collections::HashMap,
@@ -41,8 +41,8 @@ use crate::{
     recordings::{self, Recorder, Recording},
 };
 
-/// Flusskontrolle: Über dieser Menge unbestätigter Ausgabe wird das Lesen angehalten (der Server wird gebremst),
-/// darunter geht es weiter. Werte wie bei NexusSSH.
+/// Flow control: above this amount of unacknowledged output reading is paused (the server is slowed down),
+/// below it continues. Values as in NexusSSH.
 const PAUSE_ABOVE: usize = 1024 * 1024;
 const RESUME_BELOW: usize = 256 * 1024;
 
@@ -54,36 +54,36 @@ pub struct Sessions {
 
 struct Live {
     commands: UnboundedSender<Command>,
-    /// Fenster, dem die Sitzung gehört. Nur dort kommen ihre Ereignisse an.
+    /// Window the session belongs to. Its events only arrive there.
     window: String,
-    /// Wohin die Terminal-Ausgabe geht. Fehlt, während die Sitzung das Fenster wechselt.
+    /// Where the terminal output goes. Missing while the session changes windows.
     output: Option<Channel<InvokeResponseBody>>,
-    /// Ausgabe, die während des Fensterwechsels angefallen ist.
+    /// Output that accumulated during the window change.
     backlog: Vec<u8>,
     phase: &'static str,
-    /// Die eine Rückfrage, auf deren Antwort die Sitzung gerade wartet.
+    /// The one prompt whose answer the session is currently waiting for.
     pending: Option<Pending>,
-    /// Dieselbe Rückfrage in der Form für die Oberfläche, um sie einem neuen Fenster noch einmal zu zeigen.
+    /// The same prompt in the interface's form, to show it once more to a new window.
     asking: Option<SessionEvent>,
-    /// Schreibt die Ausgabe in eine Datei mit, solange gesetzt.
+    /// Records the output into a file while set.
     recorder: Option<Recorder>,
     unacked: usize,
     paused: bool,
-    /// Der Nutzer will das gerade eingegebene Passwort speichern, falls es funktioniert.
+    /// The user wants to save the password just typed, if it works.
     save_password: bool,
-    /// Der Nutzer will die Schlüsseldatei, deren Passphrase er gerade eingegeben hat, in den Tresor übernehmen.
+    /// The user wants to take the key file whose passphrase they just typed into the vault.
     adopt_key: Option<AdoptKey>,
-    /// Zeichensatz des Servers, wenn er nicht UTF-8 ist. Eingaben werden dann vor dem Senden umgewandelt.
+    /// The server's character set if it is not UTF-8. Input is then converted before sending.
     charset: Option<&'static Encoding>,
-    /// Kennung des gespeicherten Hosts, zu dem die Sitzung führt; fehlt bei einer eingetippten Adresse.
+    /// ID of the saved host the session leads to; missing for a typed address.
     host_id: Option<String>,
-    /// Name des Hosts oder die Adresse, zum Anzeigen etwa in der Liste der Transfers.
+    /// Name of the host or the address, for display e.g. in the list of transfers.
     label: String,
-    /// Das Terminal läuft über Mosh.
+    /// The terminal runs over Mosh.
     mosh: bool,
 }
 
-/// Eine Schlüsseldatei, die nach geglückter Anmeldung in den Tresor soll, und der Host, der sie dann benutzt.
+/// A key file that should go into the vault after a successful sign-in, and the host that then uses it.
 struct AdoptKey {
     file: String,
     host: String,
@@ -92,7 +92,7 @@ struct AdoptKey {
 
 enum Pending {
     HostKey { reply: oneshot::Sender<bool>, key: net::HostKey, host: String, port: u16 },
-    /// `key_file`: Die Frage gilt der Passphrase dieser Datei, verlangt für den gespeicherten Host mit dieser Kennung.
+    /// `key_file`: the question is about this file's passphrase, asked for the saved host with this ID.
     Secret { reply: oneshot::Sender<Option<Secret>>, key_file: Option<(String, String)> },
     Interactive(oneshot::Sender<Option<Vec<Secret>>>),
 }
@@ -100,11 +100,11 @@ enum Pending {
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum Target {
-    /// Gespeicherter Host aus dem Tresor.
+    /// Saved host from the vault.
     Host { id: String },
-    /// Schnellverbindung ohne gespeicherten Host. `identity` und `key` nennen wahlweise eine Identität oder einen
-    /// Schlüssel aus dem Tresor, mit denen sie sich anmeldet (so verbindet die Seite „Proxmox“ zu einer Maschine,
-    /// die noch kein Host ist); mit einer Identität gilt deren Benutzer.
+    /// Quick connect without a saved host. `identity` and `key` optionally name an identity or a
+    /// key from the vault to sign in with (that is how the Proxmox page connects to a machine
+    /// that is not a host yet); with an identity, its user applies.
     Direct {
         user: String,
         host: String,
@@ -113,13 +113,13 @@ pub enum Target {
         identity: Option<String>,
         #[serde(default)]
         key: Option<String>,
-        /// `mosh benutzer@host`: angemeldet per SSH, das Terminal über Mosh.
+        /// `mosh user@host`: signed in over SSH, the terminal over Mosh.
         #[serde(default)]
         mosh: bool,
     },
-    /// Schnellverbindung über Telnet.
+    /// Quick connect over Telnet.
     Telnet { host: String, port: u16 },
-    /// Eine Shell dieses Rechners; `shell` ist ihre Kennung aus `local_shells`.
+    /// A shell on this machine; `shell` is its ID from `local_shells`.
     Local { shell: String },
 }
 
@@ -129,7 +129,7 @@ pub enum Answer {
     HostKey {
         accept: bool,
     },
-    /// `value` fehlt, wenn der Nutzer abgebrochen hat.
+    /// `value` is missing if the user cancelled.
     Secret {
         value: Option<String>,
         #[serde(default)]
@@ -138,12 +138,12 @@ pub enum Answer {
     Interactive {
         values: Option<Vec<String>>,
     },
-    /// Das Zertifikat eines FTP-Servers.
+    /// An FTP server's certificate.
     Certificate {
         accept: bool,
     },
-    /// Die Warnung vor einer unverschlüsselten FTP-Verbindung. `remember` bestellt sie für den Host ab, `secure`
-    /// stellt ihn stattdessen auf FTPS um.
+    /// The warning about an unencrypted FTP connection. `remember` switches it off for the host, `secure`
+    /// moves the host to FTPS instead.
     Plain {
         accept: bool,
         #[serde(default)]
@@ -166,14 +166,14 @@ pub(crate) enum SessionEvent {
     Banner { text: String },
     Notice { code: &'static str, message: String },
     HostKey { host: String, port: u16, algorithm: String, fingerprint: String, changed: bool, known: Vec<String> },
-    /// `station` ist gesetzt, wenn nicht das Ziel fragt, sondern ein Sprung-Server davor (`benutzer@adresse`).
+    /// `station` is set if not the destination asks, but a jump host before it (`user@address`).
     Secret { kind: &'static str, attempt: u32, file: Option<String>, can_save: bool, station: Option<String> },
     Interactive { name: String, instructions: String, prompts: Vec<PromptView>, station: Option<String> },
-    /// Das Zertifikat eines FTP-Servers, dem dieser Rechner nicht von sich aus traut (`changed`: ein anderes als das bestätigte).
+    /// The certificate of an FTP server this machine does not trust on its own (`changed`: different from the confirmed one).
     Certificate { host: String, port: u16, fingerprint: String, changed: bool },
-    /// Vor einer unverschlüsselten FTP-Verbindung. `can_remember`: Die Frage lässt sich für diesen Host abbestellen.
+    /// Before an unencrypted FTP connection. `can_remember`: the question can be switched off for this host.
     Plain { host: String, offers_tls: bool, can_remember: bool },
-    /// Mosh: `active` (das Terminal läuft darüber) oder `fallback` (per SSH, `reason` sagt warum).
+    /// Mosh: `active` (the terminal runs over it) or `fallback` (over SSH, `reason` says why).
     Mosh {
         state: &'static str,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -181,9 +181,9 @@ pub(crate) enum SessionEvent {
         #[serde(skip_serializing_if = "Option::is_none")]
         detail: Option<String>,
     },
-    /// Mosh: Sekunden ohne Nachricht vom Server; `None`, sobald er wieder antwortet.
+    /// Mosh: seconds without a message from the server; `None` as soon as it answers again.
     Reach { silent: Option<u32> },
-    /// Mosh: Steht die SSH-Verbindung daneben für Seitenleiste und Dateien?
+    /// Mosh: is the SSH connection next to it up for sidebar and files?
     Side { linked: bool },
     End { reason: &'static str, message: Option<String>, exit_status: Option<u32> },
 }
@@ -191,7 +191,7 @@ pub(crate) enum SessionEvent {
 #[derive(Serialize, Clone)]
 struct Envelope {
     id: u64,
-    /// Fenster, dem die Sitzung gehört. Die anderen Fenster übergehen das Ereignis.
+    /// Window the session belongs to. The other windows ignore the event.
     window: String,
     #[serde(flatten)]
     event: SessionEvent,
@@ -209,7 +209,7 @@ impl Sessions {
     }
 }
 
-/// Eine neue Nummer für etwas, das wie eine Sitzung Ereignisse schickt und Antworten bekommt.
+/// A new number for something that sends events and gets answers like a session.
 pub(crate) fn number(app: &AppHandle) -> u64 {
     app.state::<Sessions>().next.fetch_add(1, Ordering::Relaxed) + 1
 }
@@ -225,7 +225,7 @@ fn emit(app: &AppHandle, id: u64, event: SessionEvent) {
     }
 }
 
-/// Beendet alle Sitzungen eines Fensters, das geschlossen wurde. Ohne Fenster sähe niemand mehr ihre Ausgabe.
+/// Ends all sessions of a window that was closed. Without a window nobody would see their output any more.
 pub fn close_window(app: &AppHandle, window: &str) {
     crate::ftp::close_window(app, window);
     for live in app.state::<Sessions>().live().values().filter(|live| live.window == window) {
@@ -250,7 +250,7 @@ pub(crate) fn safe_token(text: &str, max: usize) -> bool {
     !text.is_empty() && text.chars().count() <= max && !text.starts_with('-') && !text.chars().any(|c| c.is_whitespace() || c.is_control())
 }
 
-/// Adresse und Port aus einer Schnellverbindung: dieselben Regeln wie für gespeicherte Hosts.
+/// Address and port from quick connect: the same rules as for saved hosts.
 pub(crate) fn check_address(host: &str, port: u16) -> Result<(), CmdError> {
     if !safe_token(host, 255) {
         return Err(CmdError::invalid("address_invalid"));
@@ -261,7 +261,7 @@ pub(crate) fn check_address(host: &str, port: u16) -> Result<(), CmdError> {
     Ok(())
 }
 
-/// Adresse, Port und Benutzer aus der Schnellverbindung über SSH.
+/// Address, port and user from quick connect over SSH.
 fn check_direct(user: &str, host: &str, port: u16) -> Result<(), CmdError> {
     check_address(host, port)?;
     if !safe_token(user, 64) {
@@ -270,8 +270,8 @@ fn check_direct(user: &str, host: &str, port: u16) -> Result<(), CmdError> {
     Ok(())
 }
 
-/// Verbindungsdaten einer Schnellverbindung. Ohne Identität und Schlüssel bleibt nur das Passwort, nach dem der
-/// Verbindungskern fragt; mit ihnen kommen Benutzer, Schlüssel und Passwort aus dem Tresor.
+/// Connection details of a quick connection. Without identity and key only the password remains, which the
+/// connection core asks for; with them, user, key and password come from the vault.
 fn direct_connect(app: &AppHandle, user: String, host: String, port: u16, identity: Option<&str>, key: Option<&str>) -> CmdResult<Connect> {
     let login = if identity.is_some() || key.is_some() { app.state::<AppState>().session().directory()?.login(identity, key)? } else { Default::default() };
     Ok(Connect {
@@ -285,7 +285,7 @@ fn direct_connect(app: &AppHandle, user: String, host: String, port: u16, identi
     })
 }
 
-/// Die Leitung eines seriellen Hosts in der Form, die `glowport-extras` erwartet.
+/// A serial host's line in the form `glowport-extras` expects.
 fn line_of(line: model::Serial) -> serial::Line {
     serial::Line {
         baud: line.baud,
@@ -304,7 +304,7 @@ fn line_of(line: model::Serial) -> serial::Line {
     }
 }
 
-/// Eine Shell dieses Rechners, wie die Oberfläche sie zur Wahl stellt.
+/// A shell on this machine, as the interface offers it for choice.
 #[derive(Serialize)]
 pub struct ShellView {
     id: String,
@@ -313,7 +313,7 @@ pub struct ShellView {
     detail: String,
 }
 
-/// Die Shells, die sich als lokales Terminal öffnen lassen. Nachgesehen wird bei jedem Aufruf neu.
+/// The shells that can be opened as a local terminal. Checked anew on every call.
 #[tauri::command(async)]
 pub fn local_shells() -> Vec<ShellView> {
     local::shells().into_iter().map(|shell| ShellView { id: shell.id, name: shell.name, kind: shell.kind.as_str(), detail: shell.detail }).collect()
@@ -325,13 +325,13 @@ pub struct PortView {
     label: String,
 }
 
-/// Die seriellen Ports, die es gerade gibt.
+/// The serial ports that exist right now.
 #[tauri::command(async)]
 pub fn serial_ports() -> Vec<PortView> {
     serial::ports().into_iter().map(|port| PortView { name: port.name, label: port.label }).collect()
 }
 
-/// Verbindungsdaten eines gespeicherten Hosts in der Form, die der Verbindungskern erwartet.
+/// A saved host's connection details in the form the connection core expects.
 pub(crate) fn connect_for(info: ConnectInfo) -> Connect {
     Connect {
         host: info.address,
@@ -347,7 +347,7 @@ pub(crate) fn connect_for(info: ConnectInfo) -> Connect {
         env: info.env,
         authorities: info.authorities,
         proxy: info.proxy.map(|proxy| {
-            // Ein Benutzer ohne hinterlegtes Passwort meldet sich mit leerem Passwort an.
+            // A user without a stored password signs in with an empty password.
             let password = info.proxy_password.map_or_else(String::new, |p| p.expose().to_string());
             let login = proxy.user.map(|user| net::Login { user, password: Zeroizing::new(password) });
             match proxy.kind {
@@ -363,7 +363,7 @@ pub(crate) fn connect_for(info: ConnectInfo) -> Connect {
     }
 }
 
-/// Mosh-Einstellungen eines Hosts in der Form, die `glowport-net` erwartet.
+/// A host's Mosh settings in the form `glowport-net` expects.
 fn mosh_of(info: MoshInfo) -> net::Mosh {
     let predict = match info.predict.as_str() {
         "always" => net::MoshPredict::Always,
@@ -373,20 +373,20 @@ fn mosh_of(info: MoshInfo) -> net::Mosh {
     net::Mosh { predict, port: info.port, server: info.server }
 }
 
-/// Der Zeichensatz, in den umgewandelt werden muss; `None` bei UTF-8, das unverändert durchgeht.
+/// The character set to convert to; `None` for UTF-8, which passes through unchanged.
 fn charset_of(label: &str) -> Option<&'static Encoding> {
     Encoding::for_label(label.as_bytes()).filter(|encoding| *encoding != encoding_rs::UTF_8)
 }
 
-/// Ausgabe des Servers als UTF-8 für das Terminal. Der Umwandler merkt sich angefangene Zeichen: Eines aus
-/// mehreren Bytes kann auf zwei Pakete verteilt ankommen.
+/// The server's output as UTF-8 for the terminal. The converter remembers started characters: a multi-byte one
+/// can arrive spread over two packets.
 fn to_terminal(decoder: &mut encoding_rs::Decoder, bytes: &[u8]) -> Vec<u8> {
     let mut text = String::with_capacity(decoder.max_utf8_buffer_length(bytes.len()).unwrap_or(bytes.len() * 3));
     let _ = decoder.decode_to_string(bytes, &mut text, false);
     text.into_bytes()
 }
 
-/// Eingabe aus dem Terminal im Zeichensatz des Servers.
+/// Input from the terminal in the server's character set.
 fn to_server(charset: Option<&'static Encoding>, text: String) -> Vec<u8> {
     match charset {
         Some(encoding) => encoding.encode(&text).0.into_owned(),
@@ -394,9 +394,9 @@ fn to_server(charset: Option<&'static Encoding>, text: String) -> Vec<u8> {
     }
 }
 
-/// Mehr Stationen hintereinander braucht niemand; die Grenze fängt auch Kreise in beschädigten Daten ab.
-/// Bittet eine laufende Sitzung um einen zusätzlichen Kanal auf ihrer Verbindung, für SFTP oder einen Befehl.
-/// Zu welchem gespeicherten Host eine Sitzung führt und wie sie heißt.
+/// Nobody needs more hops in a row; the limit also catches cycles in damaged data.
+/// Asks a running session for an additional channel on its connection, for SFTP or a command.
+/// Which saved host a session leads to and what it is called.
 pub(crate) fn origin(app: &AppHandle, id: u64) -> Option<(Option<String>, String)> {
     app.state::<Sessions>().live().get(&id).map(|live| (live.host_id.clone(), live.label.clone()))
 }
@@ -409,7 +409,7 @@ pub(crate) async fn extra_channel(app: &AppHandle, id: u64) -> Option<net::files
 
 const MAX_STATIONS: usize = 8;
 
-/// Verbindungsdaten eines gespeicherten Hosts samt aller Sprung-Server davor. Jede Station trägt ihre Kennung als Marke.
+/// A saved host's connection details including all jump hosts before it. Every hop carries its ID as tag.
 pub(crate) fn connect_chain(directory: &Directory, id: &str) -> CmdResult<Connect> {
     fn build(directory: &Directory, id: &str, seen: &mut Vec<String>) -> CmdResult<Connect> {
         if seen.len() >= MAX_STATIONS || seen.iter().any(|s| s == id) {
@@ -423,11 +423,11 @@ pub(crate) fn connect_chain(directory: &Directory, id: &str) -> CmdResult<Connec
     build(directory, id, &mut Vec::new())
 }
 
-/// Öffnet eine Sitzung und liefert ihre Nummer. `output` bekommt die Terminal-Ausgabe als rohe Bytes.
+/// Opens a session and returns its number. `output` gets the terminal output as raw bytes.
 #[tauri::command]
 pub async fn session_open(app: AppHandle, window: Window, target: Target, columns: u32, rows: u32, output: Channel<InvokeResponseBody>) -> Result<u64, CmdError> {
     let size = (columns, rows);
-    // Jede Art liefert dieselbe Sitzung: Ab hier ist gleich, ob SSH, Telnet, ein Port oder eine Shell dahintersteckt.
+    // Every kind returns the same session: from here on it does not matter whether SSH, Telnet, a port or a shell is behind it.
     let (session, host_id, charset, label) = match target {
         Target::Host { id } => {
             let state = app.state::<AppState>();
@@ -438,7 +438,7 @@ pub async fn session_open(app: AppHandle, window: Window, target: Target, column
                     let info = directory.connect_info(&id)?;
                     let charset = charset_of(&info.charset);
                     let chain = connect_chain(directory, &id)?;
-                    // Mosh gilt nur für das Terminal des Ziels, nicht für Dateien, Befehle und Sprung-Server.
+                    // Mosh only applies to the destination's terminal, not to files, commands and jump hosts.
                     let mosh = info.mosh.map(mosh_of);
                     (net::open(Connect { size, detect_os: true, mosh, ..chain }), Some(id), charset, info.name)
                 }
@@ -448,7 +448,7 @@ pub async fn session_open(app: AppHandle, window: Window, target: Target, column
                     (telnet::open(telnet), Some(id), charset, info.name)
                 }
                 Endpoint::Serial(info) => (serial::open(info.port, line_of(info.line)), Some(id), charset_of(&info.charset), info.name),
-                // Ein FTP-Host hat kein Terminal.
+                // An FTP host has no terminal.
                 Endpoint::Ftp => return Err(CmdError::invalid("protocol_invalid")),
             }
         }
@@ -464,7 +464,7 @@ pub async fn session_open(app: AppHandle, window: Window, target: Target, column
             (telnet::open(telnet::Telnet { host, port, size, ..telnet::Telnet::default() }), None, None, label)
         }
         Target::Local { shell } => {
-            // Gestartet wird nur, was auf diesem Rechner als Shell gefunden wurde; die Oberfläche nennt nie ein Programm.
+            // Only what was found as a shell on this machine is started; the interface never names a program.
             let shell = local::shell(&shell).ok_or_else(|| CmdError::new("shell_missing", "Diese Shell gibt es auf diesem Rechner nicht"))?;
             let label = shell.name.clone();
             (local::open(shell, size), None, None, label)
@@ -496,9 +496,9 @@ pub async fn session_open(app: AppHandle, window: Window, target: Target, column
     Ok(id)
 }
 
-/// Lässt den Aufbau einer Port-Regel als Eintrag der Sitzungsverwaltung laufen, damit er dieselben Rückfragen
-/// stellen kann wie ein Terminal. `rule` nennt die Regel und ihren Einschalt-Vorgang; an sie geht das Ergebnis.
-/// Liefert die Nummer, unter der die Ereignisse `session` kommen.
+/// Lets the setup of a port rule run as an entry of the session manager, so it can ask the same prompts
+/// as a terminal. `rule` names the rule and its switch-on run; the result goes to it.
+/// Returns the number under which the `session` events arrive.
 pub(crate) fn connect_forward(app: &AppHandle, window: &str, host_id: String, label: String, link: net::Session, rule: (String, u64)) -> u64 {
     let sessions = app.state::<Sessions>();
     let number = sessions.next.fetch_add(1, Ordering::Relaxed) + 1;
@@ -525,18 +525,18 @@ pub(crate) fn connect_forward(app: &AppHandle, window: &str, host_id: String, la
     number
 }
 
-/// Bricht einen Verbindungsaufbau oder eine Sitzung ab.
+/// Cancels a connection setup or a session.
 pub(crate) fn close(app: &AppHandle, id: u64) {
     app.state::<Sessions>().send(id, Command::Close);
 }
 
-/// Baut für die Seite „Dateien“ eine Verbindung zu einem gespeicherten Host auf, mit denselben Rückfragen wie ein
-/// Terminal (unbekannter Server, Passwort, Fragen des Servers). Liefert die Nummer, unter der die Ereignisse
-/// `session` kommen und `session_answer` die Antworten annimmt. Bei „verbunden“ steht die Verbindung bereit;
-/// scheitert es, kommt ein Ende mit dem Grund.
+/// Sets up a connection to a saved host for the Files page, with the same prompts as a
+/// terminal (unknown server, password, server questions). Returns the number under which the
+/// `session` events arrive and `session_answer` takes the answers. On “connected” the connection is ready;
+/// if it fails, an end with the reason comes.
 #[tauri::command]
 pub fn fs_connect(app: AppHandle, window: Window, id: String) -> CmdResult<u64> {
-    // Ein FTP-Host geht seinen eigenen Weg, mit denselben Ereignissen.
+    // An FTP host goes its own way, with the same events.
     if app.state::<AppState>().session().directory()?.is_ftp(&id) {
         return crate::ftp::connect(&app, window.label().to_string(), crate::ftp::Who::Host(id));
     }
@@ -572,8 +572,8 @@ pub fn fs_connect(app: AppHandle, window: Window, id: String) -> CmdResult<u64> 
     Ok(number)
 }
 
-/// Reicht die Ereignisse einer Sitzung weiter, bis sie endet. `rule` ist gesetzt, wenn hier keine Sitzung, sondern
-/// eine Port-Regel verbindet: die Regel und ihr Einschalt-Vorgang.
+/// Passes on a session's events until it ends. `rule` is set if not a session but a port rule
+/// connects here: the rule and its switch-on run.
 async fn pump(app: AppHandle, id: u64, mut events: tokio::sync::mpsc::Receiver<Event>, host_id: Option<String>, charset: Option<&'static Encoding>, rule: Option<(String, u64)>) {
     let sessions = app.state::<Sessions>();
     let mut decoder = charset.map(Encoding::new_decoder_without_bom_handling);
@@ -585,8 +585,8 @@ async fn pump(app: AppHandle, id: u64, mut events: tokio::sync::mpsc::Receiver<E
         emit(&app, id, event);
     };
 
-    // Meldet, wie weit die Verbindung ist. Hat die Anmeldung geklappt, wandert jetzt die Schlüsseldatei in den
-    // Tresor, wenn das gewünscht war.
+    // Reports how far the connection is. If signing in worked, the key file now moves into the
+    // vault, if that was wanted.
     let reached = |phase: &'static str| {
         let adopt = sessions.live().get_mut(&id).and_then(|live| {
             live.phase = phase;
@@ -601,7 +601,7 @@ async fn pump(app: AppHandle, id: u64, mut events: tokio::sync::mpsc::Receiver<E
         }
     };
 
-    // Fragt ein Sprung-Server statt des Ziels, bekommt die Oberfläche seinen Namen dazu.
+    // If a jump host asks instead of the destination, the interface gets its name too.
     let named = |station: &net::Station| (station.tag.is_some() && station.tag != host_id).then(|| station.label.clone());
 
     while let Some(event) = events.recv().await {
@@ -629,7 +629,7 @@ async fn pump(app: AppHandle, id: u64, mut events: tokio::sync::mpsc::Receiver<E
             ),
             Event::Notice { code, message } => emit(&app, id, SessionEvent::Notice { code, message }),
             Event::HostKey { host, port, key, reply } => {
-                // Ist der Tresor gesperrt, lässt sich nichts nachschlagen: Dann wird gefragt wie bei einem unbekannten Server.
+                // If the vault is locked, nothing can be looked up: then the user is asked as for an unknown server.
                 let verdict = app.state::<AppState>().session().directory().map(|d| d.judge_host_key(&host, port, &key.openssh)).unwrap_or(Verdict::Unknown);
                 let (changed, known) = match verdict {
                     Verdict::Trusted => {
@@ -647,8 +647,8 @@ async fn pump(app: AppHandle, id: u64, mut events: tokio::sync::mpsc::Receiver<E
                     SecretKind::Password => ("password", None),
                     SecretKind::Passphrase { file } => ("passphrase", Some(file)),
                 };
-                // Speichern lässt sich nur für einen gespeicherten Host, auch für einen Sprung-Server: sein Passwort,
-                // oder bei einer Passphrase die Schlüsseldatei selbst (sie wandert dann in den Tresor).
+                // Saving only works for a saved host, also for a jump host: its password,
+                // or for a passphrase the key file itself (it then moves into the vault).
                 let can_save = station.tag.is_some();
                 let key_file = file.clone().zip(station.tag.clone());
                 ask(Pending::Secret { reply, key_file }, SessionEvent::Secret { kind, attempt, file, can_save, station: named(&station) });
@@ -687,7 +687,7 @@ async fn pump(app: AppHandle, id: u64, mut events: tokio::sync::mpsc::Receiver<E
                     live.unacked += bytes.len();
                     match &live.output {
                         Some(output) => drop(output.send(InvokeResponseBody::Raw(bytes))),
-                        // Die Sitzung wechselt gerade das Fenster: sammeln, bis das neue sie aufnimmt.
+                        // The session is changing windows right now: collect until the new one picks it up.
                         None => live.backlog.extend_from_slice(&bytes),
                     }
                     if !live.paused && live.unacked > PAUSE_ABOVE {
@@ -696,8 +696,8 @@ async fn pump(app: AppHandle, id: u64, mut events: tokio::sync::mpsc::Receiver<E
                     }
                 }
             }
-            // Eine Verbindung nur für Dateien steht: Die Seite „Dateien“ benutzt sie ab jetzt für diesen Host.
-            // Sie ist das letzte Ereignis; die Oberfläche hört erst „verbunden“, wenn die Verbindung bereitliegt.
+            // A connection for files only is up: from now on the Files page uses it for this host.
+            // It is the last event; the interface only hears “connected” when the connection is ready.
             Event::Files(remote) => {
                 if let Some(host) = &host_id {
                     crate::files::adopt(&app, crate::files::Place::Host { id: host.clone() }, crate::store::Store::Sftp(remote)).await;
@@ -705,8 +705,8 @@ async fn pump(app: AppHandle, id: u64, mut events: tokio::sync::mpsc::Receiver<E
                 reached("connected");
                 break;
             }
-            // Die Weiterleitung einer Port-Regel steht: Ab jetzt gehört sie der Verwaltung der Regeln. Auch das ist
-            // das letzte Ereignis; die Verbindung selbst läuft dort weiter.
+            // A port rule's forward is up: from now on it belongs to the rule manager. That too is
+            // the last event; the connection itself keeps running there.
             Event::Forward(tunnel) => {
                 if let Some((rule, turn)) = &rule {
                     crate::forwards::adopt(&app, rule, *turn, tunnel);
@@ -718,7 +718,7 @@ async fn pump(app: AppHandle, id: u64, mut events: tokio::sync::mpsc::Receiver<E
                 if let Some((rule, turn)) = &rule {
                     crate::forwards::ended(&app, rule, *turn, &end);
                 }
-                // Mit der Sitzung endet auch ihr Mitschnitt; die Datei wird dabei abgeschlossen.
+                // With the session its recording ends too; the file is finished on the way.
                 let gone = sessions.live().remove(&id);
                 crate::files::session_ended(&app, id);
                 if let Some(live) = gone {
@@ -732,7 +732,7 @@ async fn pump(app: AppHandle, id: u64, mut events: tokio::sync::mpsc::Receiver<E
     crate::files::session_ended(&app, id);
 }
 
-/// Mosh: die SSH-Verbindung neben dem Terminal neu aufbauen, mit Rückfragen, falls nötig.
+/// Mosh: re-establish the SSH connection next to the terminal, with prompts if necessary.
 #[tauri::command]
 pub fn session_relink(sessions: State<'_, Sessions>, id: u64) {
     sessions.send(id, Command::Relink);
@@ -749,7 +749,7 @@ pub fn session_resize(sessions: State<'_, Sessions>, id: u64, columns: u32, rows
     sessions.send(id, Command::Resize(columns, rows));
 }
 
-/// Die Oberfläche bestätigt, wie viele Bytes sie gezeichnet hat.
+/// The interface confirms how many bytes it has drawn.
 #[tauri::command]
 pub fn session_ack(sessions: State<'_, Sessions>, id: u64, bytes: usize) {
     if let Some(live) = sessions.live().get_mut(&id) {
@@ -769,7 +769,7 @@ pub fn session_close(app: AppHandle, sessions: State<'_, Sessions>, id: u64) {
     sessions.send(id, Command::Close);
 }
 
-/// Antwort der Oberfläche auf die offene Rückfrage einer Sitzung.
+/// The interface's answer to a session's open prompt.
 #[tauri::command]
 pub fn session_answer(app: AppHandle, sessions: State<'_, Sessions>, id: u64, answer: Answer) {
     let Some(answer) = crate::ftp::answer(&app, id, answer) else { return };
@@ -782,7 +782,7 @@ pub fn session_answer(app: AppHandle, sessions: State<'_, Sessions>, id: u64, an
     match (pending, answer) {
         (Pending::HostKey { reply, key, host, port }, Answer::HostKey { accept }) => {
             if accept {
-                // Lässt sich die Entscheidung nicht speichern, gilt sie für diese Verbindung trotzdem.
+                // If the decision cannot be saved, it still applies to this connection.
                 let saved = app.state::<AppState>().session().directory().map_err(drop).and_then(|d| d.trust_host_key(&host, port, &key.algorithm, &key.fingerprint, &key.openssh).map_err(drop));
                 match saved {
                     Ok(()) => emit_snapshot(&app),
@@ -803,18 +803,18 @@ pub fn session_answer(app: AppHandle, sessions: State<'_, Sessions>, id: u64, an
         (Pending::Interactive(reply), Answer::Interactive { values }) => {
             let _ = reply.send(values.map(|v| v.into_iter().map(Zeroizing::new).collect()));
         }
-        // Eine Antwort, die nicht zur Frage passt: Die Antwortkanäle fallen weg, das gilt als abgelehnt.
+        // An answer that does not fit the question: the reply channels are dropped, which counts as refused.
         _ => {}
     }
 }
 
-/// Anzahl laufender Sitzungen in allen Fenstern, für die Warnung beim Schließen des Hauptfensters.
+/// Number of running sessions in all windows, for the warning when closing the main window.
 #[tauri::command]
 pub fn session_count(sessions: State<'_, Sessions>) -> usize {
     sessions.live().len()
 }
 
-/// Hält Sitzungen an, deren Tab das Fenster wechselt: Ab jetzt wird ihre Ausgabe gesammelt statt gezeichnet.
+/// Pauses sessions whose tab changes windows: from now on their output is collected instead of drawn.
 #[tauri::command]
 pub fn session_hold(sessions: State<'_, Sessions>, ids: Vec<u64>) {
     let mut live = sessions.live();
@@ -825,7 +825,7 @@ pub fn session_hold(sessions: State<'_, Sessions>, ids: Vec<u64>) {
     }
 }
 
-/// Übergibt angehaltene Sitzungen einem anderen Fenster. Aufgenommen werden sie dort mit `session_attach`.
+/// Hands paused sessions to another window. They are picked up there with `session_attach`.
 pub(crate) fn hand_over(app: &AppHandle, ids: &[u64], window: &str) {
     let sessions = app.state::<Sessions>();
     let mut live = sessions.live();
@@ -839,11 +839,11 @@ pub(crate) fn hand_over(app: &AppHandle, ids: &[u64], window: &str) {
 #[derive(Serialize)]
 pub struct Attached {
     phase: &'static str,
-    /// Läuft das Terminal über Mosh? Das neue Fenster zeigt es wie das alte.
+    /// Does the terminal run over Mosh? The new window shows it like the old one.
     mosh: bool,
 }
 
-/// Ein Fenster nimmt eine laufende Sitzung auf: Es bekommt, was inzwischen angefallen ist, und danach alles Weitere.
+/// A window picks up a running session: it gets what accumulated in the meantime, and everything after that.
 #[tauri::command]
 pub fn session_attach(app: AppHandle, window: Window, sessions: State<'_, Sessions>, id: u64, columns: u32, rows: u32, output: Channel<InvokeResponseBody>) -> CmdResult<Attached> {
     let (phase, asking, mosh) = {
@@ -851,7 +851,7 @@ pub fn session_attach(app: AppHandle, window: Window, sessions: State<'_, Sessio
         let session = live.get_mut(&id).ok_or_else(|| CmdError::new("session_gone", "Die Sitzung gibt es nicht mehr"))?;
         session.window = window.label().to_string();
         let backlog = std::mem::take(&mut session.backlog);
-        // Was das alte Fenster nicht mehr bestätigt hat, gilt als gezeichnet; offen ist nur das Gesammelte.
+        // What the old window no longer acknowledged counts as drawn; only what was collected is open.
         session.unacked = backlog.len();
         if !backlog.is_empty() {
             let _ = output.send(InvokeResponseBody::Raw(backlog));
@@ -864,14 +864,14 @@ pub fn session_attach(app: AppHandle, window: Window, sessions: State<'_, Sessio
         let _ = session.commands.send(Command::Resize(columns, rows));
         (session.phase, session.asking.clone(), session.mosh)
     };
-    // Eine Rückfrage, die beim Wechsel offen war, erscheint im neuen Fenster noch einmal.
+    // A prompt that was open during the change appears once more in the new window.
     if let Some(event) = asking {
         emit(&app, id, event);
     }
     Ok(Attached { phase, mosh })
 }
 
-/// Schaltet den Mitschnitt einer Sitzung. `name` und `address` stehen später in der Liste der Mitschnitte.
+/// Switches a session's recording. `name` and `address` later appear in the list of recordings.
 #[tauri::command]
 pub fn session_record(app: AppHandle, sessions: State<'_, Sessions>, id: u64, on: bool, name: String, address: String) -> CmdResult<()> {
     let mut live = sessions.live();
@@ -885,7 +885,7 @@ pub fn session_record(app: AppHandle, sessions: State<'_, Sessions>, id: u64, on
     Ok(())
 }
 
-/// Dateien, in die gerade geschrieben wird.
+/// Files currently being written.
 fn recording_now(sessions: &Sessions) -> Vec<String> {
     sessions.live().values().filter_map(|live| live.recorder.as_ref().map(|recorder| recorder.id().to_string())).collect()
 }
@@ -902,7 +902,7 @@ pub fn log_read(app: AppHandle, id: String) -> CmdResult<String> {
     recordings::read(&dir, &id).map_err(|e| CmdError::new(if e.kind() == std::io::ErrorKind::NotFound { "not_found" } else { "io" }, e.to_string()))
 }
 
-/// Löscht einen Mitschnitt samt Datei. Einer, der noch läuft, muss erst beendet werden.
+/// Deletes a recording together with its file. One that is still running must be ended first.
 #[tauri::command(async)]
 pub fn log_delete(app: AppHandle, sessions: State<'_, Sessions>, id: String) -> CmdResult<Vec<Recording>> {
     let dir = crate::data_dir(&app).map_err(|e| CmdError::new("io", e))?;
@@ -916,12 +916,12 @@ pub fn log_delete(app: AppHandle, sessions: State<'_, Sessions>, id: String) -> 
 
 #[derive(Serialize)]
 pub struct Renamed {
-    /// Die Kennung des Mitschnitts nach dem Umbenennen; sie folgt dem Dateinamen.
+    /// The recording's ID after renaming; it follows the file name.
     id: String,
     list: Vec<Recording>,
 }
 
-/// Gibt einem fertigen Mitschnitt einen eigenen Namen; ein leerer nimmt ihn wieder weg.
+/// Gives a finished recording a name of its own; an empty one takes it away again.
 #[tauri::command(async)]
 pub fn log_rename(app: AppHandle, sessions: State<'_, Sessions>, id: String, title: String) -> CmdResult<Renamed> {
     let dir = crate::data_dir(&app).map_err(|e| CmdError::new("io", e))?;
@@ -933,7 +933,7 @@ pub fn log_rename(app: AppHandle, sessions: State<'_, Sessions>, id: String, tit
     Ok(Renamed { id, list: recordings::list(&dir, &running) })
 }
 
-/// Zeigt die Datei eines Mitschnitts im Dateimanager; ohne Kennung den Ordner aller Mitschnitte.
+/// Shows a recording's file in the file manager; without an ID the folder of all recordings.
 #[tauri::command(async)]
 pub fn log_reveal(app: AppHandle, id: Option<String>) -> CmdResult<()> {
     let dir = crate::data_dir(&app).map_err(|e| CmdError::new("io", e))?;
@@ -946,7 +946,7 @@ pub fn log_reveal(app: AppHandle, id: Option<String>) -> CmdResult<()> {
         explorer.arg(&target);
         explorer
     } else {
-        // Andere Systeme kennen kein einheitliches „Datei markieren“; dort öffnet sich der Ordner.
+        // Other systems know no uniform “select file”; there the folder opens.
         let mut opener = std::process::Command::new(if cfg!(target_os = "macos") { "open" } else { "xdg-open" });
         opener.arg(if id.is_some() { target.parent().unwrap_or(&target) } else { &target });
         opener
@@ -971,7 +971,7 @@ mod tests {
         assert_eq!(to_server(Some(latin), "Größe".into()), [b'G', b'r', 0xF6, 0xDF, b'e']);
         assert_eq!(to_server(None, "ä".into()), "ä".as_bytes());
 
-        // Ein Zeichen aus zwei Bytes, auf zwei Pakete verteilt, kommt heil an.
+        // A two-byte character spread over two packets arrives intact.
         let mut decoder = charset_of("gbk").unwrap().new_decoder_without_bom_handling();
         let first = to_terminal(&mut decoder, &[b'a', 0xC4]);
         let second = to_terminal(&mut decoder, &[0xE3, b'b']);

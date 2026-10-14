@@ -12,13 +12,13 @@
   type Part = 'hosts' | 'keys' | 'forwards' | 'snippets' | 'knownHosts';
 
   let found = $state<ImportFound[] | null>(null);
-  /** Was gerade gelesen wird: eine Quelle, eine gewählte Datei oder nichts. */
+  /** What is being read right now: a source, a chosen file or nothing. */
   let reading = $state<ImportSource | 'file' | null>(null);
   let draft = $state<ImportDraft | null>(null);
   let part = $state<Part>('hosts');
   let picked = $state<Record<Part, string[]>>({ hosts: [], keys: [], forwards: [], snippets: [], knownHosts: [] });
   let query = $state('');
-  /** Ziel der Hosts: leer = oberste Ebene, NEW = neue Gruppe, sonst die Kennung einer Gruppe. */
+  /** Destination of the hosts: empty = top level, NEW = new group, otherwise a group's ID. */
   const NEW = '\u0000new';
   let into = $state('');
   let newGroup = $state('');
@@ -49,7 +49,7 @@
       knownHosts: next.knownHosts.filter((k) => !k.existing).map((k) => k.ref),
     };
     part = PARTS.find((p) => next[p].length) ?? 'hosts';
-    // Quellen ohne eigene Ordner landen in einer Gruppe, die nach ihnen heißt; so bleibt die Übersicht sauber.
+    // Sources without folders of their own land in a group named after them; that keeps the overview tidy.
     into = next.hosts.length && !next.groups.length ? NEW : '';
     newGroup = next.source === 'csv' || next.source === 'glowport' ? t('imp.into.default') : sourceInfo(next.source).name;
     existing = 'skip';
@@ -85,7 +85,7 @@
   function close() {
     discard();
     importUi.open = false;
-    // Beim nächsten Öffnen neu nachsehen: Inzwischen kann ein Programm dazugekommen sein.
+    // Look again on the next opening: a program may have been added in the meantime.
     found = null;
   }
 
@@ -100,14 +100,14 @@
   const needle = $derived(query.trim().toLowerCase());
   const hit = (...texts: (string | null)[]) => !needle || texts.some((text) => text?.toLowerCase().includes(needle));
 
-  /** Weg einer Gruppe des Entwurfs von oben nach unten. */
+  /** Path of a draft group from top to bottom. */
   function draftPath(ref: string | null): string {
     const names: string[] = [];
     for (let g = draft?.groups.find((x) => x.ref === ref), n = 0; g && n < 20; g = draft?.groups.find((x) => x.ref === g!.parent), n++) names.unshift(g.name);
     return names.join(' › ');
   }
 
-  /** Hosts nach ihrer Gruppe, Hosts ohne Gruppe zuerst. */
+  /** Hosts by their group, hosts without a group first. */
   const sections = $derived.by(() => {
     if (!draft) return [];
     const by = new Map<string, DraftHost[]>();
@@ -121,7 +121,7 @@
 
   const hostByRef = (ref: string | null) => draft?.hosts.find((h) => h.ref === ref);
   const keyByRef = (ref: string | null) => draft?.keys.find((k) => k.ref === ref);
-  /** Wohin ein Host der Quelle führt. Der übliche Port (22, bei Telnet 23) bleibt weg; eine serielle Leitung hat keinen. */
+  /** Where a source's host leads. The usual port (22, for Telnet 23) is left out; a serial line has none. */
   const target = (h: DraftHost) => {
     if (h.protocol === 'serial') return h.address;
     const usual = h.protocol === 'telnet' ? 23 : h.protocol === 'ftp' ? 21 : 22;
@@ -143,7 +143,7 @@
 
   const chosenHosts = $derived(draft ? draft.hosts.filter((h) => picked.hosts.includes(h.ref)) : []);
   const known = $derived(chosenHosts.filter((h) => h.existing).length);
-  /** Hosts, die der Import anlegt oder ändert. */
+  /** Hosts the import creates or changes. */
   const effective = $derived(existing === 'skip' ? chosenHosts.length - known : chosenHosts.length);
   const others = $derived(picked.keys.length + picked.forwards.length + picked.snippets.length + picked.knownHosts.length);
   const hasPasswords = $derived(!!draft?.hosts.some((h) => h.hasPassword && !h.notes.some((n) => n.code === 'password_unreadable')));

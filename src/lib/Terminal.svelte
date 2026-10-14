@@ -17,16 +17,16 @@
   import { suggest, type Suggestion } from './suggest';
   import Icon from './ui/Icon.svelte';
 
-  /** `visible`: Der Tab des Bereichs ist vorn. `focused`: Der Bereich hat in seinem Tab die Tastatur. */
+  /** `visible`: the pane's tab is in front. `focused`: the pane has the keyboard in its tab. */
   let { pane, visible, focused }: { pane: Pane; visible: boolean; focused: boolean } = $props();
 
   const MIN_FONT = 8;
   const MAX_FONT = 32;
 
   /**
-   * Antworten des Terminals auf Anfragen des Programms darin: wo die Schreibmarke steht, was für ein Terminal es ist,
-   * ob das Fenster die Tastatur hat. Windows stellt die erste Frage beim Start jedes lokalen Terminals und wartet
-   * auf die Antwort. (Umschalt+F3 sieht aus wie eine Antwort zur Schreibmarke und zählt deshalb mit.)
+   * The terminal's answers to requests from the program inside it: where the cursor is, what kind of terminal it is,
+   * whether the window has the keyboard. Windows asks the first question when every local terminal starts and waits
+   * for the answer. (Shift+F3 looks like a cursor answer and therefore counts too.)
    */
   const REPLIES = [/^\x1b\[[?>]?[\d;]*[cRn]$/, /^\x1b\[[IO]$/, /^\x1b[\]P]/];
   const isReply = (text: string) => REPLIES.some((reply) => reply.test(text));
@@ -42,7 +42,7 @@
 
   const scheme = $derived(schemeFor(pane.target));
 
-  /** Zusatz, der Zeichenfolgen wie `!=` und `=>` als ein Zeichen der Schrift zeichnen lässt. Geladen wird er erst bei Bedarf. */
+  /** Add-on that draws character sequences like `!=` and `=>` as one glyph of the font. It is only loaded when needed. */
   let ligatures: { dispose(): void } | undefined;
   async function setLigatures(on: boolean) {
     if (!on) {
@@ -53,7 +53,7 @@
     if (ligatures || !terminal) return;
     try {
       const { LigaturesAddon } = await import('@xterm/addon-ligatures');
-      // Inzwischen kann das Terminal geschlossen oder der Schalter wieder aus sein.
+      // In the meantime the terminal may have been closed or the switch turned off again.
       if (!terminal || ligatures || !settings.termLigatures) return;
       const addon = new LigaturesAddon();
       terminal.loadAddon(addon);
@@ -68,24 +68,24 @@
   }
 
   /**
-   * Tasten, die Glowport selbst behandelt. `false` heißt: Das Terminal schickt die Taste nicht an den Server.
-   * Strg+Buchstabe bleibt der Shell, außer Strg+C mit Markierung (kopieren) und Strg+V (einfügen).
+   * Keys Glowport handles itself. `false` means: the terminal does not send the key to the server.
+   * Ctrl+letter stays with the shell, except Ctrl+C with a selection (copy) and Ctrl+V (paste).
    */
   function keys(event: KeyboardEvent): boolean {
     if (event.type !== 'keydown') return true;
-    // Ein Tastenkürzel, das einem Snippet gehört, behandelt das Fenster; die Shell bekommt die Taste nicht.
+    // A shortcut that belongs to a snippet is handled by the window; the shell does not get the key.
     const hotkey = hotkeyOf(event);
     if (hotkey && snippetForHotkey(hotkey)) return false;
     if (hints.length && !event.ctrlKey && !event.altKey && !event.metaKey && hintKey(event)) return false;
     if (!event.ctrlKey) return true;
     const key = event.key.toLowerCase();
-    // Strg+Alt+Pfeil wechselt den Bereich; das erledigt die Oberfläche.
+    // Ctrl+Alt+arrow switches the pane; the interface does that.
     if (event.altKey) return !key.startsWith('arrow');
-    // Tab-Wechsel (Strg+Tab) und Tab schließen (Strg+Umschalt+W) gehören der Oberfläche.
+    // Switching tabs (Ctrl+Tab) and closing a tab (Ctrl+Shift+W) belong to the interface.
     if (key === 'tab') return false;
     if (event.shiftKey) {
-      // Teilen (D rechts, E unten), Tab schließen, Multi-Exec, lokales Terminal (T).
-      // Strg+Umschalt+K öffnet im Terminal die Suche; Strg+K allein gehört der Sitzung (nano: Zeile ausschneiden).
+      // Split (D right, E down), close tab, multi-exec, local terminal (T).
+      // Ctrl+Shift+K opens search in the terminal; Ctrl+K alone belongs to the session (nano: cut line).
       if (key === 'w' || key === 'd' || key === 'e' || key === 'm' || key === 't' || key === 'k') return false;
       if (key === 'f') return (openFind(), false);
       if (key === 'c') return (copy(), false);
@@ -112,28 +112,28 @@
   }
 
   /**
-   * Rechtsklick wie bei Termius: nie ein Kontextmenü. Mit Markierung wird kopiert, ohne Markierung eingefügt.
-   * Hat das Programm im Terminal die Maus angefordert (htop, mc, tmux), gehört der Rechtsklick ihm; Umschalt fügt trotzdem ein.
+   * Right-click as in Termius: never a context menu. With a selection it copies, without one it pastes.
+   * If the program in the terminal requested the mouse (htop, mc, tmux), the right-click belongs to it; Shift pastes anyway.
    */
   function rightClick(event: MouseEvent) {
-    // Die Suchleiste ist ein gewöhnliches Eingabefeld: Ein Rechtsklick dort fügt nichts ins Terminal ein.
+    // The search bar is an ordinary input field: a right-click there pastes nothing into the terminal.
     if ((event.target as Element).closest('.findbar')) return;
     event.preventDefault();
-    // xterm.js bereitet sonst sein Eingabefeld auf das Menü vor und füllt es mit der Markierung.
+    // Otherwise xterm.js prepares its input field for the menu and fills it with the selection.
     event.stopPropagation();
     if (!terminal) return;
     if (terminal.hasSelection()) copy();
     else if (terminal.modes.mouseTrackingMode === 'none' || event.shiftKey) paste();
   }
 
-  // ---------- Vorschläge beim Tippen ----------
+  // ---------- Suggestions while typing ----------
 
   let hints = $state<Suggestion[]>([]);
   let hintIndex = $state(0);
   let hintStyle = $state('');
-  /** Wo die Zeile begann, an der getippt wird: Zeile im Verlauf und Spalte hinter der Eingabeaufforderung. */
+  /** Where the line being typed began: line in the scrollback and column after the prompt. */
   let anchor: { row: number; column: number } | null = null;
-  /** Mit Esc weggeklickt: bis zur nächsten Zeile kommen keine Vorschläge. */
+  /** Dismissed with Esc: no suggestions until the next line. */
   let dismissed = false;
   let hintTicket = 0;
   let hintTimer: ReturnType<typeof setTimeout> | undefined;
@@ -144,12 +144,12 @@
   }
 
   /**
-   * Liest mit, was getippt wird, aber nur um zu wissen, wann eine neue Zeile beginnt. Was in der Zeile steht,
-   * kommt später aus dem Terminal selbst: So stimmt es auch nach Tab, Pfeiltasten und dem Verlauf der Shell,
-   * und wo nichts angezeigt wird (Passwort), gibt es auch nichts vorzuschlagen.
+   * Reads along with what is typed, but only to know when a new line begins. What is in the line
+   * comes later from the terminal itself: that way it is right even after Tab, arrow keys and the shell's history,
+   * and where nothing is displayed (password), there is nothing to suggest either.
    */
   function track(text: string) {
-    // Eingabetaste, Strg+C, Strg+D: Die Zeile ist zu Ende. Strg+L zeichnet neu, danach stimmt die Stelle nicht mehr.
+    // Enter, Ctrl+C, Ctrl+D: the line is over. Ctrl+L redraws, after that the position is no longer right.
     if (/[\r\n\x03\x04\x0c]/.test(text)) {
       anchor = null;
       dismissed = false;
@@ -159,7 +159,7 @@
     if (!anchor && buffer) anchor = { row: buffer.baseY + buffer.cursorY, column: buffer.cursorX };
   }
 
-  /** Die Zeile zwischen Eingabeaufforderung und Schreibmarke, oder null, wenn sie sich nicht sicher bestimmen lässt. */
+  /** The line between prompt and cursor, or null if it cannot be determined reliably. */
   function typedLine(): string | null {
     const term = terminal;
     const buffer = term?.buffer.active;
@@ -169,32 +169,32 @@
     let line = '';
     for (let r = anchor.row; r <= row; r++) {
       const cells = buffer.getLine(r);
-      // Zwischen Anfang und Schreibmarke darf nur umbrochener Text liegen, keine Ausgabe eines Programms.
+      // Between start and cursor only wrapped text may lie, no output of a program.
       if (!cells || (r > anchor.row && !cells.isWrapped)) return null;
       line += cells.translateToString(false, r === anchor.row ? anchor.column : 0, r === row ? buffer.cursorX : term.cols);
     }
-    // Steht rechts der Schreibmarke noch etwas, wird mitten in der Zeile bearbeitet.
+    // If there is still something right of the cursor, editing happens mid-line.
     if (buffer.getLine(row)?.translateToString(true, buffer.cursorX).trim()) return null;
     return line;
   }
 
   async function refreshHints() {
     const ticket = ++hintTicket;
-    // Vorgeschlagen werden Befehle und Pfade eines Linux-Servers; die Pfade kommen über SSH. Anderswo passten sie nicht.
+    // Commands and paths of a Linux server are suggested; the paths come over SSH. Elsewhere they would not fit.
     const line = settings.termSuggest && pane.kind === 'ssh' && visible && focused && !pane.prompt && pane.phase === 'connected' ? typedLine() : null;
-    // Ist die Zeile wieder leer (Strg+U, alles gelöscht), gilt ein früheres Esc nicht mehr.
+    // If the line is empty again (Ctrl+U, everything deleted), an earlier Esc no longer applies.
     if (line === '') dismissed = false;
     if (dismissed || !line?.trim()) return void (hints.length && (hints = []));
     const found = await suggest({ line, place: pane.sessionId === null ? null : { kind: 'session', id: pane.sessionId }, cwd: pane.cwd, lang: settings.lang, snippets: vault.snippets });
     if (ticket !== hintTicket) return;
-    // Inzwischen kann weitergetippt worden sein; dann kommt gleich die nächste Runde.
+    // Typing may have continued in the meantime; then the next round comes right away.
     if (typedLine() !== line) return;
     hints = found;
     hintIndex = 0;
     if (found.length) placeHints(found[0].replace);
   }
 
-  /** Setzt die Liste unter den Anfang des Wortes, das ergänzt wird; weit unten im Terminal darüber. */
+  /** Places the list below the start of the word being completed; far down in the terminal above it. */
   function placeHints(replace: number) {
     const term = terminal;
     const screen = host?.querySelector<HTMLElement>('.xterm-screen');
@@ -208,7 +208,7 @@
     hintStyle = top + cell.h + 230 > frame.height ? `left:${left}px;bottom:${frame.height - top + 4}px` : `left:${left}px;top:${top + cell.h + 4}px`;
   }
 
-  /** Übernimmt einen Vorschlag: Was vom Wort schon dasteht, bleibt; nur der Rest wird getippt. */
+  /** Takes a suggestion: what is already there of the word stays; only the rest is typed. */
   function acceptHint(hint: Suggestion | undefined) {
     if (!hint) return;
     const line = typedLine();
@@ -223,11 +223,11 @@
     terminal?.focus();
   }
 
-  /** Tasten, die der Liste der Vorschläge gehören. Liefert true, wenn die Taste verbraucht ist. */
+  /** Keys that belong to the suggestion list. Returns true if the key was consumed. */
   function hintKey(event: KeyboardEvent): boolean {
     if (event.key === 'Tab' && !event.shiftKey) acceptHint(hints[hintIndex]);
     else if (event.key === 'ArrowDown') hintIndex = (hintIndex + 1) % hints.length;
-    // Am Anfang der Liste gehört der Pfeil nach oben wieder der Shell (ihr Verlauf).
+    // At the top of the list the up arrow belongs to the shell again (its history).
     else if (event.key === 'ArrowUp' && hintIndex > 0) hintIndex -= 1;
     else if (event.key === 'Escape') (dismissed = true), hideHints();
     else return false;
@@ -263,7 +263,7 @@
       scrollback: 10_000,
       rightClickSelectsWord: false,
       allowProposedApi: true,
-      // Der Hintergrund kommt vom Bereich hinter dem Terminal (Deckkraft, Bild); lässt sich nach dem Öffnen nicht mehr umstellen.
+      // The background comes from the pane behind the terminal (opacity, image); it cannot be changed after opening.
       allowTransparency: true,
       theme: xtermTheme(scheme),
     });
@@ -275,24 +275,24 @@
     term.loadAddon(search);
     term.loadAddon(serialize);
     term.open(host!);
-    // Ohne Grafikkarte (oder wenn der Treiber streikt) zeichnet xterm.js von selbst langsamer, aber richtig.
+    // Without a graphics card (or if the driver fails) xterm.js draws on its own, slower but correctly.
     try {
       const webgl = new WebglAddon();
       webgl.onContextLoss(() => webgl.dispose());
       term.loadAddon(webgl);
     } catch {
-      /* DOM-Darstellung bleibt aktiv */
+      /* DOM rendering stays active */
     }
     fit.fit();
 
     term.attachCustomKeyEventHandler(keys);
     term.onData((text) => {
-      // Was das Terminal von sich aus antwortet, ist keine Eingabe des Nutzers.
+      // What the terminal answers on its own is not user input.
       if (isReply(text)) return answerQuery(pane.key, text);
       track(text);
       input(pane.key, text);
     });
-    // Vorschläge richten sich nach dem, was im Terminal steht: also erst, wenn die Antwort des Servers gezeichnet ist.
+    // Suggestions depend on what is in the terminal: so only once the server's answer is drawn.
     term.onWriteParsed(() => {
       if (!anchor || !settings.termSuggest) return;
       clearTimeout(hintTimer);
@@ -306,15 +306,15 @@
       note: (text) => term.write(`\r\n\x1b[2m— ${text.replace(/\r?\n/g, '\r\n— ')}\x1b[0m\r\n`),
       size: () => ({ columns: term.cols, rows: term.rows }),
       focus: () => term.focus(),
-      // Erst wenn alles Geschriebene verarbeitet ist, steht der Inhalt fest; ein leerer Schreibauftrag meldet das.
+      // Only once everything written is processed is the content settled; an empty write reports that.
       snapshot: () => new Promise((resolve) => term.write('', () => resolve(serialize.serialize()))),
       paste: (text) => term.paste(text),
     });
-    // Unsichtbare Terminals haben keine Größe; angepasst wird, sobald der Tab wieder vorn ist.
+    // Invisible terminals have no size; it is adjusted as soon as the tab is in front again.
     const observer = new ResizeObserver(() => host?.offsetParent && fit?.fit());
     observer.observe(host!);
 
-    // Erst jetzt verbinden: Das Terminal kennt seine Größe, die Zeilenbreite stimmt ab dem ersten Byte.
+    // Only connect now: the terminal knows its size, the line width is right from the first byte.
     void connect(pane.key);
     if (focused) term.focus();
 
@@ -346,7 +346,7 @@
 
   $effect(() => void setLigatures(settings.termLigatures));
 
-  // Vorschläge gehören zum Bereich mit der Tastatur; verliert er sie oder endet die Verbindung, verschwinden sie.
+  // Suggestions belong to the pane with the keyboard; if it loses it or the connection ends, they disappear.
   $effect(() => {
     if (!visible || !focused || pane.phase !== 'connected' || pane.prompt || !settings.termSuggest) hideHints();
   });
@@ -362,8 +362,8 @@
   {#if hints.length}
     <div class="hints" style={hintStyle} role="listbox" aria-label={t('suggest.title')}>
       {#each hints as hint, i (hint.kind + hint.label)}
-        <!-- pointerdown statt click: Das Terminal behält die Tastatur. pointermove statt pointerenter: Geht die Liste
-             unter einem ruhenden Mauszeiger auf, bleibt der erste Vorschlag markiert, und die Eingabetaste nimmt ihn. -->
+        <!-- pointerdown instead of click: the terminal keeps the keyboard. pointermove instead of pointerenter: if the list
+             opens under a resting mouse pointer, the first suggestion stays highlighted and Enter takes it. -->
         <button type="button" role="option" aria-selected={i === hintIndex} class="hint" class:on={i === hintIndex} onpointerdown={(e) => (e.preventDefault(), acceptHint(hint))} onpointermove={() => (hintIndex = i)}>
           <Icon name={hint.kind === 'dir' ? 'folder' : hint.kind === 'file' ? 'file' : hint.kind === 'snippet' ? 'snippet' : hint.kind === 'option' ? 'equal' : 'terminal'} size={13} />
           <b>{hint.label}</b>

@@ -49,16 +49,16 @@ pub enum Listed<T> {
     Failed { message: String },
 }
 
-/// Ausgang einer Aktion (`ManageDone` in `types.ts`).
+/// Outcome of an action (`ManageDone` in `types.ts`).
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(tag = "outcome", rename_all = "camelCase")]
 pub enum Done {
     Done,
-    /// `sudo` will ein Passwort: Diesen Befehl schickt der Nutzer selbst im Terminal ab.
+    /// `sudo` wants a password: the user sends this command in the terminal themselves.
     Password { command: String },
 }
 
-/// Führt eine Aktion aus: als Benutzer, und wenn dem die Rechte fehlen, mit `sudo -n`.
+/// Runs an action: as the user, and if they lack the permissions, with `sudo -n`.
 async fn act(app: &AppHandle, session: u64, command: impl Fn(As) -> Option<String>, typed: Option<String>) -> CmdResult<Done> {
     let invalid = || CmdError::new("manage_failed", "Ungültige Angabe");
     let typed = typed.ok_or_else(invalid)?;
@@ -71,7 +71,7 @@ async fn act(app: &AppHandle, session: u64, command: impl Fn(As) -> Option<Strin
             Verdict::Failed(message) => return Err(failed(message)),
         }
     }
-    // Auch mit sudo abgelehnt, ohne dass es ein Passwort wollte: Das meldet schon der zweite Durchlauf als Fehler.
+    // Refused with sudo too, without it wanting a password: the second run already reports that as an error.
     Err(failed(String::new()))
 }
 
@@ -118,7 +118,7 @@ fn container(c: docker::Container) -> ContainerView {
     }
 }
 
-/// Was aus der Ausgabe eines Versuchs wird. `None`: Dem Benutzer fehlen die Rechte, der nächste Versuch gilt.
+/// What becomes of an attempt's output. `None`: the user lacks permissions, the next attempt counts.
 fn containers(text: &str, how: As) -> Option<Listed<Vec<ContainerView>>> {
     match docker::parse(text) {
         docker::Listing::Containers(list) => Some(Listed::Ok { items: list.into_iter().map(container).collect(), sudo: how == As::Sudo }),
@@ -173,7 +173,7 @@ pub enum DockerTab {
     Shell,
 }
 
-/// Was in einen neuen Tab getippt wird, damit dort die Logs mitlaufen oder eine Shell im Container aufgeht.
+/// What is typed into a new tab so the logs follow along there or a shell opens inside the container.
 #[tauri::command]
 pub fn docker_line(container: String, kind: DockerTab, sudo: bool) -> CmdResult<String> {
     match kind {
@@ -234,14 +234,14 @@ pub async fn service_action(app: AppHandle, session: u64, unit: String, action: 
     act(&app, session, |how| action.command(&unit, how), action.typed(&unit)).await
 }
 
-/// Zustand und letzte Meldungen eines Dienstes als Text. Ein Dienst, der nicht läuft, ist dabei kein Fehler.
+/// State and latest messages of a service as text. A service that is not running is not an error here.
 #[tauri::command]
 pub async fn service_status(app: AppHandle, session: u64, unit: String) -> CmdResult<String> {
     let command = services::status_command(&unit, As::User).ok_or_else(|| failed("Ungültiger Name".into()))?;
     Ok(run(&app, session, &command).await?.1.trim_end().to_string())
 }
 
-/// Was in einen neuen Tab getippt wird, damit dort das Journal des Dienstes mitläuft.
+/// What is typed into a new tab so the service's journal follows along there.
 #[tauri::command]
 pub fn service_line(unit: String, sudo: bool) -> CmdResult<String> {
     services::journal_line(&unit, sudo).ok_or_else(|| failed("Ungültiger Name".into()))
@@ -280,7 +280,7 @@ fn sample(sample: processes::Sample) -> SampleView {
     }
 }
 
-/// Eine Messung der Prozesse. `None`: Der Server gibt die Liste nicht her.
+/// A measurement of the processes. `None`: the server does not provide the list.
 #[tauri::command]
 pub async fn process_list(app: AppHandle, session: u64) -> CmdResult<Option<SampleView>> {
     let (_, text) = run(&app, session, processes::LIST).await?;
@@ -317,7 +317,7 @@ mod tests {
             serde_json::to_value(containers(&text, As::Sudo)).unwrap(),
             json!({ "state": "ok", "sudo": true, "items": [{ "id": ID, "name": "web", "image": "nginx:1.27", "state": "running", "health": "healthy", "ports": ["8080->80/tcp"], "since": 60, "cpu": 1.5, "memory": { "used": 10_485_760, "limit": 1_073_741_824 } }] })
         );
-        // Abgelehnt: als Benutzer geht es mit sudo weiter, unter sudo ist es ein Passwort oder ein Fehler.
+        // Refused: as the user it continues with sudo, under sudo it is a password or an error.
         let denied = "@error\npermission denied while trying to connect to the Docker daemon socket\n";
         assert_eq!(containers(denied, As::User), None);
         assert_eq!(serde_json::to_value(containers("@error\nsudo: a password is required\n", As::Sudo)).unwrap(), json!({ "state": "password" }));
@@ -340,7 +340,7 @@ mod tests {
         assert!(matches!(serde_json::from_value::<ServiceAction>(json!("disable")).unwrap(), ServiceAction::Disable));
         assert!(matches!(serde_json::from_value::<KillSignal>(json!("kill")).unwrap(), KillSignal::Kill));
         assert!(serde_json::from_value::<ServiceAction>(json!("mask")).is_err());
-        // Was keine Kennung und kein Name ist, wird gar nicht erst zu einem Befehl.
+        // What is neither an ID nor a name never becomes a command.
         assert!(docker_line("web; reboot".into(), DockerTab::Logs, false).is_err());
         assert!(service_line("cron.service; reboot".into(), false).is_err());
         assert_eq!(docker_line(ID.into(), DockerTab::Logs, true).unwrap(), "sudo docker logs --tail 200 -f 4c01db0b339c");

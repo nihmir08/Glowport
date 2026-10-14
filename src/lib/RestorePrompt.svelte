@@ -8,8 +8,8 @@
   import LayoutPreview from './ui/LayoutPreview.svelte';
 
   /**
-   * Rückfrage nach einem Abbruch: Glowport wurde beim letzten Mal nicht ordentlich beendet.
-   * Wiederhergestellt wird erst nach Zustimmung; das Kästchen schaltet die Rückfrage dauerhaft ab.
+   * Prompt after a crash: Glowport was not quit properly last time.
+   * Restored only after consent; the checkbox switches the prompt off permanently.
    */
   let { saved, onrestore, ondiscard }: { saved: SavedTab[]; onrestore: () => void; ondiscard: () => void } = $props();
 

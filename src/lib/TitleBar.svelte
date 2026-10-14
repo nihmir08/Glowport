@@ -34,7 +34,7 @@
   const menuTab = $derived(menu ? tabByKey(menu.key) : undefined);
   const workspaceTab = $derived(workspaceOf ? tabByKey(workspaceOf) : undefined);
 
-  /** Das Menü am Plus: Host verbinden oder lokales Terminal. */
+  /** The menu at the plus: connect a host or local terminal. */
   let adding = $state<{ x: number; y: number } | null>(null);
 
   function openAdd(event: MouseEvent) {
@@ -58,7 +58,7 @@
     renameText = tab.name ?? tabTitle(tab);
   }
 
-  /** Ein leerer Name gibt dem Tab wieder den Namen seines Hosts. */
+  /** An empty name gives the tab its host's name again. */
   function commitRename() {
     const tab = renaming ? tabByKey(renaming) : undefined;
     if (tab) tab.name = renameText.trim() || null;

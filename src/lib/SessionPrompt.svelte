@@ -5,8 +5,8 @@
   import TextField from './ui/TextField.svelte';
 
   /**
-   * Die Rückfrage einer Verbindung: Host-Schlüssel, Passwort, Passphrase oder Fragen des Servers.
-   * `name` nennt, wohin verbunden wird; `onanswer` bekommt die Antwort. Terminals und die Seite „Dateien“ benutzen sie.
+   * A connection's prompt: host key, password, passphrase or questions from the server.
+   * `name` names where the connection goes; `onanswer` gets the answer. Terminals and the Files page use it.
    */
   let { prompt, name, onanswer }: { prompt: Prompt | null; name: string; onanswer: (reply: Answer) => void } = $props();
 
@@ -15,11 +15,11 @@
   let values = $state<string[]>([]);
   let remember = $state(false);
 
-  // Jede neue Rückfrage beginnt leer, auch die Wiederholung nach einem falschen Passwort.
+  // Every new prompt starts empty, also the repetition after a wrong password.
   $effect(() => {
     void prompt;
     secret = '';
-    // Das Kästchen gilt je Frage: Ein Haken für „Passwort speichern“ soll nicht ungefragt eine Schlüsseldatei übernehmen.
+    // The checkbox applies per question: a tick for “Save password” should not take over a key file unasked.
     save = false;
     remember = false;
     values = prompt?.type === 'interactive' ? prompt.prompts.map(() => '') : [];
@@ -71,7 +71,7 @@
         </div>
         <div class="dlg-a">
           {#if prompt.changed}
-            <!-- Hier ist Abbrechen die sichere und deshalb hervorgehobene Wahl. -->
+            <!-- Here cancelling is the safe and therefore highlighted choice. -->
             <Button variant="danger" onclick={() => onanswer({ kind: 'hostKey', accept: true })}>{t('prompt.hostkey.replace')}</Button>
             <Button variant="primary" onclick={cancel}>{t('common.cancel')}</Button>
           {:else}
@@ -99,7 +99,7 @@
         </div>
         <div class="dlg-a">
           {#if prompt.changed}
-            <!-- Hier ist Abbrechen die sichere und deshalb hervorgehobene Wahl. -->
+            <!-- Here cancelling is the safe and therefore highlighted choice. -->
             <Button variant="danger" onclick={() => onanswer({ kind: 'certificate', accept: true })}>{t('prompt.cert.replace')}</Button>
             <Button variant="primary" onclick={cancel}>{t('common.cancel')}</Button>
           {:else}
@@ -117,7 +117,7 @@
           {#if prompt.canRemember}<label class="check"><input type="checkbox" bind:checked={remember} />{t('prompt.plain.remember')}</label>{/if}
         </div>
         <div class="dlg-a">
-          <!-- Unverschlüsselt weiterzumachen ist nie die hervorgehobene Wahl. -->
+          <!-- Continuing unencrypted is never the highlighted choice. -->
           <Button variant="danger" onclick={() => onanswer({ kind: 'plain', accept: true, remember })}>{t('prompt.plain.go')}</Button>
           <span class="grow"></span>
           <Button onclick={cancel}>{t('common.cancel')}</Button>

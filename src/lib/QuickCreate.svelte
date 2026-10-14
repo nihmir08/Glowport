@@ -11,8 +11,8 @@
   import TextField from './ui/TextField.svelte';
 
   /**
-   * Die kleinen Dialoge zum Anlegen an Ort und Stelle (siehe `quick.svelte.ts`). Sie liegen über allem, auch
-   * übereinander: Aus dem Dialog „Neue Identität“ heraus lässt sich wieder ein Schlüssel importieren.
+   * The small dialogs for creating in place (see `quick.svelte.ts`). They lie above everything, also
+   * on top of each other: from the “New identity” dialog a key can be imported again.
    */
   let name = $state('');
   let address = $state('');
@@ -23,7 +23,7 @@
 
   const top = $derived(quick.stack.at(-1));
 
-  // Jeder neue Dialog beginnt mit leeren Feldern.
+  // Every new dialog starts with empty fields.
   $effect(() => {
     void top?.n;
     name = address = user = port = error = '';

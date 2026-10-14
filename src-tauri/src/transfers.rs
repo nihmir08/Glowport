@@ -1,12 +1,12 @@
-//! Die Warteschlange der Transfers: Dateien und Ordner zwischen diesem PC und Servern, auch von Server zu Server.
+//! The transfer queue: files and folders between this PC and servers, also from server to server.
 //!
-//! Jeder Auftrag ist ein Eintrag der Liste (eine Datei oder ein Ordner samt Inhalt). Bis zu `parallel` Dateien
-//! laufen gleichzeitig, in der Reihenfolge der Liste. Ein angehaltener oder unterbrochener Auftrag merkt sich je
-//! Datei, wie weit er war, und macht dort weiter; unfertige Aufträge werden in `transfers.json` vorgemerkt und
-//! nach einem Neustart angehalten wieder angeboten.
+//! Every job is one entry of the list (a file or a folder with its content). Up to `parallel` files
+//! run at the same time, in the order of the list. A paused or interrupted job remembers per
+//! file how far it got and continues there; unfinished jobs are noted in `transfers.json` and
+//! offered again, paused, after a restart.
 //!
-//! Die Warteschlange kennt weder Fenster noch Tresor: Wie ein Ort erreicht wird, sagt ihr [`Resolve`], und den
-//! Stand gibt sie über [`Publish`] heraus. So lässt sie sich ohne Programmfenster prüfen.
+//! The queue knows neither windows nor vault: how a location is reached it is told by [`Resolve`], and it
+//! hands out its state through [`Publish`]. That way it can be tested without a program window.
 
 use std::{
     future::Future,
@@ -36,16 +36,16 @@ use crate::store::Store as Remote;
 
 const CHUNK: usize = 256 * 1024;
 const TICK: Duration = Duration::from_millis(250);
-/// Nach so vielen Bytes hält eine laufende Kopie ihren Stand fest. Endet das Programm hart, geht höchstens das verloren.
+/// After this many bytes a running copy records its state. If the program ends hard, at most this is lost.
 const CHECKPOINT: u64 = 8 * 1024 * 1024;
 
-/// Wie ein Ort erreicht wird. Scheitert es, kommt der Fehlercode für die Oberfläche zurück.
+/// How a location is reached. If it fails, the error code for the interface comes back.
 pub type Resolve = Arc<dyn Fn(Place) -> Pin<Box<dyn Future<Output = Result<Endpoint, &'static str>> + Send>> + Send + Sync>;
 pub type Publish = Arc<dyn Fn(Vec<TransferView>) + Send + Sync>;
-/// Sagt Bescheid, dass die Verbindung zu einem Ort abgerissen ist und beim nächsten Mal neu aufgebaut werden muss.
+/// Reports that the connection to a location broke and has to be re-established next time.
 pub type Forget = Arc<dyn Fn(Place) + Send + Sync>;
 
-/// Ein erreichbarer Ort: dieser PC oder ein Server über SFTP.
+/// A reachable location: this PC or a server over SFTP.
 #[derive(Clone)]
 pub enum Endpoint {
     Local,
@@ -72,7 +72,7 @@ impl Endpoint {
         }
     }
 
-    /// Angaben zu einem Pfad; `None`, wenn es ihn nicht gibt. Verknüpfungen zählen als ihr Ziel.
+    /// Details about a path; `None` if it does not exist. Links count as their target.
     async fn stat(&self, path: &str) -> Result<Option<Meta>, FileError> {
         let found = match self {
             Endpoint::Local => tokio::fs::metadata(path).await.map(|m| Meta { dir: m.is_dir(), size: m.len(), modified: seconds(m.modified()) }).map_err(FileError::from),
@@ -91,7 +91,7 @@ impl Endpoint {
             Endpoint::Local => {
                 let mut dir = tokio::fs::read_dir(path).await?;
                 while let Some(item) = dir.next_entry().await? {
-                    // Was sich nicht lesen lässt oder ins Leere zeigt, bleibt liegen.
+                    // What cannot be read or points into nothing is left behind.
                     if let Ok(meta) = tokio::fs::metadata(item.path()).await {
                         out.push((item.file_name().to_string_lossy().into_owned(), Meta { dir: meta.is_dir(), size: meta.len(), modified: seconds(meta.modified()) }));
                     }
@@ -113,7 +113,7 @@ impl Endpoint {
         Ok(out)
     }
 
-    /// Legt einen Ordner an; gibt es ihn schon, ist das recht.
+    /// Creates a folder; if it already exists, that is fine.
     async fn mkdir(&self, path: &str) -> Result<(), FileError> {
         if self.stat(path).await?.is_some_and(|meta| meta.dir) {
             return Ok(());
@@ -146,7 +146,7 @@ impl Endpoint {
         })
     }
 
-    /// Gibt der Kopie die Änderungszeit des Originals, damit ein späterer Abgleich sie als gleich erkennt.
+    /// Gives the copy the original's modification time, so a later comparison recognises them as equal.
     async fn touch(&self, path: &str, modified: u64) {
         match self {
             Endpoint::Local => {
@@ -165,7 +165,7 @@ impl Endpoint {
     }
 }
 
-/// Was geschieht, wenn es am Ziel schon etwas unter dem Namen gibt.
+/// What happens if something with that name already exists at the destination.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Policy {
@@ -210,14 +210,14 @@ enum Step {
     Done,
 }
 
-/// Eine einzelne Datei eines Auftrags.
+/// A single file of a job.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Item {
     from: String,
     to: String,
     size: u64,
     modified: u64,
-    /// So viele Bytes stehen schon am Ziel.
+    /// This many bytes are already at the destination.
     done: u64,
     step: Step,
 }
@@ -226,21 +226,21 @@ const RUN: u8 = 0;
 const PAUSE: u8 = 1;
 const CANCEL: u8 = 2;
 
-/// Ein Auftrag, wie ihn [`Engine::start`] bekommt.
+/// A job as [`Engine::start`] receives it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Order {
     pub from: Place,
-    /// Datei oder Ordner an der Quelle.
+    /// File or folder at the source.
     pub source: String,
     pub to: Place,
     /// Zielordner.
     pub dest: String,
     pub policy: Policy,
-    /// Quelle und Ziel zum Anzeigen.
+    /// Source and destination for display.
     pub source_label: String,
     pub dest_label: String,
-    /// Dieselben Orte ohne laufende Sitzung: der Host dahinter. Über sie geht es weiter, wenn die Sitzung endet,
-    /// und nur mit ihnen lässt sich der Auftrag nach einem Neustart fortsetzen (`None` bei eingetippten Adressen).
+    /// The same locations without a running session: the host behind it. Through them it continues when the session ends,
+    /// and only with them can the job be resumed after a restart (`None` for typed addresses).
     pub keep_from: Option<Place>,
     pub keep_to: Option<Place>,
 }
@@ -256,11 +256,11 @@ struct Job {
     order: Order,
     name: String,
     state: State,
-    /// Die Dateien des Auftrags; `None`, solange die Quelle noch nicht durchgesehen ist.
+    /// The job's files; `None` as long as the source has not been scanned yet.
     items: Option<Vec<Item>>,
     scanning: bool,
     bytes: u64,
-    /// Fortschritt, von den laufenden Kopien hochgezählt.
+    /// Progress, counted up by the running copies.
     done: Arc<AtomicU64>,
     last: u64,
     speed: u64,
@@ -313,7 +313,7 @@ impl Job {
     }
 }
 
-/// Was von einem unfertigen Auftrag vorgemerkt wird.
+/// What is noted of an unfinished job.
 #[derive(Serialize, Deserialize)]
 struct Saved {
     order: Order,
@@ -330,12 +330,12 @@ struct Shared {
     publish: Publish,
     next: AtomicU64,
     parallel: AtomicUsize,
-    /// Laufende Kopien und Durchsichten zusammen.
+    /// Running copies and scans together.
     active: AtomicUsize,
-    /// Datei, in der unfertige Aufträge vorgemerkt werden.
+    /// File in which unfinished jobs are noted.
     store: Option<PathBuf>,
     dirty: AtomicBool,
-    /// Pause in Millisekunden nach jedem Stück; nur Tests bremsen damit, um einen Transfer mittendrin zu erwischen.
+    /// Pause in milliseconds after every chunk; only tests slow down with it, to catch a transfer midway.
     brake: AtomicU64,
 }
 
@@ -353,14 +353,14 @@ impl Shared {
         self.jobs().iter().map(Job::view).collect()
     }
 
-    /// Schreibt die unfertigen Aufträge auf, die einen Neustart überstehen können.
+    /// Writes down the unfinished jobs that can survive a restart.
     fn save(&self) {
         let Some(path) = &self.store else { return };
         let saved: Vec<Saved> = self
             .jobs()
             .iter()
             .filter(|job| job.state.open() && job.order.durable())
-            // Vorgemerkt wird mit den Orten, die es nach einem Neustart noch gibt.
+            // Noted with the locations that still exist after a restart.
             .map(|job| Saved { order: Order { from: job.order.keep_from.clone().unwrap_or(Place::Local), to: job.order.keep_to.clone().unwrap_or(Place::Local), ..job.order.clone() }, name: job.name.clone(), bytes: job.bytes, items: job.items.as_ref().map(|items| items.iter().map(|item| Item { step: if item.step == Step::Done { Step::Done } else { Step::Pending }, ..item.clone() }).collect()) })
             .collect();
         let result = if saved.is_empty() { std::fs::remove_file(path).or_else(|e| if e.kind() == std::io::ErrorKind::NotFound { Ok(()) } else { Err(e) }) } else { serde_json::to_vec(&saved).map_err(std::io::Error::other).and_then(|bytes| std::fs::write(path, bytes)) };
@@ -380,9 +380,9 @@ enum Next {
     Copy(u64, usize),
 }
 
-/// Wie eine Kopie endet, wenn sie nicht fertig wird.
+/// How a copy ends if it does not finish.
 enum Stop {
-    /// Angehalten oder abgebrochen; der zweite Fall räumt die halbe Datei weg.
+    /// Paused or cancelled; the second case clears away the half file.
     Halted,
     Failed(&'static str),
 }
@@ -400,8 +400,8 @@ impl From<std::io::Error> for Stop {
 }
 
 impl Engine {
-    /// Startet die Warteschlange. `store` nennt die Datei für unfertige Aufträge; was darin vom letzten Mal steht,
-    /// erscheint angehalten in der Liste. Muss in einem tokio-Runtime aufgerufen werden.
+    /// Starts the queue. `store` names the file for unfinished jobs; what is in it from last time
+    /// appears paused in the list. Must be called within a tokio runtime.
     pub fn new(resolve: Resolve, forget: Forget, publish: Publish, store: Option<PathBuf>) -> Engine {
         let shared = Arc::new(Shared { jobs: Mutex::new(Vec::new()), wake: Notify::new(), resolve, forget, publish, next: AtomicU64::new(0), parallel: AtomicUsize::new(4), active: AtomicUsize::new(0), store, dirty: AtomicBool::new(false), brake: AtomicU64::new(0) });
         let saved: Vec<Saved> = shared.store.as_ref().and_then(|path| std::fs::read(path).ok()).and_then(|bytes| serde_json::from_slice(&bytes).ok()).unwrap_or_default();
@@ -421,7 +421,7 @@ impl Engine {
         self.shared.wake.notify_one();
     }
 
-    /// Reiht Aufträge ein und liefert ihre Nummern.
+    /// Queues jobs and returns their numbers.
     pub fn start(&self, orders: Vec<Order>, name: impl Fn(&Order) -> String) -> Vec<u64> {
         let mut ids = Vec::new();
         {
@@ -440,7 +440,7 @@ impl Engine {
         self.shared.views()
     }
 
-    /// Hält an, setzt fort, bricht ab oder versucht es erneut; ohne Nummern gilt es für alle Aufträge.
+    /// Pauses, resumes, cancels or retries; without numbers it applies to all jobs.
     pub fn control(&self, ids: Option<&[u64]>, action: &str) {
         for job in self.shared.jobs().iter_mut().filter(|job| ids.is_none_or(|ids| ids.contains(&job.id))) {
             match (action, job.state) {
@@ -464,26 +464,26 @@ impl Engine {
         self.shared.changed();
     }
 
-    /// Nimmt alles Fertige, Abgebrochene und Gescheiterte aus der Liste.
+    /// Removes everything finished, cancelled and failed from the list.
     pub fn clear(&self) {
         self.shared.jobs().retain(|job| job.state.open());
         self.shared.changed();
     }
 
-    /// Anzahl der Aufträge, die laufen oder warten.
+    /// Number of jobs that are running or waiting.
     #[cfg(test)]
     fn busy(&self) -> usize {
         self.shared.jobs().iter().filter(|job| matches!(job.state, State::Queued | State::Running)).count()
     }
 
-    /// Vor dem Beenden: alles anhalten und vormerken, was sich fortsetzen lässt.
+    /// Before quitting: pause everything and note what can be resumed.
     pub fn shutdown(&self) {
         self.control(None, "pause");
         self.shared.save();
     }
 }
 
-/// Verteilt die Arbeit: startet Durchsichten und Kopien, solange Plätze frei sind, und meldet regelmäßig den Stand.
+/// Distributes the work: starts scans and copies as long as slots are free, and reports the state regularly.
 async fn dispatch(shared: Arc<Shared>) {
     let mut last_tick = Instant::now();
     let mut last_views: Vec<TransferView> = Vec::new();
@@ -524,7 +524,7 @@ async fn dispatch(shared: Arc<Shared>) {
             }
         }
 
-        // Tempo aus dem Zuwachs seit der letzten Meldung.
+        // Speed from the growth since the last report.
         let elapsed = last_tick.elapsed();
         if elapsed >= TICK {
             for job in shared.jobs().iter_mut() {
@@ -551,7 +551,7 @@ async fn dispatch(shared: Arc<Shared>) {
     }
 }
 
-/// Erreicht einen Ort. Hängt er an einer Sitzung, die es nicht mehr gibt, geht es über den Host dahinter weiter.
+/// Reaches a location. If it hangs on a session that no longer exists, it continues through the host behind it.
 async fn reach(shared: &Shared, place: &Place, keep: &Option<Place>) -> Result<Endpoint, Stop> {
     match (shared.resolve)(place.clone()).await {
         Err("not_connected") => match keep {
@@ -562,7 +562,7 @@ async fn reach(shared: &Shared, place: &Place, keep: &Option<Place>) -> Result<E
     }
 }
 
-/// Nach einem Abriss sollen die Verbindungen der beiden Orte beim nächsten Versuch neu entstehen.
+/// After a break, the connections of both locations should be created anew on the next attempt.
 fn dropped(shared: &Shared, order: &Order, code: &str) {
     if code == "not_connected" {
         (shared.forget)(order.from.clone());
@@ -570,7 +570,7 @@ fn dropped(shared: &Shared, order: &Order, code: &str) {
     }
 }
 
-/// Ein Name daneben, den es am Ziel noch nicht gibt: „bericht (2).pdf“.
+/// A name beside it that does not exist at the destination yet: “report (2).pdf”.
 async fn free_name(to: &Endpoint, dir: &str, name: &str) -> Result<String, FileError> {
     let (stem, extension) = match name.rsplit_once('.') {
         Some((stem, extension)) if !stem.is_empty() => (stem, format!(".{extension}")),
@@ -585,8 +585,8 @@ async fn free_name(to: &Endpoint, dir: &str, name: &str) -> Result<String, FileE
     Err(FileError::Exists)
 }
 
-/// Sieht die Quelle eines Auftrags durch: Aus einer Datei wird ein Eintrag, aus einem Ordner alle Dateien darin.
-/// Die Ordner am Ziel entstehen dabei gleich mit.
+/// Scans a job's source: a file becomes one entry, a folder all files in it.
+/// The folders at the destination are created along the way.
 async fn scan(shared: Arc<Shared>, id: u64) {
     let order = shared.jobs().iter().find(|job| job.id == id).map(|job| (job.order.clone(), job.name.clone(), job.control.clone()));
     let result = match order {
@@ -608,7 +608,7 @@ async fn scan(shared: Arc<Shared>, id: u64) {
                 job.error = Some(code);
                 dropped(&shared, &job.order, code);
             }
-            // Angehalten oder abgebrochen, bevor es losging: Beim nächsten Mal wird neu durchgesehen.
+            // Paused or cancelled before it started: next time it is scanned anew.
             Err(Stop::Halted) => {}
         }
     }
@@ -654,7 +654,7 @@ async fn plan(shared: &Shared, order: &Order, name: &str, control: &AtomicU8) ->
     Ok(items)
 }
 
-/// Überträgt eine Datei eines Auftrags, ab der Stelle, an der sie zuletzt stand.
+/// Transfers one file of a job, from the point where it last stood.
 async fn copy(shared: Arc<Shared>, id: u64, index: usize) {
     let picked = shared.jobs().iter().find(|job| job.id == id).and_then(|job| Some((job.order.clone(), job.items.as_ref()?.get(index)?.clone(), job.done.clone(), job.control.clone())));
     let mut written = 0;
@@ -668,7 +668,7 @@ async fn copy(shared: Arc<Shared>, id: u64, index: usize) {
             item.done = written;
             item.step = if result.is_ok() { Step::Done } else { Step::Pending };
             if cancelled {
-                // Ein abgebrochener Auftrag beginnt beim erneuten Versuch diese Datei von vorn.
+                // A cancelled job starts this file from the beginning when retried.
                 job.done.fetch_sub(written.min(job.done.load(Ordering::Relaxed)), Ordering::Relaxed);
                 item.done = 0;
             }
@@ -678,7 +678,7 @@ async fn copy(shared: Arc<Shared>, id: u64, index: usize) {
                 job.state = State::Failed;
                 job.error = Some(code);
                 dropped(&shared, &job.order, code);
-                // Die übrigen Dateien des Auftrags laufen nicht weiter, bis der Nutzer es erneut versucht.
+                // The job's other files do not continue until the user retries.
                 job.control.store(PAUSE, Ordering::Relaxed);
             }
             Ok(()) if job.state == State::Running && job.items.as_ref().is_some_and(|items| items.iter().all(|item| item.step == Step::Done)) => job.state = State::Done,
@@ -694,7 +694,7 @@ async fn transfer(shared: &Shared, (id, index): (u64, usize), order: &Order, ite
     let from = reach(shared, &order.from, &order.keep_from).await?;
     let to = reach(shared, &order.to, &order.keep_to).await?;
 
-    // Fortsetzen nur, wenn am Ziel wirklich so viel steht und die Quelle noch dieselbe ist; sonst von vorn.
+    // Resume only if that much is really at the destination and the source is still the same; otherwise from the start.
     let source = from.stat(&item.from).await?.ok_or(FileError::NoSuchFile)?;
     let partial = if item.done > 0 { to.stat(&item.to).await?.map_or(0, |meta| meta.size) } else { 0 };
     let offset = if source.size == item.size && source.modified == item.modified && partial >= item.done { item.done } else { 0 };
@@ -744,12 +744,12 @@ async fn transfer(shared: &Shared, (id, index): (u64, usize), order: &Order, ite
     Ok(())
 }
 
-// ---------- Anbindung an das Programm ----------
+// ---------- Connection to the program ----------
 
-/// Die Warteschlange des Programms. Sie gehört keinem Fenster; jedes zeigt denselben Stand.
+/// The program's queue. It belongs to no window; every one shows the same state.
 pub struct Queue(pub Engine);
 
-/// Startet die Warteschlange mit den Verbindungen der Brücke und meldet ihren Stand als Ereignis `transfers`.
+/// Starts the queue with the bridge's connections and reports its state as the `transfers` event.
 pub fn init(app: &AppHandle, store: PathBuf) -> Queue {
     let reach = app.clone();
     let resolve: Resolve = Arc::new(move |place| {
@@ -771,7 +771,7 @@ pub fn init(app: &AppHandle, store: PathBuf) -> Queue {
     Queue(tauri::async_runtime::block_on(async move { Engine::new(resolve, forget, publish, Some(store)) }))
 }
 
-/// Wie ein Ort in der Liste heißt und unter welchem Ort er nach einem Neustart noch zu erreichen ist.
+/// What a location is called in the list and under which location it can still be reached after a restart.
 fn describe(app: &AppHandle, place: &Place) -> (String, Option<Place>) {
     match place {
         Place::Local => (String::new(), Some(Place::Local)),
@@ -799,7 +799,7 @@ fn base_name(place: &Place, path: &str) -> String {
     }
 }
 
-/// Bei diesem PC genügt der Pfad; bei einem Server steht sein Name davor.
+/// For this PC the path is enough; for a server its name comes before it.
 fn labelled(label: &str, path: &str) -> String {
     if label.is_empty() {
         path.to_string()
@@ -814,7 +814,7 @@ pub struct Request {
     from: Place,
     paths: Vec<String>,
     to: Place,
-    /// Zielordner; leer bei Ziel „dieser PC“ heißt Download-Ordner.
+    /// Destination folder; empty with destination “this PC” means the downloads folder.
     dest: String,
     #[serde(default)]
     policy: Option<Policy>,
@@ -841,22 +841,22 @@ fn orders(app: &AppHandle, from: &Place, to: &Place, policy: Policy, pairs: Vec<
         .collect()
 }
 
-/// Holt Dateien und Ordner eines Servers in einen Ordner dieses Rechners, damit sie sich danach aus dem Fenster
-/// ziehen lassen. Liefert die Nummern der Transfers und wo die Dateien danach liegen.
+/// Fetches a server's files and folders into a folder on this computer, so they can then be dragged out of the
+/// window. Returns the transfers' numbers and where the files will be afterwards.
 pub(crate) fn stage(app: &AppHandle, queue: &Queue, from: &Place, paths: Vec<String>, dir: &Path) -> (Vec<u64>, Vec<String>) {
     let dest = dir.to_string_lossy().into_owned();
     let staged = paths.iter().map(|source| join(&Place::Local, &dest, &base_name(from, source))).collect();
     let mut orders = orders(app, from, &Place::Local, Policy::Overwrite, paths.into_iter().map(|source| (source, dest.clone())).collect());
     for order in &mut orders {
         order.dest_label = "Explorer".into();
-        // Nach einem Neustart ist der Zug vorbei; so ein Auftrag wird nicht vorgemerkt.
+        // After a restart the drag is over; such a job is not noted.
         order.keep_to = None;
     }
     let source = from.clone();
     (queue.0.start(orders, |order| base_name(&source, &order.source)), staged)
 }
 
-/// Reiht Dateien und Ordner in die Warteschlange ein.
+/// Queues files and folders.
 #[tauri::command]
 pub fn transfer_start(app: AppHandle, queue: tauri::State<'_, Queue>, request: Request) -> CmdResult<Vec<u64>> {
     if request.from == request.to && request.paths.iter().any(|path| join(&request.from, &request.dest, &base_name(&request.from, path)) == *path) {
@@ -888,9 +888,9 @@ pub fn transfer_clear(queue: tauri::State<'_, Queue>) {
 
 // ---------- Ordner abgleichen ----------
 
-/// Mehr Einträge vergleicht der Abgleich nicht; dann ist der Ordner zu groß für eine Liste.
+/// The comparison does not compare more entries; then the folder is too big for a list.
 const MAX_COMPARED: usize = 20_000;
-/// Um so viele Sekunden dürfen die Änderungszeiten gleicher Dateien auseinanderliegen (Dateisysteme runden verschieden).
+/// By this many seconds the modification times of equal files may differ (file systems round differently).
 const SAME_WITHIN: u64 = 2;
 
 #[derive(Serialize)]
@@ -903,7 +903,7 @@ pub struct Side {
 
 #[derive(Serialize)]
 pub struct Diff {
-    /// Pfad unterhalb der verglichenen Ordner, mit `/` getrennt.
+    /// Path below the compared folders, separated by `/`.
     rel: String,
     kind: &'static str,
     state: &'static str,
@@ -918,7 +918,7 @@ async fn endpoint(app: &AppHandle, place: &Place) -> CmdResult<Endpoint> {
     }
 }
 
-/// Größe von allem, was in einem Ordner liegt.
+/// Size of everything in a folder.
 async fn total(at: &Endpoint, path: &str, budget: &mut usize) -> Result<u64, FileError> {
     let mut sum = 0;
     let mut folders = vec![path.to_string()];
@@ -951,7 +951,7 @@ async fn compare(left: &Endpoint, left_path: &str, right: &Endpoint, right_path:
             let y = r.iter().position(|(n, _)| *n == name).map(|i| r.swap_remove(i).1);
             let path = if rel.is_empty() { name.clone() } else { format!("{rel}/{name}") };
             let (l_path, r_path) = (left.join(&l_dir, &name), right.join(&r_dir, &name));
-            // Auf beiden Seiten ein Ordner: Verglichen wird, was darin liegt.
+            // A folder on both sides: what is inside is compared.
             if x.as_ref().is_some_and(|m| m.dir) && y.as_ref().is_some_and(|m| m.dir) {
                 folders.push((path, l_path, r_path));
                 continue;
@@ -979,7 +979,7 @@ async fn compare(left: &Endpoint, left_path: &str, right: &Endpoint, right_path:
     Ok(out)
 }
 
-/// Vergleicht zwei Ordner samt Unterordnern nach Größe und Änderungszeit.
+/// Compares two folders including subfolders by size and modification time.
 #[tauri::command]
 pub async fn fs_compare(app: AppHandle, left: Place, left_path: String, right: Place, right_path: String) -> CmdResult<Vec<Diff>> {
     let (l, r) = (endpoint(&app, &left).await?, endpoint(&app, &right).await?);
@@ -993,7 +993,7 @@ pub struct SyncItem {
     to_right: bool,
 }
 
-/// Gleicht zwei Ordner an: Jede Zeile nennt den Pfad unterhalb der Ordner und die Richtung. Gelöscht wird nichts.
+/// Syncs two folders: every line names the path below the folders and the direction. Nothing is deleted.
 #[tauri::command]
 pub fn sync_start(app: AppHandle, queue: tauri::State<'_, Queue>, left: Place, left_path: String, right: Place, right_path: String, items: Vec<SyncItem>) -> CmdResult<Vec<u64>> {
     let mut ids = Vec::new();
@@ -1021,7 +1021,7 @@ mod tests {
 
     static SEQ: AtomicU32 = AtomicU32::new(0);
 
-    /// Zwei Ordner auf diesem Rechner als Quelle und Ziel; sie verschwinden mit dem Test.
+    /// Two folders on this computer as source and destination; they disappear with the test.
     struct Bench {
         root: PathBuf,
         seen: Arc<Mutex<Vec<Vec<TransferView>>>>,
@@ -1100,7 +1100,7 @@ mod tests {
         assert!(bench.root.join("ziel/ordner/leer").is_dir(), "auch leere Ordner kommen mit");
         let folder = &views[1];
         assert_eq!((folder.name.as_str(), folder.files, folder.files_done, folder.bytes, folder.done, folder.direction), ("ordner", 2, 2, 600_003, 600_003, "upload"));
-        // Die Kopie ist so alt wie das Original.
+        // The copy is as old as the original.
         let age = |path: &str| std::fs::metadata(bench.root.join(path)).unwrap().modified().unwrap().duration_since(UNIX_EPOCH).unwrap().as_secs();
         assert_eq!(age("ziel/einzeln.txt"), age("quelle/einzeln.txt"));
         assert!(bench.seen.lock().unwrap().len() >= 2, "der Stand wird gemeldet");
@@ -1149,7 +1149,7 @@ mod tests {
         until(&engine, |views| views[0].done > 0).await;
         engine.control(None, "pause");
         let paused = until(&engine, |views| views[0].state == "paused").await;
-        // Warten, bis die laufende Kopie wirklich steht und ihr Stand festgehalten ist.
+        // Wait until the running copy really stands still and its state is recorded.
         until(&engine, |_| engine.shared.active.load(Ordering::Relaxed) == 0).await;
         let halfway = engine.list()[0].done;
         assert!(halfway > 0 && halfway < content.len() as u64, "mittendrin angehalten: {halfway} (gemeldet {})", paused[0].done);
@@ -1157,7 +1157,7 @@ mod tests {
         tokio::time::sleep(TICK * 2).await;
         assert!(bench.root.join("transfers.json").exists(), "der unfertige Auftrag ist vorgemerkt");
 
-        // Neustart: Eine neue Warteschlange liest das Vorgemerkte und bietet es angehalten an.
+        // Restart: a new queue reads what was noted and offers it paused.
         drop(engine);
         let again = bench.engine();
         let offered = again.list();
@@ -1219,8 +1219,8 @@ mod tests {
         assert_eq!(engine.busy(), 0);
     }
 
-    /// Kein Test, sondern Messwerte: wie schnell Transfers gegen den eigenen Testserver auf diesem Rechner laufen,
-    /// daneben `scp` von OpenSSH gegen denselben Server als Maßstab. Aufruf:
+    /// Not a test but measurements: how fast transfers run against our own test server on this computer,
+    /// with OpenSSH's `scp` against the same server as a yardstick. Run:
     /// `cargo test --release -p glowport measures_throughput -- --ignored --nocapture`
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     #[ignore]
@@ -1237,7 +1237,7 @@ mod tests {
         for dir in [files.join("srv"), local.join("viele"), local.join("zurueck"), home.join(".ssh")] {
             std::fs::create_dir_all(dir).unwrap();
         }
-        // Unregelmäßiger Inhalt, damit weder Kompression noch gleiche Blöcke das Bild schönen.
+        // Irregular content, so neither compression nor equal blocks make the picture look better.
         let mut seed = 0x2545_F491_4F6C_DD1D_u64;
         let noise: Vec<u8> = (0..BIG).map(|_| { seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17; seed as u8 }).collect();
         std::fs::write(local.join("gross.bin"), &noise).unwrap();
@@ -1246,7 +1246,7 @@ mod tests {
         }
         drop(noise);
 
-        // Schlüssel für `scp`; der Testserver liest ihn aus dem Heimatverzeichnis.
+        // Key for `scp`; the test server reads it from the home directory.
         let key = root.join("schluessel");
         let keyed = Command::new("ssh-keygen").args(["-q", "-t", "ed25519", "-N", "", "-f"]).arg(&key).status().is_ok_and(|status| status.success());
         if keyed {
@@ -1270,7 +1270,7 @@ mod tests {
         let server_place = Place::Host { id: "tempo".into() };
         let text = |path: &Path| path.to_string_lossy().into_owned();
         let order = |from: &Place, source: String, to: &Place, dest: String| Order { from: from.clone(), source, to: to.clone(), dest, policy: Policy::Overwrite, source_label: String::new(), dest_label: String::new(), keep_from: None, keep_to: None };
-        // Lässt einen Auftrag laufen und liefert die Dauer in Sekunden.
+        // Runs a job and returns the duration in seconds.
         let run = |job: Order, parallel: usize| {
             let engine = engine.clone();
             async move {
@@ -1307,10 +1307,10 @@ mod tests {
             println!("  {SMALL} kleine herunter, {parallel} gleichzeitig  {seconds:5.2} s = {:6.0} Dateien/s", SMALL as f64 / seconds);
         }
 
-        // Derselbe Weg mit `scp` von OpenSSH, das heute ebenfalls SFTP spricht.
+        // The same route with OpenSSH's `scp`, which nowadays speaks SFTP as well.
         let scp = |from: String, to: String, recursive: bool| {
             let mut command = Command::new("scp");
-            // Im Ordner der Quelle und mit Namen statt Pfaden: `C:\…` hielte scp für einen Rechner namens C.
+            // In the source's folder and with names instead of paths: scp would take `C:\…` for a computer named C.
             command.current_dir(&local);
             command.args(["-q", "-P", &port.to_string(), "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", "-o", "IdentitiesOnly=yes", "-o", "BatchMode=yes", "-i"]).arg(&key);
             if recursive {

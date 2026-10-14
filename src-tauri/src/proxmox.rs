@@ -1,10 +1,10 @@
-//! Proxmox (`docs/verwaltung.md`): Verbindungen prüfen und speichern, Maschinen auflisten und schalten, Hosts aus
-//! ihnen anlegen und aktuell halten.
+//! Proxmox (`docs/management.md`): check and save connections, list and switch machines, create hosts from
+//! them and keep them up to date.
 //!
-//! Der Zugriff auf die Schnittstelle kommt aus `glowport_proxmox`, die Datensätze aus `glowport_core`. Hier treffen
-//! sich beide: Das Geheimnis eines Tokens geht aus dem Tresor nur an den Server seiner Verbindung, und nur über ein
-//! Zertifikat, das anerkannt oder vom Nutzer bestätigt ist. Das Nachlesen der Übersicht zählt nicht als Eingabe für
-//! die Auto-Sperre.
+//! Access to the API comes from `glowport_proxmox`, the records from `glowport_core`. This is where
+//! both meet: a token's secret only goes from the vault to the server of its connection, and only over a
+//! certificate that is trusted or confirmed by the user. Refreshing the overview does not count as input for
+//! the auto-lock.
 
 use std::{
     collections::HashMap,
@@ -22,27 +22,27 @@ use tauri::{AppHandle, Manager};
 
 use crate::app::{emit_snapshot_quiet, AppState, Changed, CmdError, CmdResult};
 
-/// So lange gilt, was über eine Maschine gelesen wurde (Einstellungen, Adresse), bevor neu gefragt wird.
+/// This long what was read about a machine (settings, address) applies before it is asked again.
 const FACTS_AGE: Duration = Duration::from_secs(60);
-/// So viele Maschinen werden zugleich gefragt.
+/// This many machines are asked at the same time.
 const PARALLEL: usize = 6;
-/// So lange gilt nach dem Schalten, was die Maschine selbst über ihren Zustand gesagt hat, vor dem, was die Liste
-/// aller Maschinen nennt. Proxmox erneuert diese Liste nur alle paar Sekunden.
+/// For this long after switching, what the machine itself said about its state applies before what the list
+/// of all machines names. Proxmox only refreshes that list every few seconds.
 const SETTLED_AGE: Duration = Duration::from_secs(30);
 
-/// Was zuletzt über eine Maschine gelesen wurde.
+/// What was last read about a machine.
 struct Known {
     at: Instant,
     status: &'static str,
     facts: Facts,
 }
 
-/// Der Zugang zu einem Proxmox-Server, solange sich an seiner Verbindung nichts ändert.
+/// Access to a Proxmox server, as long as nothing changes about its connection.
 struct Link {
     access: ProxmoxAccess,
     client: Client,
     facts: Mutex<HashMap<u32, Known>>,
-    /// Je eben geschalteter Maschine: ihr Zustand danach und wann.
+    /// Per machine just switched: its state afterwards and when.
     settled: Mutex<HashMap<u32, (Instant, &'static str)>>,
 }
 
@@ -51,8 +51,8 @@ impl Link {
         self.settled.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    /// Setzt bei eben geschalteten Maschinen den Zustand ein, den sie selbst genannt haben, solange die Liste
-    /// noch den alten führt. Hat die Liste aufgeholt, ist die Sache erledigt.
+    /// For machines just switched, fills in the state they named themselves while the list
+    /// still carries the old one. Once the list has caught up, the matter is settled.
     fn settle(&self, guests: &mut [Guest]) {
         let mut settled = self.settled();
         settled.retain(|_, (at, _)| at.elapsed() < SETTLED_AGE);
@@ -76,7 +76,7 @@ impl Link {
     }
 }
 
-/// Die offenen Zugänge, je Verbindung einer.
+/// The open accesses, one per connection.
 #[derive(Default)]
 pub struct Links(Mutex<HashMap<String, Arc<Link>>>);
 
@@ -93,7 +93,7 @@ fn locked() -> CmdError {
     VaultError::Locked.into()
 }
 
-/// Der Zugang zu einer Verbindung. `quiet`: Der Zugriff auf den Tresor zählt nicht als Eingabe (Nachlesen).
+/// Access to a connection. `quiet`: the access to the vault does not count as input (refreshing).
 fn link(app: &AppHandle, id: &str, quiet: bool) -> CmdResult<Arc<Link>> {
     let access = {
         let state = app.state::<AppState>();
@@ -116,7 +116,7 @@ fn link(app: &AppHandle, id: &str, quiet: bool) -> CmdResult<Arc<Link>> {
     Ok(link)
 }
 
-/// Der Tresor wird gesperrt: Die offenen Zugänge tragen das Geheimnis ihres Tokens und verschwinden mit.
+/// The vault is being locked: the open accesses carry their token's secret and disappear with it.
 pub(crate) fn forget_all(app: &AppHandle) {
     app.state::<Links>().0.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clear();
 }
@@ -125,8 +125,8 @@ fn forget(app: &AppHandle, id: &str) {
     app.state::<Links>().0.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).remove(id);
 }
 
-/// Was über die Maschinen zu wissen ist, um sich mit ihnen zu verbinden. Gefragt wird nur, wessen Stand alt ist
-/// oder wer seinen Zustand gewechselt hat; eine laufende Maschine ohne Adresse jedes Mal, bis sie eine nennt.
+/// What there is to know about the machines in order to connect to them. Only those whose state is old
+/// or that changed their state are asked; a running machine without an address every time until it names one.
 async fn facts_of(link: &Arc<Link>, guests: &[Guest]) -> HashMap<u32, Facts> {
     let mut found = HashMap::new();
     let mut tasks = tokio::task::JoinSet::new();
@@ -148,8 +148,8 @@ async fn facts_of(link: &Arc<Link>, guests: &[Guest]) -> HashMap<u32, Facts> {
         }
     }
     while let Some(done) = tasks.join_next().await {
-        // Gibt Proxmox die Einstellungen einer Maschine nicht her, bleibt offen, wie sie zu erreichen ist; beim
-        // nächsten Nachlesen wird wieder gefragt.
+        // If Proxmox does not hand out a machine's settings, how to reach it stays open; it is asked again
+        // on the next refresh.
         if let Ok((vmid, status, Ok(facts))) = done {
             link.known().insert(vmid, Known { at: Instant::now(), status, facts: facts.clone() });
             found.insert(vmid, facts);
@@ -206,14 +206,14 @@ pub struct GuestView {
     source: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     user: Option<String>,
-    /// Kennung und Name des Schlüssels im Tresor, den Cloud-Init für diese Maschine hinterlegt hat.
+    /// ID and name of the key in the vault that Cloud-Init stored for this machine.
     #[serde(skip_serializing_if = "Option::is_none")]
     key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     key_name: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     os: Option<&'static str>,
-    /// Kennung des Hosts, der zu dieser Maschine gehört.
+    /// ID of the host that belongs to this machine.
     #[serde(skip_serializing_if = "Option::is_none")]
     host: Option<String>,
 }
@@ -225,9 +225,9 @@ pub struct Overview {
     guests: Vec<GuestView>,
 }
 
-/// Knoten und Maschinen einer Verbindung. Dabei ziehen verknüpfte Hosts nach, wenn sich in Proxmox ihr Name oder
-/// ihre Adresse geändert hat; dann bekommen alle Fenster den neuen Stand, und der Abgleich läuft an. `fresh`: Der
-/// Nutzer will neu lesen; dann wird jede Maschine gefragt, auch wenn ihr Stand noch nicht alt ist.
+/// Nodes and machines of a connection. Linked hosts follow along when their name or
+/// address changed in Proxmox; then all windows get the new state, and syncing starts. `fresh`: the
+/// user wants to reload; then every machine is asked, even if its state is not old yet.
 #[tauri::command]
 pub async fn proxmox_overview(app: AppHandle, id: String, fresh: Option<bool>) -> CmdResult<Overview> {
     let link = link(&app, &id, true)?;
@@ -236,7 +236,7 @@ pub async fn proxmox_overview(app: AppHandle, id: String, fresh: Option<bool>) -
     }
     let (version, mut guests) = tokio::try_join!(link.client.version(), link.client.guests()).map_err(failed)?;
     link.settle(&mut guests);
-    // Ohne das Recht, die Knoten zu sehen, bleiben ihre Namen aus der Liste der Maschinen.
+    // Without the permission to see the nodes, their names come from the list of machines.
     let mut nodes: Vec<NodeView> = link.client.nodes().await.unwrap_or_default().into_iter().map(|n| NodeView { node: n.node, online: n.online, cpu: n.cpu, cores: n.cores, memory: usage(n.memory), uptime: n.uptime }).collect();
     for guest in &guests {
         if !nodes.iter().any(|n| n.node == guest.node) {
@@ -288,22 +288,22 @@ pub async fn proxmox_overview(app: AppHandle, id: String, fresh: Option<bool>) -
     Ok(overview)
 }
 
-/// Was eine Prüfung der Angaben ergab (`ProxmoxProbe` in `types.ts`).
+/// What checking the details resulted in (`ProxmoxProbe` in `types.ts`).
 #[derive(Debug, Serialize, PartialEq)]
 pub struct Probe {
-    /// Leer, solange der Fingerabdruck eines selbst erstellten Zertifikats nicht bestätigt ist: Bis dahin ist der
-    /// Token nicht hinausgegangen.
+    /// Empty as long as the fingerprint of a self-signed certificate is not confirmed: until then the
+    /// token has not gone out.
     version: String,
     trusted: bool,
     fingerprint: String,
     missing: Vec<&'static str>,
-    /// Der Server zeigt ein anderes Zertifikat als das, dessen Fingerabdruck mitkam.
+    /// The server shows a different certificate than the one whose fingerprint came along.
     changed: bool,
 }
 
-/// Prüft Adresse, Zertifikat und Token, ohne etwas zu speichern. In zwei Schritten: Erst wird nur die Verbindung
-/// aufgebaut und das Zertifikat angesehen. Ist es anerkannt, oder nennt die Eingabe genau seinen Fingerabdruck (der
-/// Nutzer hat ihn bestätigt), geht der Token hinaus und liest Version und Rechte.
+/// Checks address, certificate and token without saving anything. In two steps: first only the connection
+/// is established and the certificate looked at. If it is trusted, or the input names exactly its fingerprint (the
+/// user confirmed it), the token goes out and reads version and permissions.
 #[tauri::command]
 pub async fn proxmox_probe(app: AppHandle, input: ProxmoxInput) -> CmdResult<Probe> {
     let address = normalize(&input.address).map_err(failed)?;
@@ -315,7 +315,7 @@ pub async fn proxmox_probe(app: AppHandle, input: ProxmoxInput) -> CmdResult<Pro
         (false, Some(confirmed)) if confirmed == seen.fingerprint => Some(confirmed),
         (false, other) => return Ok(waiting(other.is_some())),
     };
-    // Ohne neues Geheimnis gilt das gespeicherte der Verbindung, die gerade bearbeitet wird.
+    // Without a new secret, the saved one of the connection currently being edited applies.
     let secret = match (input.secret.filter(|secret| !secret.expose().trim().is_empty()), &input.id) {
         (Some(secret), _) => secret,
         (None, Some(id)) => app.state::<AppState>().session().directory()?.proxmox_access(id)?.secret,
@@ -323,7 +323,7 @@ pub async fn proxmox_probe(app: AppHandle, input: ProxmoxInput) -> CmdResult<Pro
     };
     let client = Client::new(&address, &input.token_id, secret.expose(), pin).map_err(failed)?;
     let version = client.version().await.map_err(failed)?;
-    // Lässt sich nicht lesen, was der Token darf, wird nichts bemängelt; es zeigt sich dann beim Benutzen.
+    // If what the token may do cannot be read, nothing is criticised; it then shows when using it.
     let missing = client.missing().await.unwrap_or_default().into_iter().map(|missing| missing.name()).collect();
     Ok(Probe { version, trusted: seen.trusted, missing, ..waiting(false) })
 }
@@ -338,7 +338,7 @@ pub fn proxmox_save(app: AppHandle, mut input: ProxmoxInput) -> CmdResult<Change
     session.changed(Some(id))
 }
 
-/// Entfernt die Verbindung. Die Hosts bleiben und verlieren nur ihre Verknüpfung.
+/// Removes the connection. The hosts stay and only lose their link.
 #[tauri::command]
 pub fn proxmox_delete(app: AppHandle, id: String) -> CmdResult<Changed> {
     let state = app.state::<AppState>();
@@ -348,7 +348,7 @@ pub fn proxmox_delete(app: AppHandle, id: String) -> CmdResult<Changed> {
     session.changed(None)
 }
 
-/// Eine Maschine, wie die Oberfläche sie benennt.
+/// A machine as the interface names it.
 #[derive(Debug, Deserialize)]
 pub struct GuestRef {
     node: String,
@@ -356,7 +356,7 @@ pub struct GuestRef {
     kind: String,
 }
 
-/// Starten, herunterfahren, hart stoppen, neu starten. Kehrt zurück, wenn Proxmox den Auftrag ausgeführt hat.
+/// Start, shut down, hard stop, restart. Returns when Proxmox has carried out the task.
 #[tauri::command]
 pub async fn proxmox_action(app: AppHandle, id: String, guest: GuestRef, action: String) -> CmdResult<()> {
     let invalid = || CmdError::new("proxmox_failed", "Ungültige Angabe");
@@ -374,11 +374,11 @@ pub async fn proxmox_action(app: AppHandle, id: String, guest: GuestRef, action:
     };
     let link = link(&app, &id, false)?;
     let outcome = link.client.power(&guest.node, kind, guest.vmid, action).await;
-    // Nach dem Schalten stimmt nicht mehr, was über die Maschine gelesen wurde.
+    // After switching, what was read about the machine is no longer right.
     link.known().remove(&guest.vmid);
     if outcome.is_ok() {
-        // Die Liste aller Maschinen nennt jetzt noch den alten Zustand; die Oberfläche soll gleich den neuen
-        // zeigen. Also die Maschine selbst fragen. Antwortet sie nicht, gilt, was der Auftrag bewirkt hat.
+        // The list of all machines still names the old state now; the interface should show the new one
+        // right away. So ask the machine itself. If it does not answer, what the task brought about applies.
         let expected = if matches!(action, Power::Start | Power::Reboot) { "running" } else { "stopped" };
         let status = link.client.status(&guest.node, kind, guest.vmid).await.unwrap_or(expected);
         link.settled().insert(guest.vmid, (Instant::now(), status));
@@ -386,8 +386,8 @@ pub async fn proxmox_action(app: AppHandle, id: String, guest: GuestRef, action:
     outcome.map_err(failed)
 }
 
-/// Legt aus den gewählten Maschinen Hosts an und verknüpft sie. Was über sie eingetragen wird (Adresse, Benutzer,
-/// Schlüssel, Betriebssystem), liest der Kern selbst aus Proxmox; die Oberfläche nennt nur, welche.
+/// Creates hosts from the chosen machines and links them. What is entered about them (address, user,
+/// key, operating system) the core reads from Proxmox itself; the interface only names which ones.
 #[tauri::command]
 pub async fn proxmox_import(app: AppHandle, id: String, picks: Vec<GuestRef>, group: Option<String>) -> CmdResult<Changed> {
     let link = link(&app, &id, false)?;
@@ -408,9 +408,9 @@ pub async fn proxmox_import(app: AppHandle, id: String, picks: Vec<GuestRef>, gr
     session.changed(None)
 }
 
-/// Nimmt ein Host an seinem Port Verbindungen an? Ein einzelner Versuch, für „Starten und verbinden“: Eine eben
-/// gestartete Maschine braucht eine Weile, bis ihr SSH-Server läuft. Über einen Sprung-Server oder Proxy lässt sich
-/// von hier aus nicht fragen; dann gilt der Host als erreichbar, und das Verbinden selbst zeigt, ob es stimmt.
+/// Does a host accept connections on its port? A single attempt, for “Start and connect”: a machine just
+/// started needs a while until its SSH server runs. Through a jump host or proxy it cannot be asked
+/// from here; then the host counts as reachable, and connecting itself shows whether that is true.
 #[tauri::command]
 pub async fn proxmox_reachable(app: AppHandle, host: String) -> CmdResult<bool> {
     let target = {
@@ -424,7 +424,7 @@ pub async fn proxmox_reachable(app: AppHandle, host: String) -> CmdResult<bool> 
     Ok(matches!(tokio::time::timeout(Duration::from_secs(3), tokio::net::TcpStream::connect(target)).await, Ok(Ok(_))))
 }
 
-/// Löst die Verknüpfung eines Hosts mit seiner Maschine. Der Host bleibt, wie er ist.
+/// Unlinks a host from its machine. The host stays as it is.
 #[tauri::command]
 pub fn proxmox_unlink(app: AppHandle, host: String) -> CmdResult<Changed> {
     let state = app.state::<AppState>();

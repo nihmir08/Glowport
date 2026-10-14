@@ -1,5 +1,5 @@
-//! Dateien vom Server im eigenen Programm bearbeiten: Die Datei wird in einen Arbeitsordner geholt, dort geöffnet
-//! und nach jedem Speichern wieder hochgeladen, bis der Nutzer das beendet.
+//! Editing server files in a program of your own: the file is fetched into a working folder, opened there
+//! and uploaded again after every save, until the user ends it.
 
 use std::{
     path::PathBuf,
@@ -19,7 +19,7 @@ use crate::{
     sessions,
 };
 
-/// Größer darf eine Datei nicht sein, um so bearbeitet zu werden.
+/// A file must not be larger than this to be edited this way.
 const MAX_EDITED: u64 = 64 * 1024 * 1024;
 const LOOK_EVERY: Duration = Duration::from_millis(900);
 
@@ -45,7 +45,7 @@ pub struct Watched {
     uploads: u32,
     /// Millisekunden seit 1970.
     uploaded_at: Option<u64>,
-    /// Fehlercode, wenn das letzte Hochladen gescheitert ist.
+    /// Error code if the last upload failed.
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<&'static str>,
 }
@@ -64,11 +64,11 @@ fn publish(app: &AppHandle) {
     let _ = app.emit("watched", app.state::<Watches>().views());
 }
 
-/// Öffnet eine Datei mit einem Programm; ohne Angabe mit dem, das das System für sie vorsieht.
+/// Opens a file with a program; without one, with the one the system intends for it.
 fn launch(program: Option<&str>, file: &PathBuf) -> std::io::Result<()> {
     let mut command = match program.map(str::trim).filter(|p| !p.is_empty()) {
         Some(program) => std::process::Command::new(program),
-        // Der Explorer öffnet eine Datei mit ihrem Standardprogramm, ohne dass eine Shell den Pfad deutet.
+        // Explorer opens a file with its default program without a shell interpreting the path.
         None if cfg!(windows) => std::process::Command::new("explorer.exe"),
         None if cfg!(target_os = "macos") => std::process::Command::new("open"),
         None => std::process::Command::new("xdg-open"),
@@ -80,7 +80,7 @@ fn changed(file: &PathBuf) -> Option<SystemTime> {
     std::fs::metadata(file).and_then(|meta| meta.modified()).ok()
 }
 
-/// Holt eine Datei vom Server, öffnet sie im Programm des Nutzers und lädt sie nach jedem Speichern wieder hoch.
+/// Fetches a file from the server, opens it in the user's program and uploads it again after every save.
 #[tauri::command]
 pub async fn watch_open(app: AppHandle, place: Place, path: String, program: Option<String>) -> CmdResult<()> {
     if place == Place::Local {
@@ -94,7 +94,7 @@ pub async fn watch_open(app: AppHandle, place: Place, path: String, program: Opt
     let name = path.rsplit('/').next().filter(|name| !name.is_empty() && !name.contains(['\\', ':'])).ok_or_else(|| CmdError::invalid("name_required"))?.to_string();
     let watches = app.state::<Watches>();
     let id = watches.next.fetch_add(1, Ordering::Relaxed) + 1;
-    // Jede Datei bekommt ihren eigenen Ordner, damit gleiche Namen verschiedener Server sich nicht überschreiben.
+    // Every file gets its own folder, so equal names from different servers do not overwrite each other.
     let dir = crate::data_dir(&app).map_err(|e| CmdError::new("internal", e))?.join("edit").join(id.to_string());
     std::fs::create_dir_all(&dir).and_then(|()| std::fs::write(dir.join(&name), bytes)).map_err(|e| CmdError::new("internal", e.to_string()))?;
     let local = dir.join(&name);
@@ -119,7 +119,7 @@ pub async fn watch_open(app: AppHandle, place: Place, path: String, program: Opt
                 continue;
             }
             seen = now;
-            // Manche Programme schreiben in zwei Schritten; kurz warten, bis die Datei steht.
+            // Some programs write in two steps; wait briefly until the file is complete.
             tokio::time::sleep(Duration::from_millis(150)).await;
             let result = match std::fs::read(&local) {
                 Ok(bytes) => match files::remote(&app, &place).await {
@@ -144,7 +144,7 @@ pub async fn watch_open(app: AppHandle, place: Place, path: String, program: Opt
     Ok(())
 }
 
-/// Beendet das Beobachten einer Datei und räumt ihre Arbeitskopie weg.
+/// Stops watching a file and clears away its working copy.
 #[tauri::command]
 pub fn watch_stop(app: AppHandle, watches: State<'_, Watches>, id: u64) {
     let gone: Vec<Watch> = {
@@ -167,7 +167,7 @@ pub fn watch_list(watches: State<'_, Watches>) -> Vec<Watched> {
     watches.views()
 }
 
-/// Beim Start: Arbeitskopien vom letzten Mal sind verwaist und werden entfernt.
+/// On start: working copies from last time are orphaned and get removed.
 pub fn clean(app: &AppHandle) {
     if let Ok(dir) = crate::data_dir(app) {
         let _ = std::fs::remove_dir_all(dir.join("edit"));

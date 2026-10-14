@@ -10,13 +10,13 @@
   import LayoutPreview from './ui/LayoutPreview.svelte';
   import TextField from './ui/TextField.svelte';
 
-  /** Legt die Anordnung eines Tabs als Arbeitsbereich in den Tresor. */
+  /** Puts a tab's layout into the vault as a workspace. */
   let { tab, onclose }: { tab: Tab; onclose: () => void } = $props();
 
-  // Der Dialog wird je Tab neu erzeugt; die Startwerte werden bewusst nur einmal gelesen.
+  // The dialog is created anew per tab; the initial values are deliberately read only once.
   const saved = (() => savedTab(tab))();
   const total = leaves(saved.layout as Layout<Target>).length;
-  // Gespeicherte Hosts und lokale Terminals lassen sich wieder öffnen; eingetippte Adressen fallen weg.
+  // Saved hosts and local terminals can be opened again; typed addresses are dropped.
   const layout = mapLeaves<Target, Target>(saved.layout as Layout<Target>, (target) => (target.kind === 'host' || target.kind === 'local' ? target : null)) as SavedLayout | null;
   const kept = layout ? leaves(layout as Layout<Target>).length : 0;
 

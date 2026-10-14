@@ -7,7 +7,7 @@
   import { closeOtherTabs, closeTab, duplicateTab, panesOf, tabs, type Tab } from './sessions.svelte';
   import Icon from './ui/Icon.svelte';
 
-  /** Menü eines Tabs (Rechtsklick): umbenennen, einfärben, duplizieren, in ein eigenes Fenster, als Arbeitsbereich speichern, schließen. */
+  /** A tab's menu (right-click): rename, color, duplicate, into a window of its own, save as workspace, close. */
   let {
     tab,
     x,
@@ -20,12 +20,12 @@
   const COLORS = ['#FF5D6C', '#F59E0B', '#8BD613', '#22C3A6', '#5B9DFF', '#8B5CF6'];
   const WIDTH = 300;
 
-  // Arbeitsbereiche bestehen aus gespeicherten Hosts und lokalen Terminals; eingetippte Adressen lassen sich nicht ablegen.
+  // Workspaces consist of saved hosts and local terminals; typed addresses cannot be stored.
   const savable = $derived(vault.state === 'open' && panesOf(tab).some((pane) => pane.target.kind === 'host' || pane.target.kind === 'local'));
   const left = $derived(Math.max(8, Math.min(x, innerWidth - WIDTH - 8)));
 
   function run(action: () => void) {
-    // Erst handeln, dann schließen: Die Handlung braucht den Tab, zu dem das Menü gehört.
+    // Act first, then close: the action needs the tab the menu belongs to.
     action();
     onclose();
   }
