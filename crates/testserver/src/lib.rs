@@ -1,8 +1,8 @@
-//! Kleiner SSH-Server für Tests. Er läuft im Prozess des Tests auf einem freien Port von 127.0.0.1.
+//! Small SSH server for tests. It runs in the test's process on a free port of 127.0.0.1.
 //!
-//! Die „Shell“ ist ein Stück Text: Sie wiederholt Eingaben wie ein Terminal und kennt ein paar Befehle,
-//! mit denen sich das Verhalten des Clients prüfen lässt (`size`, `term`, `env`, `agent`, `exit`, `drop`).
-//! Mit `Options::files` spricht er außerdem SFTP auf einem Ordner dieses Rechners (siehe `sftp`).
+//! The “shell” is a piece of text: it echoes input like a terminal and knows a few commands
+//! that can be used to check the client's behaviour (`size`, `term`, `env`, `agent`, `exit`, `drop`).
+//! With `Options::files` it also speaks SFTP on a folder of this machine (see `sftp`).
 
 pub mod admin;
 pub mod ftp;
@@ -30,40 +30,40 @@ pub const GREETING: &str = "Willkommen beim Testserver\r\n";
 
 #[derive(Clone, Default)]
 pub struct Options {
-    /// Benutzer und Passwort, mit denen die Anmeldung gelingt. `None` schaltet die Passwort-Anmeldung ab.
+    /// User and password with which signing in succeeds. `None` switches password sign-in off.
     pub password: Option<(String, String)>,
     pub authorized_keys: Vec<PublicKey>,
-    /// Zertifizierungsstelle, deren Benutzer-Zertifikate der Server annimmt (wie `TrustedUserCAKeys`).
+    /// Certificate authority whose user certificates the server accepts (like `TrustedUserCAKeys`).
     pub user_ca: Option<PublicKey>,
-    /// Zertifikat für den Schlüssel des Servers. Er zeigt es Clients, die danach fragen.
+    /// Certificate for the server's key. It shows it to clients that ask for it.
     pub host_certificate: Option<russh::keys::Certificate>,
-    /// Heimatverzeichnis des Benutzers. Damit liest der Server `.ssh/authorized_keys` darin bei jeder Anmeldung neu
-    /// und führt `exec`-Befehle wirklich aus (über `sh`, mit diesem Ordner als `$HOME`), wie ein echter Server.
+    /// The user's home directory. With it the server reads `.ssh/authorized_keys` inside it anew on every sign-in
+    /// and really runs `exec` commands (via `sh`, with this folder as `$HOME`), like a real server.
     pub home: Option<PathBuf>,
-    /// Darf der Server Verbindungen zu anderen Rechnern weiterreichen (`direct-tcpip`), also Sprung-Server sein?
-    /// Dann lauscht er auf Wunsch auch selbst an einem Port und reicht herein, was dort ankommt (`tcpip-forward`).
+    /// May the server forward connections to other machines (`direct-tcpip`), i.e. be a jump host?
+    /// Then on request it also listens on a port itself and hands in what arrives there (`tcpip-forward`).
     pub forwarding: bool,
-    /// Der Server spricht nur Verfahren, die heute als schwach gelten, wie ein altes Netzwerkgerät.
+    /// The server only speaks algorithms considered weak today, like an old network device.
     pub legacy_only: bool,
-    /// Text, den der Server vor der Anmeldung zeigt.
+    /// Text the server shows before signing in.
     pub banner: Option<String>,
-    /// Feste Antwort auf `exec`-Aufrufe, etwa der Inhalt von `/etc/os-release`. Mit `home` gilt sie nur noch für
-    /// Befehle, die `uname -s` enthalten (so fragt der Client nach dem Betriebssystem).
+    /// Fixed answer to `exec` calls, e.g. the content of `/etc/os-release`. With `home` it only applies to
+    /// commands that contain `uname -s` (that is how the client asks for the operating system).
     pub exec_output: Option<String>,
-    /// Ordner dieses Rechners, den der Server über SFTP als sein Dateisystem zeigt. Ohne ihn gibt es kein SFTP.
+    /// Folder of this machine that the server shows over SFTP as its file system. Without it there is no SFTP.
     pub files: Option<PathBuf>,
-    /// Pfade im Dateisystem des Servers, unter denen SFTP nichts ändern darf (etwa `/etc`).
+    /// Paths in the server's file system under which SFTP may change nothing (e.g. `/etc`).
     pub files_read_only: Vec<String>,
-    /// Ein nachgestelltes Linux mit Docker, systemd und procps: Befehle der Verwaltung beantwortet der Server
-    /// dann aus diesem Stand, statt sie auszuführen (siehe [`admin`]).
+    /// A simulated Linux with Docker, systemd and procps: the server then answers management commands
+    /// from this state instead of running them (see [`admin`]).
     pub admin: Option<std::sync::Arc<std::sync::Mutex<admin::Admin>>>,
-    /// Pause vor jedem Lesen und Schreiben über SFTP, damit ein Test einen Transfer mittendrin erwischt.
+    /// Pause before every SFTP read and write, so a test catches a transfer in the middle.
     pub files_delay: Option<Duration>,
-    /// `mosh-server` im WSL samt Weiterleitung für UDP (siehe [`mosh`]). Ohne sie gibt es hier kein mosh.
+    /// `mosh-server` in WSL with a UDP forwarder (see [`mosh`]). Without it there is no mosh here.
     pub mosh: Option<mosh::Bridge>,
 }
 
-/// Zertifikat für einen Server-Schlüssel, ausgestellt von `ca` für die Adresse `name`, einen Tag lang gültig.
+/// Certificate for a server key, issued by `ca` for the address `name`, valid for one day.
 pub fn host_certificate(ca: &PrivateKey, host_key: &PrivateKey, name: &str) -> Option<russh::keys::Certificate> {
     use russh::keys::ssh_key::certificate::{Builder, CertType};
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok()?.as_secs();
@@ -72,14 +72,14 @@ pub fn host_certificate(ca: &PrivateKey, host_key: &PrivateKey, name: &str) -> O
     builder.sign(ca).ok()
 }
 
-/// Fester Schlüssel aus einem Startwert, damit Tests denselben Fingerabdruck wiedersehen.
+/// Fixed key from a seed, so tests see the same fingerprint again.
 pub fn key(seed: u8) -> PrivateKey {
     PrivateKey::from(Ed25519Keypair::from_seed(&[seed; 32]))
 }
 
 pub struct Running {
     pub address: SocketAddr,
-    /// Das Dateisystem hinter SFTP, falls der Server eines zeigt.
+    /// The file system behind SFTP, if the server shows one.
     pub files: Option<sftp::Files>,
     task: JoinHandle<()>,
 }
@@ -90,7 +90,7 @@ impl Drop for Running {
     }
 }
 
-/// Startet den Server im laufenden tokio-Runtime.
+/// Starts the server in the running tokio runtime.
 pub async fn start(options: Options, host_key: PrivateKey) -> std::io::Result<Running> {
     let listener = TcpListener::bind(("127.0.0.1", 0)).await?;
     let address = listener.local_addr()?;
@@ -103,7 +103,7 @@ pub async fn start(options: Options, host_key: PrivateKey) -> std::io::Result<Ru
     }
     let config = Arc::new(russh::server::Config {
         methods: methods.clone(),
-        // Keine Bremse gegen Passwort-Raten: Sie würde nur die Tests verlangsamen.
+        // No brake on password guessing: it would only slow down the tests.
         auth_rejection_time: Duration::ZERO,
         auth_rejection_time_initial: Some(Duration::ZERO),
         keys: vec![host_key],
@@ -142,22 +142,22 @@ struct Connection {
     options: Options,
     methods: MethodSet,
     files: Option<sftp::Files>,
-    /// Geöffnete Kanäle, bis feststeht, wofür sie gebraucht werden.
+    /// Opened channels, until it is clear what they are needed for.
     pending: HashMap<ChannelId, Channel<Msg>>,
     /// Bisher getippte Zeile je Shell.
     shells: HashMap<ChannelId, Vec<u8>>,
     sizes: HashMap<ChannelId, (u32, u32)>,
-    /// Umgebungsvariablen, die der Client für eine Shell gesetzt hat.
+    /// Environment variables the client set for a shell.
     env: HashMap<ChannelId, Vec<(String, String)>>,
-    /// Kanäle, für die der Client seinen Agenten weiterreicht.
+    /// Channels for which the client forwards its agent.
     agent: Vec<ChannelId>,
-    /// Terminal-Typ je Kanal, wie ihn der Client angefordert hat.
+    /// Terminal type per channel, as the client requested it.
     terms: HashMap<ChannelId, String>,
-    /// Ports, an denen der Server für den Client lauscht (`tcpip-forward`). Sie enden mit der Verbindung.
+    /// Ports on which the server listens for the client (`tcpip-forward`). They end with the connection.
     listeners: HashMap<(String, u32), Listening>,
 }
 
-/// Bricht das Lauschen ab, sobald der Eintrag wegfällt.
+/// Aborts listening as soon as the entry is dropped.
 struct Listening(JoinHandle<()>);
 
 impl Drop for Listening {
@@ -167,13 +167,13 @@ impl Drop for Listening {
 }
 
 impl Connection {
-    /// Wie OpenSSH: Nach einem Fehlversuch bleiben alle Methoden im Angebot.
+    /// Like OpenSSH: after a failed attempt all methods stay on offer.
     fn reject(&self) -> Auth {
         Auth::Reject { proceed_with_methods: Some(self.methods.clone()), partial_success: false }
     }
 
-    /// Verglichen wird der Schlüssel selbst. Der Kommentar aus einer `.pub`-Datei gehört nicht dazu und kommt
-    /// über die Leitung auch nicht mit.
+    /// The key itself is compared. The comment from a `.pub` file is not part of it and does not travel
+    /// over the line either.
     fn authorised(&self, key: &PublicKey) -> bool {
         let from_file = self.options.home.as_ref().and_then(|home| std::fs::read_to_string(home.join(".ssh").join("authorized_keys")).ok()).unwrap_or_default();
         let listed = from_file.lines().filter_map(|line| PublicKey::from_openssh(line.trim()).ok());
@@ -189,16 +189,16 @@ impl Connection {
                 session.eof(channel)?;
                 return session.close(channel);
             }
-            // Verbindung ohne Abschied kappen, so wie ein Netzabriss aus Sicht des Clients aussieht.
+            // Cut the connection without a goodbye, the way a network drop looks from the client's side.
             "drop" => return session.disconnect(Disconnect::ByApplication, "", ""),
             "size" => {
                 let (columns, rows) = self.sizes.get(&channel).copied().unwrap_or((0, 0));
                 session.data(channel, format!("{columns}x{rows}\r\n").into_bytes())?;
             }
-            // Fragt den weitergereichten Agenten des Clients und nennt die Fingerabdrücke seiner Schlüssel.
+            // Queries the client's forwarded agent and names the fingerprints of its keys.
             "agent" if self.agent.contains(&channel) => {
                 let handle = session.handle();
-                // Als eigene Aufgabe: Die Antwort auf das Öffnen des Kanals kommt über dieselbe Verbindung.
+                // As a task of its own: the answer to opening the channel comes over the same connection.
                 tokio::spawn(async move {
                     let listed = match handle.channel_open_agent().await {
                         Ok(forwarded) => AgentClient::connect(forwarded.into_stream()).request_identities().await.ok(),
@@ -246,14 +246,14 @@ impl Handler for Connection {
         })
     }
 
-    /// Nimmt ein Zertifikat an, wenn die vertraute Stelle es unterschrieben hat, es gerade gilt und den Benutzer nennt.
+    /// Accepts a certificate if the trusted authority signed it, it is currently valid and it names the user.
     async fn auth_openssh_certificate(&mut self, user: &str, certificate: &russh::keys::Certificate) -> Result<Auth, Self::Error> {
         let trusted = self.options.user_ca.as_ref().is_some_and(|ca| certificate.validate([&ca.fingerprint(Default::default())]).is_ok());
         Ok(if trusted && certificate.valid_principals().iter().any(|principal| principal == user) { Auth::Accept } else { self.reject() })
     }
 
-    // Die Bibliothek fragt hier auch für den Schlüssel in einem Zertifikat. Ob das Zertifikat gilt, entscheidet erst
-    // `auth_openssh_certificate`; ein bloßer Schlüssel scheitert danach in `auth_publickey`.
+    // The library also asks here for the key inside a certificate. Whether the certificate is valid is only decided by
+    // `auth_openssh_certificate`; a bare key then fails in `auth_publickey`.
     async fn auth_publickey_offered(&mut self, _user: &str, key: &PublicKey) -> Result<Auth, Self::Error> {
         Ok(if self.authorised(key) || self.options.user_ca.is_some() { Auth::Accept } else { self.reject() })
     }
@@ -315,7 +315,7 @@ impl Handler for Connection {
         Ok(())
     }
 
-    /// Sprung-Server: reicht den Kanal an den gewünschten Rechner weiter, wenn es erlaubt ist und er erreichbar ist.
+    /// Jump host: forwards the channel to the desired machine if that is allowed and it is reachable.
     #[allow(clippy::too_many_arguments)]
     async fn channel_open_direct_tcpip(
         &mut self,
@@ -327,7 +327,7 @@ impl Handler for Connection {
         reply: russh::server::ChannelOpenHandle,
         session: &mut Session,
     ) -> Result<(), Self::Error> {
-        // Für Tests: Dieses Ziel kappt die Verbindung, so wie ein Netzabriss aus Sicht des Clients aussieht.
+        // For tests: this destination cuts the connection, the way a network drop looks from the client's side.
         if host_to_connect == "disconnect.test" {
             return session.disconnect(Disconnect::ByApplication, "", "");
         }
@@ -336,7 +336,7 @@ impl Handler for Connection {
             _ => None,
         };
         let Some(mut target) = target else {
-            // Ohne Zusage gilt die Anfrage als abgelehnt.
+            // Without a promise the request counts as refused.
             return Ok(());
         };
         reply.accept().await;
@@ -347,13 +347,13 @@ impl Handler for Connection {
         Ok(())
     }
 
-    /// Lauscht für den Client an einem Port dieses Rechners und reicht jede Verbindung als Kanal zu ihm zurück.
+    /// Listens for the client on a port of this machine and hands every connection back to it as a channel.
     async fn tcpip_forward(&mut self, address: &str, port: &mut u32, session: &mut Session) -> Result<bool, Self::Error> {
         if !self.options.forwarding {
             return Ok(false);
         }
         let Ok(wanted) = u16::try_from(*port) else { return Ok(false) };
-        // Wie ein Server ohne `GatewayPorts`: immer nur an der eigenen Adresse.
+        // Like a server without `GatewayPorts`: always only on its own address.
         let Ok(listener) = TcpListener::bind(("127.0.0.1", wanted)).await else { return Ok(false) };
         let bound = listener.local_addr().map(|a| u32::from(a.port())).unwrap_or(*port);
         *port = bound;
@@ -398,7 +398,7 @@ impl Handler for Connection {
             _ if managed.is_some() => managed.map(|(output, status)| (output.into_bytes(), Vec::new(), status)).unwrap_or_default(),
             (Some(output), _) => (output.into_bytes(), Vec::new(), 0),
             (None, Some(home)) => {
-                // Vorwärts-Schrägstriche, damit auch die Shell von Git für Windows den Pfad versteht.
+                // Forward slashes, so Git for Windows' shell understands the path too.
                 let home = home.to_string_lossy().replace('\\', "/");
                 let ran = tokio::task::spawn_blocking(move || std::process::Command::new("sh").arg("-c").arg(command).env("HOME", home).output()).await;
                 match ran {
@@ -411,7 +411,7 @@ impl Handler for Connection {
         session.channel_success(channel)?;
         session.data(channel, output)?;
         if !errors.is_empty() {
-            // Fehlerausgabe auf ihrem eigenen Weg, wie bei einem echten Server.
+            // Error output on its own path, as with a real server.
             session.extended_data(channel, 1, errors)?;
         }
         session.exit_status_request(channel, status)?;

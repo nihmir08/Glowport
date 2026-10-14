@@ -21,7 +21,7 @@ sha2 = "0.10"
 rand_core = { version = "0.6", features = ["getrandom"] }
 ed25519-dalek = "2"
 subtle = "2"
-# Eigenes TLS für den Betrieb ohne vorgeschalteten Webserver. `ring` wie überall im Projekt.
+# TLS of its own for running without a web server in front. `ring` as everywhere in the project.
 axum-server = { version = "0.7", default-features = false, features = ["tls-rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 base64 = "0.22"

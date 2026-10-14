@@ -1,7 +1,7 @@
-//! Nachrichten zwischen Glowport und dem Sync-Server (`docs/sync.md`). JSON über HTTPS unter `/v1/…`.
+//! Messages between Glowport and the sync server (`docs/sync.md`). JSON over HTTPS under `/v1/…`.
 //!
-//! Alles Binäre reist als Base64. Der Server deutet davon nur, was er zum Prüfen braucht: Kennungen,
-//! öffentliche Schlüssel, Signaturen. Schlüsseltexte reicht er durch.
+//! Everything binary travels as Base64. Of it the server only interprets what it needs for checking: IDs,
+//! public keys, signatures. It passes ciphertexts through.
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use glowport_core::{
@@ -11,10 +11,10 @@ use glowport_core::{
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-/// Fassung dieses Protokolls. Der Server nennt seine und die älteste, die er noch bedient.
+/// Version of this protocol. The server names its own and the oldest it still serves.
 pub const PROTOCOL: u32 = 1;
 
-/// Binäres Feld; im JSON ein Base64-Text.
+/// Binary field; a Base64 text in JSON.
 #[derive(Clone, PartialEq, Eq, Default)]
 pub struct Bytes(pub Vec<u8>);
 
@@ -49,7 +49,7 @@ impl<'de> Deserialize<'de> for Bytes {
     }
 }
 
-/// Fehlerantwort des Servers. `code` ist für das Programm, `message` für das Protokoll des Betreibers.
+/// Error response of the server. `code` is for the program, `message` for the operator's log.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ApiError {
     pub code: String,
@@ -61,7 +61,7 @@ pub struct Info {
     pub name: String,
     pub protocol: u32,
     pub min_protocol: u32,
-    /// Es gibt noch kein Konto: Das erste braucht den Einrichtungscode statt einer Einladung.
+    /// There is no account yet: the first one needs the setup code instead of an invitation.
     pub fresh: bool,
 }
 
@@ -95,8 +95,8 @@ pub struct PreloginReply {
     pub kdf: Kdf,
 }
 
-/// Was der Server je Konto aufbewahrt, damit sich ein weiteres Gerät mit dem Master-Passwort anmelden kann.
-/// Jedes Stück ist öffentlich oder schon verschlüsselt.
+/// What the server keeps per account so another device can sign in with the master password.
+/// Every piece is public or already encrypted.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WireAccount {
     pub salt: Bytes,
@@ -135,7 +135,7 @@ impl From<&Account> for WireAccount {
 }
 
 impl WireAccount {
-    /// Zurück in die Form des Kerns, sofern jedes Stück die richtige Länge hat.
+    /// Back into the core's form, provided every piece has the right length.
     pub fn account(&self) -> Option<Account> {
         Some(Account {
             salt: self.salt.array()?,
@@ -157,12 +157,12 @@ impl WireAccount {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Register {
-    /// Einladungscode, beim allerersten Konto der Einrichtungscode des Servers.
+    /// Invitation code; for the very first account the server's setup code.
     pub code: String,
     pub username: String,
     pub auth_key: Bytes,
     pub account: WireAccount,
-    /// Name des Geräts, mit dem Kontoschlüssel verschlüsselt.
+    /// Name of the device, encrypted with the account key.
     pub device_name: Bytes,
 }
 
@@ -178,14 +178,14 @@ pub struct Session {
     pub account_id: Bytes,
     pub username: String,
     pub device_id: Bytes,
-    /// Weist das Gerät bei jeder weiteren Anfrage aus (`Authorization: Bearer <Base64>`).
+    /// Identifies the device on every further request (`Authorization: Bearer <Base64>`).
     pub token: Bytes,
     pub admin: bool,
     pub account: WireAccount,
 }
 
-/// Antwort auf Anmelden und Konto anlegen. `needs` ist für einen späteren zweiten Faktor vorgesehen: Steht
-/// dort etwas, gibt es noch keine Sitzung, und ein Programm, das den Schritt nicht kennt, braucht ein Update.
+/// Response to signing in and creating an account. `needs` is intended for a later second factor: if something
+/// is there, there is no session yet, and a program that does not know the step needs an update.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LoginReply {
     #[serde(default)]
@@ -204,8 +204,8 @@ pub struct WireRecord {
     pub nonce: Bytes,
     pub ciphertext: Bytes,
     pub signature: Bytes,
-    /// Nur beim Schicken: die Revision, auf der diese Änderung aufsetzt (0 = der Server kennt den Datensatz
-    /// nicht). Der Server nimmt nur an, was auf seinem Stand aufsetzt.
+    /// Only when sending: the revision this change builds on (0 = the server does not know the record).
+    /// The server only accepts what builds on its state.
     #[serde(default)]
     pub base: u64,
 }
@@ -217,7 +217,7 @@ impl From<&Envelope> for WireRecord {
 }
 
 impl WireRecord {
-    /// Ein Datensatz auf dem Weg zum Server, mit der Revision, auf der er aufsetzt.
+    /// A record on its way to the server, with the revision it builds on.
     pub fn outgoing(envelope: &Envelope, base: u64) -> Self {
         Self { base, ..Self::from(envelope) }
     }
@@ -236,22 +236,22 @@ impl WireRecord {
     }
 }
 
-/// Ein Tresor aus Sicht eines Kontos.
+/// A vault as an account sees it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VaultEntry {
     pub id: Bytes,
     pub shared: bool,
     pub epoch: u64,
-    /// Nummer der letzten angenommenen Änderung.
+    /// Number of the last accepted change.
     pub seq: u64,
     pub role: Role,
-    /// Eingeladen, aber noch nicht angenommen.
+    /// Invited, but not accepted yet.
     pub invited: bool,
-    /// Signierte Mitgliederliste und der für dieses Konto verpackte Schlüssel (nur geteilte Tresore).
+    /// Signed member list and the key wrapped for this account (shared vaults only).
     pub roster: Option<Bytes>,
     pub sealed_key: Option<Bytes>,
-    /// Wer beim Server gerade Mitglied ist. Nennt die Liste jemanden, der hier fehlt, ist er gegangen oder
-    /// hat die Einladung abgelehnt; der Besitzer tauscht dann den Schlüssel.
+    /// Who is currently a member at the server. If the list names someone who is missing here, they left or
+    /// declined the invitation; the owner then rotates the key.
     #[serde(default)]
     pub members: Vec<MemberState>,
 }
@@ -262,13 +262,13 @@ pub struct MemberState {
     pub invited: bool,
 }
 
-/// Neuer Name eines Geräts, mit dem Kontoschlüssel verschlüsselt.
+/// New name of a device, encrypted with the account key.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RenameDevice {
     pub name: Bytes,
 }
 
-/// Alles, was ein Gerät nach dem Anmelden und nach „an deinem Konto hat sich etwas geändert“ wissen muss.
+/// Everything a device must know after signing in and after “something changed on your account”.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Overview {
     pub account_id: Bytes,
@@ -282,10 +282,10 @@ pub struct Overview {
 pub struct Pull {
     pub seq: u64,
     pub epoch: u64,
-    /// Der ganze Stand statt nur der Änderungen: Das Gerät war länger weg, als der Server Grabsteine aufhebt.
+    /// The whole state instead of only the changes: the device was away longer than the server keeps tombstones.
     pub full: bool,
     pub records: Vec<WireRecord>,
-    /// Prüfsumme über den ganzen Stand des Tresors beim Server (`glowport_core::vault::state_digest`).
+    /// Checksum over the vault's whole state at the server (`glowport_core::vault::state_digest`).
     #[serde(default)]
     pub digest: Bytes,
 }
@@ -296,7 +296,7 @@ pub struct Push {
     pub records: Vec<WireRecord>,
 }
 
-/// Angenommen wird ein Paket ganz oder gar nicht. Abgelehnt nennt die Antwort, was der Server stattdessen hat.
+/// A package is accepted completely or not at all. If refused, the answer names what the server has instead.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PushReply {
     pub accepted: bool,
@@ -312,21 +312,21 @@ pub struct CreateVault {
     pub sealed_key: Bytes,
 }
 
-/// Der Schlüssel eines Tresors, verpackt für das Mitglied mit diesem Signaturschlüssel.
+/// A vault's key, wrapped for the member with this signing key.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SealedKey {
     pub member: Bytes,
     pub sealed: Bytes,
 }
 
-/// Neue Mitgliederliste beim selben Schlüsselstand, mit dem Schlüssel für jedes neue Mitglied.
+/// New member list at the same key generation, with the key for every new member.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RosterUpdate {
     pub roster: Bytes,
     pub keys: Vec<SealedKey>,
 }
 
-/// Schlüsseltausch als ein Paket. Gilt nur, wenn seit `expected_seq` niemand geschrieben hat.
+/// Key rotation as one package. Only valid if nobody has written since `expected_seq`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Rotate {
     pub expected_seq: u64,
@@ -354,7 +354,7 @@ pub struct Device {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PasswordChange {
-    /// Der bisherige Anmeldeschlüssel: Ein gestohlenes Geräte-Token allein ändert kein Passwort.
+    /// The previous sign-in key: a stolen device token alone changes no password.
     pub auth_key: Bytes,
     pub new_auth_key: Bytes,
     pub salt: Bytes,
@@ -380,11 +380,11 @@ pub struct AdminAccount {
     pub created_at: i64,
     pub seen_at: i64,
     pub devices: u32,
-    /// Größe aller Schlüsseltexte in Tresoren, die diesem Konto gehören.
+    /// Size of all ciphertexts in vaults this account owns.
     pub bytes: u64,
 }
 
-/// Nachricht über den WebSocket `/v1/live`: nur der Anstoß, geholt wird über die gewöhnlichen Anfragen.
+/// Message over the WebSocket `/v1/live`: only the nudge, fetching happens over the ordinary requests.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "lowercase")]
 pub enum Event {

@@ -1,5 +1,5 @@
-//! Alles, was der Server weiß und entscheidet, ohne Netz: Konten, Geräte, Tresore, Datensätze, Rechte.
-//! Regeln: `docs/sync.md`. Der Server entschlüsselt nichts; er prüft Signaturen, Rollen und Revisionen.
+//! Everything the server knows and decides, without network: accounts, devices, vaults, records, permissions.
+//! Rules: `docs/sync.md`. The server decrypts nothing; it checks signatures, roles and revisions.
 
 use std::{
     collections::{BTreeSet, HashMap, VecDeque},
@@ -58,7 +58,7 @@ CREATE INDEX IF NOT EXISTS records_seq ON records (vault, seq);
 const RECORD: &str = "id, revision, deleted, modified_at, author, nonce, ciphertext, signature";
 const ACCOUNT: &str = "salt, kdf, account_nonce, account_wrapped, ed25519, ed25519_nonce, ed25519_wrapped, x25519, x25519_nonce, x25519_wrapped, personal, personal_nonce, personal_wrapped";
 
-/// Zeichen der Codes: keine, die sich beim Abtippen verwechseln lassen (kein 0, O, 1, I).
+/// Characters of the codes: none that can be confused when typing (no 0, O, 1, I).
 const CODE_ALPHABET: &[u8; 32] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const INVITE_DAYS: i64 = 7;
 const WINDOW_MS: i64 = 15 * 60 * 1000;
@@ -69,7 +69,7 @@ pub struct Limits {
     pub record_bytes: usize,
     pub records_per_vault: usize,
     pub vaults_per_account: usize,
-    /// Fehlversuche je Konto und je Absender-Adresse in fünfzehn Minuten.
+    /// Failed attempts per account and per sender address in fifteen minutes.
     pub failures_per_account: usize,
     pub failures_per_address: usize,
     pub tombstone_days: i64,
@@ -81,7 +81,7 @@ impl Default for Limits {
     }
 }
 
-/// Warum der Server eine Anfrage ablehnt. `code` geht an das Programm.
+/// Why the server refuses a request. `code` goes to the program.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum Fail {
     #[error("Anfrage unvollständig oder unlesbar ({0})")]
@@ -136,7 +136,7 @@ impl From<rusqlite::Error> for Fail {
 
 type Result<T> = std::result::Result<T, Fail>;
 
-/// Wer eine Anfrage stellt, nach geprüftem Geräte-Token.
+/// Who makes a request, after the device token was checked.
 #[derive(Debug, Clone)]
 pub struct Caller {
     pub account: Id,
@@ -172,7 +172,7 @@ fn same(a: &[u8], b: &[u8]) -> bool {
     a.ct_eq(b).into()
 }
 
-/// Ein Code wie `K7QF-2MXA-9RTD`: 60 Bit Zufall.
+/// A code like `K7QF-2MXA-9RTD`: 60 bits of randomness.
 fn new_code() -> String {
     let bytes: [u8; 12] = random();
     let mut code = String::with_capacity(14);
@@ -236,7 +236,7 @@ fn wire_account(row: &rusqlite::Row) -> rusqlite::Result<WireAccount> {
     wire_account_at(row, 0)
 }
 
-/// Stand eines Tresors und die Rolle des Anfragenden darin.
+/// State of a vault and the requester's role in it.
 struct Seat {
     shared: bool,
     epoch: u64,
@@ -258,7 +258,7 @@ impl Store {
     }
 
     fn with(conn: Connection) -> Result<Self> {
-        // Die Befehle der Verwaltung öffnen dieselbe Datei neben dem laufenden Server: kurz warten statt scheitern.
+        // The administration commands open the same file next to the running server: wait briefly instead of failing.
         conn.busy_timeout(std::time::Duration::from_secs(10))?;
         conn.execute_batch("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL;")?;
         conn.execute_batch(SCHEMA)?;
@@ -273,7 +273,7 @@ impl Store {
         })
     }
 
-    /// Für Tests: eine Uhr, die sich stellen lässt.
+    /// For tests: a clock that can be set.
     pub fn set_clock(&mut self, clock: impl Fn() -> i64 + Send + Sync + 'static) {
         self.clock = Box::new(clock);
     }
@@ -294,8 +294,8 @@ impl Store {
         Ok(Info { name: "glowport-sync".into(), protocol: PROTOCOL, min_protocol: PROTOCOL, fresh: Self::is_fresh(&self.db())? })
     }
 
-    /// Solange es kein Konto gibt: ein neuer Einrichtungscode für das erste, das Verwalter wird. Der Server
-    /// gibt ihn beim Start aus; aufbewahrt wird nur sein Prüfwert.
+    /// As long as there is no account: a new setup code for the first one, which becomes the administrator. The server
+    /// prints it at startup; only its verifier is kept.
     pub fn setup_code(&self) -> Result<Option<String>> {
         let conn = self.db();
         if !Self::is_fresh(&conn)? {
@@ -337,10 +337,10 @@ impl Store {
         }
     }
 
-    // ── Konto und Geräte ─────────────────────────────────────────────────────────────────────────────────
+    // ── Account and devices ──────────────────────────────────────────────────────────────────────────────
 
-    /// Salz und Aufwand für die Schlüsselableitung. Für unbekannte Namen feste erfundene Werte, damit sich
-    /// hier nicht ablesen lässt, welche Konten es gibt.
+    /// Salt and cost for the key derivation. For unknown names fixed made-up values, so that it cannot
+    /// be read from here which accounts exist.
     pub fn prelogin(&self, username: &str) -> Result<PreloginReply> {
         let conn = self.db();
         let found = conn.query_row("SELECT salt, kdf FROM accounts WHERE username = ?1", [username], |row| Ok((row.get::<_, Vec<u8>>(0)?, row.get::<_, Vec<u8>>(1)?))).optional()?;
@@ -443,7 +443,7 @@ impl Store {
                 Ok((row.get::<_, Vec<u8>>(0)?, row.get::<_, Vec<u8>>(1)?, row.get::<_, Vec<u8>>(2)?, row.get::<_, bool>(3)?, row.get::<_, bool>(4)?, account))
             })
             .optional()?;
-        // Auch für unbekannte Namen wird gerechnet und verglichen, damit die Antwortzeit nichts verrät.
+        // Even for unknown names the computation and comparison run, so the response time reveals nothing.
         let (id, salt, hash, admin, disabled, account) = match found {
             Some(found) => (Some(found.0), found.1, found.2, found.3, found.4, Some(found.5)),
             None => (None, vec![0; 16], vec![0; 32], false, false, None),
@@ -463,7 +463,7 @@ impl Store {
         Ok(LoginReply { needs: None, session: Some(Session { account_id: id.into(), username: username.into(), device_id: device.into(), token: token.into(), admin, account }) })
     }
 
-    /// Prüft ein Geräte-Token. Ein gesperrtes Konto kommt nicht weiter.
+    /// Checks a device token. A disabled account gets no further.
     pub fn authenticate(&self, token: &[u8]) -> Result<Caller> {
         let conn = self.db();
         let found = conn
@@ -525,7 +525,7 @@ impl Store {
         Ok(devices)
     }
 
-    /// Gibt einem Gerät des eigenen Kontos einen Namen (verschlüsselt; der Server liest ihn nicht).
+    /// Gives a device of the own account a name (encrypted; the server does not read it).
     pub fn rename_device(&self, caller: &Caller, device: &Id, name: &Bytes) -> Result<()> {
         if name.0.len() > 512 {
             return Err(Fail::Bad("device_name"));
@@ -536,7 +536,7 @@ impl Store {
         }
     }
 
-    /// Meldet ein Gerät des eigenen Kontos ab: Sein Token gilt nicht mehr.
+    /// Signs out a device of the own account: its token is no longer valid.
     pub fn remove_device(&self, caller: &Caller, device: &Id) -> Result<()> {
         match self.db().execute("DELETE FROM devices WHERE id = ?1 AND account = ?2", params![device.as_slice(), caller.account.as_slice()])? {
             0 => Err(Fail::NotFound),
@@ -576,7 +576,7 @@ impl Store {
         Ok(tx.commit()?)
     }
 
-    /// Öffentliche Schlüssel eines Kontos, zum Einladen.
+    /// Public keys of an account, for inviting.
     pub fn public_keys(&self, username: &str) -> Result<PublicKeys> {
         self.db()
             .query_row("SELECT id, username, ed25519, x25519 FROM accounts WHERE username = ?1 AND disabled = 0", [username], |row| {
@@ -606,11 +606,11 @@ impl Store {
             },
         )
         .optional()?
-        // Wer kein Mitglied ist, erfährt nicht einmal, ob es den Tresor gibt.
+        // Whoever is not a member does not even learn whether the vault exists.
         .ok_or(Fail::NotFound)
     }
 
-    /// Die Konten, die über eine Änderung an diesem Tresor Bescheid bekommen.
+    /// The accounts that are notified about a change to this vault.
     pub fn members(&self, vault: &Id) -> Result<Vec<Id>> {
         let conn = self.db();
         let mut statement = conn.prepare("SELECT account FROM members WHERE vault = ?1")?;
@@ -618,7 +618,7 @@ impl Store {
         Ok(accounts.iter().filter_map(|a| a.as_slice().try_into().ok()).collect())
     }
 
-    /// Die Mitglieder einer Liste müssen Konten dieses Servers sein, mit genau den Schlüsseln, die sie nennt.
+    /// The members of a list must be accounts on this server, with exactly the keys it names.
     fn accounts_of(conn: &Connection, roster: &Roster) -> Result<Vec<(Id, Role, [u8; 32])>> {
         let mut out = Vec::with_capacity(roster.members.len());
         for member in &roster.members {
@@ -636,7 +636,7 @@ impl Store {
         keys.iter().find(|key| key.member.0 == member).map(|key| key.sealed.0.as_slice())
     }
 
-    /// Legt einen geteilten Tresor an. Der Anfragende ist Besitzer und einziges Mitglied.
+    /// Creates a shared vault. The requester is owner and only member.
     pub fn create_vault(&self, caller: &Caller, request: &CreateVault) -> Result<()> {
         let id = id_of(&request.id, "vault")?;
         let roster = roster::verify(&request.roster.0, &id, None).map_err(|_| Fail::Forbidden("roster_invalid"))?;
@@ -661,8 +661,8 @@ impl Store {
 
     pub fn pull(&self, caller: &Caller, vault: &Id, after: u64) -> Result<Pull> {
         let conn = self.db();
-        // Auch wer erst eingeladen ist, darf lesen: Den Schlüssel hat er ohnehin schon, und so sieht er vor
-        // dem Annehmen, was ihn erwartet.
+        // Even someone only invited may read: they already have the key anyway, and this way they see before
+        // accepting what awaits them.
         let seat = Self::seat(&conn, caller, vault)?;
         let full = after < seat.floor;
         let mut statement = conn.prepare(&format!("SELECT {RECORD} FROM records WHERE vault = ?1 AND seq > ?2 ORDER BY seq, id"))?;
@@ -673,7 +673,7 @@ impl Store {
         Ok(Pull { seq: seat.seq, epoch: seat.epoch, full, records, digest: digest.into() })
     }
 
-    /// Prüft, was sich ohne Schlüssel prüfen lässt: Größe, Autor und Signatur.
+    /// Checks what can be checked without a key: size, author and signature.
     fn checked(&self, caller: &Caller, vault: &Id, records: &[WireRecord]) -> Result<Vec<Envelope>> {
         let mut seen = BTreeSet::new();
         let mut out = Vec::with_capacity(records.len());
@@ -710,7 +710,7 @@ impl Store {
         Ok(())
     }
 
-    /// Nimmt ein Paket ganz an oder gar nicht (`docs/sync.md`, „Schicken“).
+    /// Accepts a package completely or not at all (`docs/sync.md`, “Sending”).
     pub fn push(&self, caller: &Caller, vault: &Id, request: &Push) -> Result<PushReply> {
         let envelopes = self.checked(caller, vault, &request.records)?;
         let conn = self.db();
@@ -730,10 +730,10 @@ impl Store {
         for (envelope, sent) in envelopes.iter().zip(&request.records) {
             let current = tx.query_row(&format!("SELECT {RECORD} FROM records WHERE vault = ?1 AND id = ?2"), params![vault.as_slice(), envelope.id.as_slice()], wire_record).optional()?;
             match current {
-                // Einen Datensatz, den der Server nicht kennt, nimmt er mit jeder Revision an.
+                // A record the server does not know is accepted with any revision.
                 None => added += 1,
-                // Sonst nur, was auf seinem Stand aufsetzt und darüber liegt. Gewöhnlich ist das genau eins
-                // darüber; mehr wird es, wenn ein Gerät nach dem Zurückholen des Servers seinen Stand hochlädt.
+                // Otherwise only what builds on its state and lies above it. Usually that is exactly one
+                // above; it becomes more when a device uploads its state after the server was restored.
                 Some(current) if sent.base == current.revision && envelope.revision > current.revision => {}
                 Some(current) => conflicts.push(current),
             }
@@ -754,7 +754,7 @@ impl Store {
         Ok(PushReply { accepted: true, seq, epoch: seat.epoch, conflicts: Vec::new() })
     }
 
-    /// Die geltende Mitgliederliste, und die neue dagegen geprüft: vom bisherigen Besitzer signiert und neuer.
+    /// The current member list, and the new one checked against it: signed by the previous owner and newer.
     fn next_roster(seat: &Seat, vault: &Id, blob: &[u8]) -> Result<(Roster, Roster)> {
         if !seat.shared {
             return Err(Fail::Forbidden("personal_vault"));
@@ -767,7 +767,7 @@ impl Store {
         Ok((current, next))
     }
 
-    /// Schreibt die Mitgliedschaften so, wie die Liste sie nennt. Wer neu ist, gilt als eingeladen, bis er annimmt.
+    /// Writes the memberships as the list names them. Whoever is new counts as invited until they accept.
     fn write_members(conn: &Connection, vault: &Id, roster: &Roster, keys: &[SealedKey], replace_keys: bool) -> Result<()> {
         let accounts = Self::accounts_of(conn, roster)?;
         let listed: Vec<Vec<u8>> = accounts.iter().map(|(id, _, _)| id.to_vec()).collect();
@@ -790,8 +790,8 @@ impl Store {
         Ok(())
     }
 
-    /// Neue Mitgliederliste beim selben Schlüsselstand: einladen, Rechte erweitern, Besitz übergeben.
-    /// Liefert die Konten, die Bescheid bekommen.
+    /// New member list at the same key generation: invite, extend permissions, transfer ownership.
+    /// Returns the accounts that are notified.
     pub fn update_roster(&self, caller: &Caller, vault: &Id, request: &RosterUpdate) -> Result<Vec<Id>> {
         let conn = self.db();
         let tx = conn.unchecked_transaction()?;
@@ -807,8 +807,8 @@ impl Store {
         self.members(vault)
     }
 
-    /// Schlüsseltausch: neue Liste, neuer Schlüssel für jedes Mitglied und alle Datensätze als ein Paket.
-    /// Liefert die Konten, die Bescheid bekommen, darunter die entfernten.
+    /// Key rotation: new list, new key for every member and all records as one package.
+    /// Returns the accounts that are notified, the removed ones included.
     pub fn rotate(&self, caller: &Caller, vault: &Id, request: &Rotate) -> Result<Vec<Id>> {
         let envelopes = self.checked(caller, vault, &request.records)?;
         let mut notify = self.members(vault)?;
@@ -842,7 +842,7 @@ impl Store {
         Ok(notify)
     }
 
-    /// Nimmt eine Einladung an.
+    /// Accepts an invitation.
     pub fn accept(&self, caller: &Caller, vault: &Id) -> Result<Vec<Id>> {
         let changed = self.db().execute("UPDATE members SET invited = 0 WHERE vault = ?1 AND account = ?2 AND invited = 1", params![vault.as_slice(), caller.account.as_slice()])?;
         if changed == 0 {
@@ -851,7 +851,7 @@ impl Store {
         self.members(vault)
     }
 
-    /// Lehnt eine Einladung ab oder verlässt einen Tresor. Der Besitzer kann nicht gehen.
+    /// Declines an invitation or leaves a vault. The owner cannot leave.
     pub fn leave(&self, caller: &Caller, vault: &Id) -> Result<Vec<Id>> {
         {
             let conn = self.db();
@@ -864,7 +864,7 @@ impl Store {
         self.members(vault)
     }
 
-    /// Löscht einen geteilten Tresor für alle. Nur der Besitzer.
+    /// Deletes a shared vault for everyone. Owner only.
     pub fn delete_vault(&self, caller: &Caller, vault: &Id) -> Result<Vec<Id>> {
         let notify = self.members(vault)?;
         let conn = self.db();
@@ -878,18 +878,18 @@ impl Store {
 
     // ── Verwaltung ───────────────────────────────────────────────────────────────────────────────────────
 
-    /// Wer an der Kommandozeile des Servers sitzt, verwaltet ihn: Dieselben Handgriffe wie in Glowport, ohne
-    /// Konto. Gedacht für den Fall, dass kein Verwalter mehr hineinkommt.
+    /// Whoever sits at the server's command line administers it: the same actions as in Glowport, without
+    /// an account. Meant for the case that no administrator can get in any more.
     pub fn operator() -> Caller {
         Caller { account: [0; 16], device: [0; 16], admin: true, username: String::new(), ed25519: [0; 32] }
     }
 
-    /// Wem ein Geräte-Token gehört, für das Protokoll. Prüft nichts und ändert nichts.
+    /// Who a device token belongs to, for the log. Checks nothing and changes nothing.
     pub fn username_of(&self, token: &[u8]) -> Option<String> {
         self.db().query_row("SELECT a.username FROM devices d JOIN accounts a ON a.id = d.account WHERE d.token_hash = ?1", [sha(&[token]).as_slice()], |row| row.get(0)).optional().ok().flatten()
     }
 
-    /// Kennung eines Kontos zu seinem Benutzernamen.
+    /// ID of an account for its user name.
     pub fn account_id(&self, username: &str) -> Result<Id> {
         let id: Option<Vec<u8>> = self.db().query_row("SELECT id FROM accounts WHERE username = ?1", [username], |row| row.get(0)).optional()?;
         id.and_then(|id| Id::try_from(id.as_slice()).ok()).ok_or(Fail::NotFound)
@@ -945,7 +945,7 @@ impl Store {
         Ok(accounts)
     }
 
-    /// Sperrt ein Konto oder gibt es wieder frei. Gesperrt heißt: keine Anmeldung, kein Abgleich; die Daten bleiben.
+    /// Disables an account or enables it again. Disabled means: no sign-in, no sync; the data stays.
     pub fn set_disabled(&self, caller: &Caller, account: &Id, disabled: bool) -> Result<()> {
         Self::admin(caller)?;
         if *account == caller.account {
@@ -957,9 +957,9 @@ impl Store {
         }
     }
 
-    /// Macht ein Konto zum Verwalter oder nimmt ihm das Recht. Das geht nur an der Kommandozeile des Servers
-    /// ([`Store::operator`]): Wer dort sitzt, kann ohnehin alles, und so kommt ein Server wieder zu einem
-    /// Verwalter, wenn der bisherige sein Master-Passwort nicht mehr weiß.
+    /// Makes an account an administrator or takes the right away. That only works on the server's command line
+    /// ([`Store::operator`]): whoever sits there can do everything anyway, and this way a server gets an
+    /// administrator again if the previous one no longer knows their master password.
     pub fn set_admin(&self, caller: &Caller, account: &Id, admin: bool) -> Result<()> {
         if !caller.admin || caller.account != Self::operator().account {
             return Err(Fail::Forbidden("not_admin"));
@@ -970,8 +970,8 @@ impl Store {
         }
     }
 
-    /// Löscht ein Konto samt Geräten und persönlichem Tresor. Geteilte Tresore, die ihm gehören, bleiben für
-    /// die übrigen Mitglieder lesbar, nehmen aber nichts mehr an. Liefert die Konten, die Bescheid bekommen.
+    /// Deletes an account with its devices and personal vault. Shared vaults it owns stay readable for
+    /// the other members but accept nothing any more. Returns the accounts that are notified.
     pub fn delete_account(&self, caller: &Caller, account: &Id) -> Result<Vec<Id>> {
         Self::admin(caller)?;
         if *account == caller.account {
@@ -996,8 +996,8 @@ impl Store {
 
     // ── Pflege ───────────────────────────────────────────────────────────────────────────────────────────
 
-    /// Entfernt Grabsteine, die älter sind als die Aufbewahrungsfrist, und merkt je Tresor, ab welcher Nummer
-    /// der Verlauf noch vollständig ist. Liefert die Zahl der entfernten.
+    /// Removes tombstones older than the retention period and records per vault from which number on
+    /// the history is still complete. Returns the number removed.
     pub fn purge(&self) -> Result<usize> {
         let cutoff = self.now() - self.limits.tombstone_days * DAY_MS;
         let conn = self.db();
@@ -1008,7 +1008,7 @@ impl Store {
         Ok(removed)
     }
 
-    /// Schreibt im Betrieb eine folgerichtige Kopie der Datenbank.
+    /// Writes a consistent copy of the database while running.
     pub fn backup(&self, dest: &Path) -> Result<()> {
         if dest.exists() {
             return Err(Fail::Conflict("file_exists"));

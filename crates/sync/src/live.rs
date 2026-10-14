@@ -1,5 +1,5 @@
-//! Der Abgleich im Hintergrund: Er läuft, sobald hier etwas geändert wird, sobald der Server über den
-//! WebSocket anstößt, und sonst in größeren Abständen.
+//! Syncing in the background: it runs as soon as something is changed here, as soon as the server nudges over the
+//! WebSocket, and otherwise at longer intervals.
 
 use std::{
     sync::{
@@ -22,31 +22,31 @@ use tokio_tungstenite::tungstenite::Message;
 
 use crate::{api::Api, Door, Engine, Report, SyncError};
 
-/// Sammelzeit nach einer lokalen Änderung: Wer mehrere Dinge kurz hintereinander ändert, schickt ein Paket.
+/// Collection time after a local change: whoever changes several things in quick succession sends one package.
 const DEBOUNCE: Duration = Duration::from_millis(300);
-/// Abstand der Runden ohne Anstoß: mit stehendem WebSocket nur zur Sicherheit, ohne ihn als Ersatz.
+/// Interval of rounds without a nudge: with a standing WebSocket only as a safety net, without it as a replacement.
 const IDLE_LIVE: Duration = Duration::from_secs(300);
 const IDLE_BLIND: Duration = Duration::from_secs(60);
-/// Wartezeiten vor dem nächsten Verbindungsversuch des WebSockets, in Sekunden.
+/// Waiting times before the WebSocket's next connection attempt, in seconds.
 const BACKOFF: [u64; 5] = [1, 2, 5, 10, 30];
-/// Der Server meldet sich mindestens einmal in der Minute. Bleibt er länger still, gilt die Verbindung als tot.
+/// The server reports at least once a minute. If it stays silent longer, the connection counts as dead.
 const SILENCE: Duration = Duration::from_secs(150);
 const CONNECT: Duration = Duration::from_secs(10);
 
-/// Was der Abgleich gerade tut; für die Statusleiste.
+/// What sync is doing right now; for the status bar.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Status {
     Syncing,
     Synced(Report),
     Offline,
-    /// Der Tresor ist gesperrt; abgeglichen wird wieder nach dem Entsperren.
+    /// The vault is locked; syncing resumes after unlocking.
     Locked,
-    /// Der Server kennt dieses Gerät nicht mehr (abgemeldet) oder das Konto ist gesperrt.
+    /// The server no longer knows this device (signed out) or the account is disabled.
     SignedOut(String),
     Failed(String),
 }
 
-/// Was das Ergebnis einer Runde für die Statusleiste heißt.
+/// What a round's result means for the status bar.
 pub fn status_of(result: Result<Report, SyncError>) -> Status {
     match result {
         Ok(report) => Status::Synced(report),
@@ -57,15 +57,15 @@ pub fn status_of(result: Result<Report, SyncError>) -> Status {
     }
 }
 
-/// Der laufende Abgleich eines verbundenen Tresors. Endet, wenn er fallen gelassen wird.
+/// The running sync of a connected vault. Ends when it is dropped.
 pub struct Runner {
     kick: Arc<Notify>,
     tasks: Vec<JoinHandle<()>>,
 }
 
 impl Runner {
-    /// Startet den Abgleich. `on_status` erfährt jeden Wechsel; nach `Synced` mit `changed` liest die
-    /// Oberfläche neu.
+    /// Starts syncing. `on_status` learns about every change; after `Synced` with `changed` the
+    /// interface reads again.
     pub fn start<D: Door>(engine: Arc<Engine<D>>, on_status: impl Fn(Status) + Send + Sync + 'static) -> Self {
         let kick = Arc::new(Notify::new());
         let live = Arc::new(AtomicBool::new(false));
@@ -92,7 +92,7 @@ impl Runner {
                 loop {
                     let connected = listen(&api, &kick, &live).await;
                     live.store(false, Ordering::Relaxed);
-                    // Stand die Verbindung schon einmal, beginnt das Warten wieder kurz.
+                    // If the connection was up once, the wait starts short again.
                     if connected {
                         attempt = 0;
                     }
@@ -104,7 +104,7 @@ impl Runner {
         Self { kick, tasks: vec![rounds, listener] }
     }
 
-    /// Hier wurde etwas geändert oder der Tresor wurde entsperrt: bald abgleichen.
+    /// Something was changed here or the vault was unlocked: sync soon.
     pub fn kick(&self) {
         self.kick.notify_one();
     }
@@ -118,7 +118,7 @@ impl Drop for Runner {
     }
 }
 
-/// Hält eine WebSocket-Verbindung zum Server, solange sie steht. Liefert, ob sie zustande kam.
+/// Holds a WebSocket connection to the server while it stands. Returns whether it came about.
 async fn listen(api: &Api, kick: &Notify, live: &AtomicBool) -> bool {
     let Some(token) = api.token() else { return false };
     let (host, port, secure, url) = api.live();
@@ -132,8 +132,8 @@ async fn listen(api: &Api, kick: &Notify, live: &AtomicBool) -> bool {
     converse(stream, &url, token, kick, live).await
 }
 
-/// Weist sich mit dem Geräte-Token aus und stößt bei jeder Nachricht des Servers eine Runde an. Was sich
-/// geändert hat, steht nicht in der Nachricht; das holt die Runde über die gewöhnlichen Anfragen.
+/// Identifies itself with the device token and triggers a round on every message from the server. What
+/// changed is not in the message; the round fetches it over the ordinary requests.
 async fn converse<S: AsyncRead + AsyncWrite + Unpin>(stream: S, url: &str, token: &str, kick: &Notify, live: &AtomicBool) -> bool {
     let Ok(Ok((mut socket, _))) = timeout(CONNECT, tokio_tungstenite::client_async(url, stream)).await else { return false };
     if socket.send(Message::Text(token.into())).await.is_err() {
@@ -144,7 +144,7 @@ async fn converse<S: AsyncRead + AsyncWrite + Unpin>(stream: S, url: &str, token
         _ => return false,
     }
     live.store(true, Ordering::Relaxed);
-    // Nach jedem Verbinden nachsehen: In der Zwischenzeit kann etwas verpasst worden sein.
+    // Check after every connect: something may have been missed in the meantime.
     kick.notify_one();
     loop {
         match timeout(SILENCE, socket.next()).await {

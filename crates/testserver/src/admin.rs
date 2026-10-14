@@ -1,9 +1,9 @@
-//! Ein nachgestelltes Linux mit Docker, systemd und procps: feste Antworten auf die Befehle, mit denen Glowport
-//! einen Server verwaltet (`glowport_net::manage`). So lässt sich die Seitenleiste prüfen, ohne dass auf dem
-//! Rechner des Tests eines davon läuft.
+//! A simulated Linux with Docker, systemd and procps: fixed answers to the commands Glowport uses to
+//! manage a server (`glowport_net::manage`). This way the sidebar can be tested without any of them
+//! running on the test machine.
 //!
-//! Der angemeldete Benutzer ist hier nie `root`, gehört aber zur Gruppe `docker`: Container darf er steuern, Dienste
-//! nicht, und `sudo` will ein Passwort. Eigene Prozesse darf er beenden, fremde nicht.
+//! The signed-in user is never `root` here, but belongs to the `docker` group: they may control containers, not
+//! services, and `sudo` wants a password. They may end their own processes, not others'.
 
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
@@ -14,7 +14,7 @@ struct Container {
     ports: &'static str,
     running: bool,
     exit_code: i32,
-    /// Seit wann er läuft oder steht.
+    /// Since when it has been running or stopped.
     since: Instant,
 }
 
@@ -33,7 +33,7 @@ struct Process {
     /// Arbeitsspeicher in KiB.
     rss: u64,
     command: &'static str,
-    /// Verbrauchte Rechenzeit in Ticks je Sekunde: 100 heißt ein Kern voll.
+    /// CPU time used in ticks per second: 100 means one core fully used.
     load: f64,
 }
 
@@ -44,9 +44,9 @@ pub struct Admin {
     processes: Vec<Process>,
 }
 
-/// So lange läuft der nachgestellte Server schon, wenn der Test beginnt.
+/// This is how long the simulated server has already been running when the test starts.
 const BOOTED: u64 = 86_400;
-/// Der Benutzer der Sitzung.
+/// The session's user.
 const USER: &str = "e2e";
 
 impl Default for Admin {
@@ -79,7 +79,7 @@ impl Default for Admin {
     }
 }
 
-/// Sekunden seit 1970 als `2026-10-11T20:52:44Z`.
+/// Seconds since 1970 as `2026-10-11T20:52:44Z`.
 fn rfc3339(seconds: u64) -> String {
     let (days, rest) = ((seconds / 86_400) as i64, seconds % 86_400);
     let z = days + 719_468;
@@ -92,17 +92,17 @@ fn rfc3339(seconds: u64) -> String {
     format!("{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z", rest / 3600, rest / 60 % 60, rest % 60)
 }
 
-/// Liest aus einem Befehl der Form `… programm verb "$1"' sh 'wert'` das Verb und den Wert.
+/// Reads verb and value from a command of the form `… program verb "$1"' sh 'value'`.
 fn action<'a>(command: &'a str, program: &str) -> Option<(&'a str, &'a str)> {
     let after = command.split_once(&format!("{program} "))?.1;
     let verb = after.split(' ').next()?;
-    // Zwischen Verb und Wert können Schalter stehen, etwa bei `systemctl status`.
+    // Switches can stand between verb and value, e.g. with `systemctl status`.
     let value = after.split_once("\"$1\"' sh '")?.1.strip_suffix('\'')?;
     Some((verb, value))
 }
 
 impl Admin {
-    /// Die Antwort auf einen Befehl: Ausgabe und Endwert. `None`: Das ist keiner der Verwaltung.
+    /// The answer to a command: output and exit value. `None`: this is not a management command.
     pub fn answer(&mut self, command: &str) -> Option<(String, u32)> {
         let sudo = command.contains("sudo -n -- ");
         let password = || Some(("sudo: a password is required\n".to_string(), 1));
@@ -129,7 +129,7 @@ impl Admin {
                 let text = format!("* {unit} - {}\n     Loaded: loaded (/usr/lib/systemd/system/{unit}; {})\n     Active: {} ({})\n\nOct 12 09:41:12 e2e systemd[1]: {} {unit}.\n", service.description, service.enabled, service.active, service.sub, if service.active == "active" { "Started" } else { "Stopped" });
                 return Some((text, if service.active == "active" { 0 } else { 3 }));
             }
-            // Dienste steuert nur root, und sudo will hier ein Passwort.
+            // Only root controls services, and sudo wants a password here.
             return if sudo { password() } else { Some((format!("Failed to {verb} {unit}: Interactive authentication required.\nSee system logs and 'systemctl status {unit}' for details.\n"), 1)) };
         }
         if let Some((_, pid)) = action(command, "kill") {
@@ -155,7 +155,7 @@ impl Admin {
         }
         out.push_str("@inspect\n");
         for c in &self.containers {
-            // Beim Start des Tests laufen die Container schon eine Stunde; was er selbst anstößt, zählt ab dann.
+            // When the test starts, the containers have been running for an hour; what it triggers itself counts from then on.
             let ago = if c.since == self.started { 3600 } else { c.since.elapsed().as_secs() };
             let (moment, never) = (rfc3339(now.saturating_sub(ago)), "0001-01-01T00:00:00Z");
             let (state, started, finished) = if c.running { ("running", moment.as_str(), never) } else { ("exited", never, moment.as_str()) };
@@ -189,7 +189,7 @@ impl Admin {
         }
         out.push_str("@stat\n");
         for p in &self.processes {
-            // Die Rechenzeit wächst mit der Uhr, damit zwei Messungen eine Auslastung ergeben.
+            // CPU time grows with the clock, so two measurements give a load.
             let ticks = (uptime * p.load) as u64;
             out.push_str(&format!("{} (prozess) S {} 1 1 0 -1 0 0 0 0 0 {ticks} 0 0 0 20 0 1 0 0 0 0 0\n", p.pid, p.parent));
         }

@@ -1,9 +1,9 @@
-//! Was beim Abgleich mit dem Tresor geschieht (`docs/sync.md`): einrichten, anmelden, holen, schicken,
-//! zusammenführen, Tresore teilen, Schlüssel tauschen.
+//! What happens with the vault when syncing (`docs/sync.md`): set up, sign in, fetch, send,
+//! merge, share vaults, rotate keys.
 //!
-//! Jede Funktion wechselt zwischen kurzen Griffen in den Tresor ([`Door::enter`]) und Anfragen an den Server.
-//! Dem Server wird dabei nichts geglaubt, was sich prüfen lässt: Datensätze, Mitgliederlisten und Schlüssel
-//! prüft der Kern (`glowport_core::vault`), bevor etwas davon gilt.
+//! Every function alternates between short reaches into the vault ([`Door::enter`]) and requests to the server.
+//! Nothing that can be checked is believed from the server: records, member lists and keys
+//! are checked by the core (`glowport_core::vault`) before any of it counts.
 
 use std::{
     collections::BTreeSet,
@@ -29,12 +29,12 @@ use crate::{
 type Id = [u8; 16];
 type Result<T> = std::result::Result<T, SyncError>;
 
-/// So oft wird ein Paket nach einer Ablehnung zusammengeführt und neu geschickt, bevor die Runde endet.
+/// This many times a package is merged and sent again after a refusal before the round ends.
 const ROUNDS: usize = 5;
 
-/// Geringster Aufwand der Schlüsselableitung, den ein Server beim Anmelden vorgeben darf. Ein böswilliger
-/// Server könnte sonst winzige Werte nennen und das Master-Passwort aus dem Anmeldeschlüssel billig erraten.
-/// (Die Vorgabe von Glowport liegt weit darüber; die Zahlen hier sind die übliche Untergrenze für Argon2id.)
+/// Lowest key derivation cost a server may prescribe at sign-in. A malicious
+/// server could otherwise name tiny values and cheaply guess the master password from the sign-in key.
+/// (Glowport's default is far above; the numbers here are the usual minimum for Argon2id.)
 pub const MIN_KDF: KdfParams = KdfParams { memory_kib: 19 * 1024, passes: 2, lanes: 1 };
 
 fn now_ms() -> i64 {
@@ -45,19 +45,19 @@ fn envelopes(records: &[WireRecord]) -> Result<Vec<Envelope>> {
     records.iter().map(|record| record.envelope().ok_or(SyncError::Protocol("Datensatz"))).collect()
 }
 
-/// Ein Hinweis aus dem Abgleich, wie er im Tresor liegt und in den Einstellungen erscheint.
+/// A notice from syncing, as stored in the vault and shown in the settings.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Notice {
-    /// Zwei Seiten haben dasselbe Feld geändert. `mine`: Der eigene Wert gilt.
+    /// Two sides changed the same field. `mine`: the own value applies.
     Clash { vault: String, record: String, path: String, mine: bool },
-    /// Eine Seite hatte gelöscht, die andere geändert: Der Eintrag ist geblieben.
+    /// One side had deleted, the other changed: the entry stayed.
     Restored { vault: String, record: String },
-    /// Eigene Änderungen wurden verworfen, weil man in diesem Tresor nicht (mehr) schreiben darf.
+    /// Own changes were discarded because one may not write in this vault (any more).
     Discarded { vault: String, count: usize },
-    /// Man ist kein Mitglied mehr; die Kopie des Tresors auf diesem Gerät ist entfernt.
+    /// One is no longer a member; the copy of the vault on this device has been removed.
     VaultRemoved { vault: String },
-    /// Der Server hat Datensätze geliefert, die die Prüfung nicht bestehen. Nichts davon wurde übernommen.
+    /// The server delivered records that fail the check. None of them was taken over.
     Rejected { vault: String, count: usize },
 }
 
@@ -65,7 +65,7 @@ fn note(vault: &mut Vault, notice: &Notice) -> Result<()> {
     Ok(vault.add_notice(&serde_json::to_vec(notice).map_err(|_| SyncError::Protocol("Hinweis"))?)?)
 }
 
-/// Hält fest, was beim Übernehmen auffiel. Liefert die Zahl der Hinweise.
+/// Records what was noticed while taking over. Returns the number of notices.
 fn note_applied(vault: &mut Vault, id: &Id, applied: &Applied) -> Result<usize> {
     let mut count = 0;
     for (record, merge) in &applied.merged {
@@ -85,37 +85,37 @@ fn note_applied(vault: &mut Vault, id: &Id, applied: &Applied) -> Result<usize> 
     Ok(count)
 }
 
-/// Eine Einladung in einen geteilten Tresor, die noch niemand angenommen hat.
+/// An invitation to a shared vault that has not been accepted yet.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Invitation {
     pub vault: String,
-    /// Name des Tresors, sofern er sich schon lesen ließ.
+    /// Name of the vault, if it could already be read.
     pub name: Option<String>,
     pub owner: String,
     pub role: Role,
-    /// Sicherheitscode des Besitzers: sechs Wörter aus dem Prüfwert seiner Schlüssel.
+    /// The owner's safety code: six words from the hash of their keys.
     pub code: String,
     pub known: Known,
 }
 
-/// Ob die Schlüssel eines Kontos zu denen passen, die dieses Gerät früher von ihm gesehen hat.
+/// Whether an account's keys match those this device saw from it before.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Known {
     New,
     Same,
-    /// Andere Schlüssel als früher: Entweder hat das Konto neu angefangen, oder jemand schiebt falsche unter.
+    /// Different keys than before: either the account started over, or someone slips in false ones.
     Changed,
 }
 
-/// Ein Konto, das sich einladen lässt.
+/// An account that can be invited.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Candidate {
     pub account: String,
     pub username: String,
     pub ed25519: String,
     pub x25519: String,
-    /// Sicherheitscode des Kontos: sechs Wörter aus dem Prüfwert seiner Schlüssel.
+    /// The account's safety code: six words from the hash of its keys.
     pub code: String,
     pub known: Known,
 }
@@ -124,33 +124,33 @@ pub struct Candidate {
 #[serde(rename_all = "camelCase")]
 pub struct DeviceInfo {
     pub id: String,
-    /// Leer, wenn das Gerät noch keinen Namen hat oder er sich nicht lesen ließ.
+    /// Empty if the device has no name yet or it could not be read.
     pub name: String,
     pub created_at: i64,
     pub seen_at: i64,
     pub current: bool,
 }
 
-/// Ergebnis einer Runde.
+/// Result of a round.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct Report {
-    /// Datensätze, Tresore oder Rollen haben sich geändert: Die Oberfläche liest neu.
+    /// Records, vaults or roles changed: the interface reads again.
     pub changed: bool,
-    /// Änderungen, die noch nicht beim Server sind.
+    /// Changes that have not reached the server yet.
     pub pending: usize,
     pub invitations: Vec<Invitation>,
-    /// Tresore, bei denen der Server einen älteren Stand hat als dieses Gerät. Sie ruhen, bis jemand
-    /// [`Engine::resync`] auslöst.
+    /// Vaults for which the server has an older state than this device. They rest until someone
+    /// triggers [`Engine::resync`].
     pub rolled_back: Vec<String>,
-    /// Eigene geteilte Tresore, die der Server nicht mehr kennt. Die Kopie hier bleibt.
+    /// Own shared vaults the server no longer knows. The copy here stays.
     pub orphaned: Vec<String>,
-    /// Neue Hinweise aus dieser Runde.
+    /// New notices from this round.
     pub notices: usize,
-    /// Das Master-Passwort wurde auf einem anderen Gerät geändert; hier gilt das neue ab dem ersten Entsperren damit.
+    /// The master password was changed on another device; here the new one applies from the first unlock with it.
     pub password_changed: bool,
-    /// Tresor und Konto derer, die eingeladen sind und noch nicht angenommen haben.
+    /// Vault and account of those who are invited and have not accepted yet.
     pub invited: Vec<(String, String)>,
-    /// Ob dieses Konto den Server verwaltet, nach dem Stand dieser Runde.
+    /// Whether this account administers the server, as of this round.
     pub admin: bool,
 }
 
@@ -170,7 +170,7 @@ fn code_of(ed25519: &str, x25519: &str) -> Option<String> {
     Some(safety_code(&unhex(ed25519)?, &unhex(x25519)?))
 }
 
-/// Der Name eines geteilten Tresors steht verschlüsselt darin, als Datensatz der Art `vault-info`.
+/// A shared vault's name is stored inside it, encrypted, as a record of kind `vault-info`.
 fn vault_name<T: AsRef<[u8]>>(plain: &[T]) -> Option<String> {
     plain.iter().filter_map(|bytes| serde_json::from_slice::<serde_json::Value>(bytes.as_ref()).ok()).find(|value| value["t"] == "vault-info").and_then(|value| value["name"].as_str().map(str::to_string))
 }
@@ -180,14 +180,14 @@ fn wrapping_of(overview: &Overview) -> Option<Wrapping> {
     Some(Wrapping { salt: account.salt.array()?, kdf: account.kdf.into(), account_nonce: account.account_nonce.0.clone(), account_wrapped: account.account_wrapped.0.clone() })
 }
 
-/// Führt Arbeit am Tresor aus, die rechnet (Schlüsselableitung), ohne die Netz-Threads aufzuhalten.
+/// Runs work on the vault that computes (key derivation) without holding up the network threads.
 async fn heavy<D: Door, T: Send + 'static>(door: &Arc<D>, work: impl FnOnce(&mut Vault) -> Result<T> + Send + 'static) -> Result<T> {
     let door = door.clone();
     tokio::task::spawn_blocking(move || door.enter(work)).await.map_err(|_| SyncError::Protocol("abgebrochen"))?
 }
 
-/// Fragt einen Server, ob er einer von Glowport ist und zu dieser Version passt. Liefert die Adresse in
-/// fester Form und seine Auskunft (darin: ob er noch auf sein erstes Konto wartet).
+/// Asks a server whether it is a Glowport one and fits this version. Returns the address in
+/// fixed form and its information (including whether it is still waiting for its first account).
 pub async fn probe(server: &str) -> Result<(String, Info)> {
     let api = Api::new(server)?;
     let info = check(&api).await?;
@@ -213,8 +213,8 @@ fn link_from(api: &Api, session: &Session) -> Result<Link> {
     Ok(Link { server: api.server(), account: hex(&account), username: session.username.clone(), device: hex(&device), token: encode_token(&session.token.0), admin: session.admin })
 }
 
-/// Meldet sich mit Benutzername und Master-Passwort an. Das Passwort verlässt das Gerät nicht: Zum Server
-/// geht nur der daraus abgeleitete Anmeldeschlüssel.
+/// Signs in with user name and master password. The password does not leave the device: only the
+/// sign-in key derived from it goes to the server.
 async fn sign_in(api: &Api, username: &str, password: &str, min_kdf: KdfParams) -> Result<Session> {
     let pre = api.prelogin(username).await?;
     let salt = pre.salt.array().ok_or(SyncError::Protocol("Salz"))?;
@@ -231,16 +231,16 @@ async fn sign_in(api: &Api, username: &str, password: &str, min_kdf: KdfParams) 
     reply.session.ok_or(SyncError::Protocol("Sitzung"))
 }
 
-/// Meldet ein eben angemeldetes Gerät wieder ab, wenn danach etwas scheitert. Gelingt das nicht, bleibt beim
-/// Server ein namenloses Gerät stehen, das sich in der Geräteliste abmelden lässt.
+/// Signs out a device just signed in if something fails afterwards. If that does not work, a nameless
+/// device stays at the server, which can be signed out in the device list.
 async fn undo_sign_in(api: &Api, link: &Link) {
     if let Some(device) = unhex(&link.device) {
         let _ = api.with_token(&link.token).remove_device(&device).await;
     }
 }
 
-/// Macht den Tresor dieses Geräts zum Konto auf einem Server („Sync einrichten“). `code` ist ein
-/// Einladungscode, beim allerersten Konto der Einrichtungscode des Servers.
+/// Turns this device's vault into an account on a server (“Set up sync”). `code` is an
+/// invitation code; for the very first account the server's setup code.
 pub async fn register<D: Door>(door: &Arc<D>, server: &str, code: &str, username: &str, password: &str, device_name: &str) -> Result<Engine<D>> {
     let api = Api::new(server)?;
     check(&api).await?;
@@ -259,9 +259,9 @@ pub async fn register<D: Door>(door: &Arc<D>, server: &str, code: &str, username
     Engine::with(door.clone(), link)
 }
 
-/// Verbindet einen Tresor, der schon zu einem Konto gehört, wieder mit dem Server: nach dem Einspielen einer
-/// Sicherung oder nachdem das Gerät abgemeldet wurde. Gehört der Tresor zu einem anderen Konto, scheitert es
-/// mit [`SyncError::OtherAccount`]; dann führt der Weg über [`login_new`] und `Vault::adopt_from`.
+/// Reconnects a vault that already belongs to an account to the server: after restoring a
+/// backup or after the device was signed out. If the vault belongs to another account, it fails
+/// with [`SyncError::OtherAccount`]; then the way leads through [`login_new`] and `Vault::adopt_from`.
 pub async fn connect<D: Door>(door: &Arc<D>, server: &str, username: &str, password: &str, device_name: &str, min_kdf: KdfParams) -> Result<Engine<D>> {
     let api = Api::new(server)?;
     check(&api).await?;
@@ -275,13 +275,13 @@ pub async fn connect<D: Door>(door: &Arc<D>, server: &str, username: &str, passw
         if vault.public_keys()?.0 != account.ed25519_public || vault.personal()? != account.personal {
             return Err(SyncError::OtherAccount);
         }
-        // Das eben benutzte Passwort ist das des Servers. Weicht seine Verpackung von der hiesigen ab, gilt sie
-        // ab dem nächsten Entsperren damit.
+        // The password just used is the server's. If its wrapping differs from the local one, it applies
+        // from the next unlock with it.
         let theirs = Wrapping { salt: account.salt, kdf: account.kdf, account_nonce: account.account_nonce.clone(), account_wrapped: account.account_wrapped.clone() };
         if vault.current_wrapping()? != theirs {
             vault.stage_wrapping(&theirs)?;
         }
-        // Was dieses Gerät vom Stand des Servers wusste, gilt nicht mehr: von vorn holen.
+        // What this device knew about the server's state no longer applies: fetch from scratch.
         for info in vault.vaults()? {
             vault.set_cursor(&info.id, 0)?;
         }
@@ -300,8 +300,8 @@ pub async fn connect<D: Door>(door: &Arc<D>, server: &str, username: &str, passw
     Ok(engine)
 }
 
-/// Legt auf einem Gerät ohne Tresor den eines bestehenden Kontos an („Mit Konto anmelden“). Der Tresor ist
-/// danach offen und mit dem Server verbunden, aber noch leer: Den Inhalt holt die erste Runde.
+/// Creates the vault of an existing account on a device without a vault (“Sign in with an account”). The vault is
+/// then open and connected to the server, but still empty: the first round fetches the content.
 pub async fn login_new(path: &Path, server: &str, username: &str, password: &str, device_name: &str, min_kdf: KdfParams) -> Result<Vault> {
     if Vault::exists(path) {
         return Err(VaultError::AlreadyExists.into());
@@ -337,7 +337,7 @@ pub async fn login_new(path: &Path, server: &str, username: &str, password: &str
     Ok(vault)
 }
 
-/// Der Abgleich eines verbundenen Tresors.
+/// Syncing a connected vault.
 pub struct Engine<D: Door> {
     door: Arc<D>,
     pub(crate) api: Api,
@@ -347,7 +347,7 @@ pub struct Engine<D: Door> {
 }
 
 impl<D: Door> Engine<D> {
-    /// Liest die Anmeldung aus dem offenen Tresor. `None`: Der Abgleich ist nicht eingerichtet.
+    /// Reads the sign-in from the open vault. `None`: sync is not set up.
     pub fn open(door: Arc<D>) -> Result<Option<Self>> {
         match door.enter(|vault| Link::load(vault))? {
             Some(link) => Self::with(door, link).map(Some),
@@ -369,9 +369,9 @@ impl<D: Door> Engine<D> {
         self.door.enter(|v| v.vaults()?.into_iter().find(|info| info.id == *vault).ok_or(SyncError::Vault(VaultError::NotFound)))
     }
 
-    // ── Eine Runde ───────────────────────────────────────────────────────────────────────────────────────
+    // ── One round ────────────────────────────────────────────────────────────────────────────────────────
 
-    /// Gleicht alles ab: Konto, Tresore, Mitgliedschaften, Datensätze in beide Richtungen.
+    /// Syncs everything: account, vaults, memberships, records in both directions.
     pub async fn sync(&self) -> Result<Report> {
         let overview = self.api.overview().await?;
         let mut report = Report { admin: overview.admin, ..Report::default() };
@@ -379,12 +379,12 @@ impl<D: Door> Engine<D> {
             if overview.account.ed25519_public.0 != vault.public_keys()?.0 {
                 return Err(SyncError::OtherAccount);
             }
-            // Wer den Server verwaltet, kann sich dort ändern; die gespeicherte Anmeldung zieht nach.
+            // Whoever administers the server can change there; the stored sign-in follows.
             if let Some(mut link) = Link::load(vault)?.filter(|link| link.admin != overview.admin) {
                 link.admin = overview.admin;
                 link.save(vault)?;
             }
-            // Auf einem anderen Gerät wurde das Master-Passwort geändert: Die neue Verpackung wird vorgemerkt.
+            // The master password was changed on another device: the new wrapping is stored as pending.
             let theirs = wrapping_of(&overview).ok_or(SyncError::Protocol("Konto"))?;
             if vault.current_wrapping()? != theirs {
                 vault.stage_wrapping(&theirs)?;
@@ -406,7 +406,7 @@ impl<D: Door> Engine<D> {
                 Some(info) => self.sync_shared(&id, info, entry, &mut report).await?,
                 None if !entry.shared => return Err(SyncError::OtherAccount),
                 None if entry.invited => report.invitations.extend(self.invitation(&id, entry).await?),
-                // Auf einem anderen eigenen Gerät angenommen: Hier kommt der Tresor einfach dazu.
+                // Accepted on another own device: here the vault is simply added.
                 None => {
                     if self.join(&id, entry)? {
                         self.sync_vault(&id, &mut report).await?;
@@ -415,7 +415,7 @@ impl<D: Door> Engine<D> {
             }
         }
 
-        // Geteilte Tresore, die der Server für dieses Konto nicht mehr führt.
+        // Shared vaults the server no longer keeps for this account.
         let listed: BTreeSet<Id> = overview.vaults.iter().filter_map(|entry| entry.id.array()).collect();
         for info in local.iter().filter(|info| info.kind == Kind::Shared && !listed.contains(&info.id)) {
             if info.role == Role::Owner {
@@ -439,12 +439,12 @@ impl<D: Door> Engine<D> {
         Ok(report)
     }
 
-    /// Ein geteilter Tresor, den es hier schon gibt: Schlüsseltausch und neue Mitgliederliste übernehmen,
-    /// dann die Datensätze abgleichen.
+    /// A shared vault that already exists here: take over key rotation and new member list,
+    /// then sync the records.
     async fn sync_shared(&self, id: &Id, info: &VaultInfo, entry: &VaultEntry, report: &mut Report) -> Result<()> {
         let (Some(roster), Some(sealed_key)) = (&entry.roster, &entry.sealed_key) else { return Err(SyncError::Protocol("Tresor")) };
         if entry.epoch > info.epoch {
-            // Der Besitzer hat den Schlüssel getauscht: Alles kommt neu verschlüsselt.
+            // The owner rotated the key: everything comes newly encrypted.
             let pull = self.api.pull(id, 0).await?;
             let rows = envelopes(&pull.records)?;
             let outcome = self.door.enter(|vault| match vault.apply_rotation(id, &sealed_key.0, &roster.0, &rows) {
@@ -452,7 +452,7 @@ impl<D: Door> Engine<D> {
                     vault.set_cursor(id, pull.seq)?;
                     Ok(Some(note_applied(vault, id, &applied)?))
                 }
-                // Die neue Liste nennt dieses Konto nicht mehr.
+                // The new list no longer names this account.
                 Err(VaultError::NotMember) => {
                     vault.remove_vault(id)?;
                     note(vault, &Notice::VaultRemoved { vault: hex(id) })?;
@@ -468,11 +468,11 @@ impl<D: Door> Engine<D> {
                 }
             }
         } else {
-            // Neue Mitglieder, mehr Rechte, Übergabe des Besitzes: Die Liste ist neuer, der Schlüssel derselbe.
+            // New members, more permissions, transfer of ownership: the list is newer, the key the same.
             self.door.enter(|vault| {
                 if vault.roster_blob(id)? != roster.0 {
                     match vault.set_roster(id, &roster.0) {
-                        // Eine Liste, die die Prüfung nicht besteht, ändert nichts.
+                        // A list that fails the check changes nothing.
                         Ok(()) | Err(VaultError::Roster(_)) | Err(VaultError::NotMember) => {}
                         Err(error) => return Err(error.into()),
                     }
@@ -482,8 +482,8 @@ impl<D: Door> Engine<D> {
         }
         self.sync_vault(id, report).await?;
 
-        // Wer gegangen ist oder eine Einladung abgelehnt hat, steht noch in der Liste, ist beim Server aber
-        // kein Mitglied mehr. Der Besitzer nimmt ihn heraus und tauscht den Schlüssel.
+        // Whoever left or declined an invitation is still on the list but no longer a member
+        // at the server. The owner takes them out and rotates the key.
         let info = self.info(id)?;
         if let (Role::Owner, Some(roster)) = (info.role, &info.roster) {
             let present: BTreeSet<String> = entry.members.iter().filter_map(|member| member.account.array::<16>()).map(|account| hex(&account)).collect();
@@ -495,19 +495,19 @@ impl<D: Door> Engine<D> {
         Ok(())
     }
 
-    /// Holt, was es in einem Tresor Neues gibt, und schickt, was hier wartet.
+    /// Fetches what is new in a vault and sends what is waiting here.
     async fn sync_vault(&self, id: &Id, report: &mut Report) -> Result<()> {
         let mut reconciled = false;
         for _ in 0..ROUNDS {
             let (cursor, info) = self.door.enter(|vault| Ok((vault.cursor(id)?, vault.vaults()?.into_iter().find(|info| info.id == *id).ok_or(VaultError::NotFound)?)))?;
             let pull = self.api.pull(id, cursor).await?;
             if pull.epoch != info.epoch {
-                // Mitten in einem Schlüsseltausch: Die nächste Runde beginnt wieder bei der Übersicht.
+                // In the middle of a key rotation: the next round starts again at the overview.
                 return Ok(());
             }
             let rows = envelopes(&pull.records)?;
             let may_write = info.role.may_write();
-            // Eine kleinere Nummer als die zuletzt gesehene: Der Server weiß weniger als dieses Gerät.
+            // A smaller number than the last one seen: the server knows less than this device.
             let mut consistent = pull.seq >= cursor || reconciled;
             let outgoing = self.door.enter(|vault| {
                 if consistent {
@@ -517,7 +517,7 @@ impl<D: Door> Engine<D> {
                     }
                     vault.set_cursor(id, pull.seq)?;
                     report.notices += note_applied(vault, id, &applied)?;
-                    // Stimmt jetzt, was dieses Gerät für den Stand des Servers hält, mit dessen Prüfsumme überein?
+                    // Does what this device believes the server's state to be now match its checksum?
                     consistent = reconciled || pull.digest.0.is_empty() || vault.believed_digest(id)?.as_slice() == pull.digest.0;
                 }
                 if !consistent {
@@ -526,7 +526,7 @@ impl<D: Door> Engine<D> {
                 if may_write {
                     return Ok(vault.outgoing(id)?);
                 }
-                // Wer nur lesen darf, behält keine wartenden Änderungen (etwa aus der Zeit vor dem Herabstufen).
+                // Whoever may only read keeps no waiting changes (e.g. from the time before being downgraded).
                 let discarded = vault.discard_pending(id)?;
                 if discarded > 0 {
                     note(vault, &Notice::Discarded { vault: hex(id), count: discarded })?;
@@ -535,7 +535,7 @@ impl<D: Door> Engine<D> {
                 Ok(Vec::new())
             })?;
             if !consistent {
-                // Etwas verpasst oder der Server hat etwas verloren: den ganzen Stand vergleichen.
+                // Missed something or the server lost something: compare the whole state.
                 if !self.reconcile(id, report).await? {
                     return Ok(());
                 }
@@ -552,16 +552,16 @@ impl<D: Door> Engine<D> {
                 Ok(reply) if reply.accepted => {
                     return self.door.enter(|vault| {
                         vault.acknowledge(id, &sent)?;
-                        // Nur wenn zwischen Holen und Schicken sonst nichts geschah, ist damit alles bekannt.
+                        // Only if nothing else happened between fetching and sending is everything known with it.
                         if reply.seq == pull.seq + 1 {
                             vault.set_cursor(id, reply.seq)?;
                         }
                         Ok(())
                     });
                 }
-                // Abgelehnt wegen eines anderen Schlüsselstands: Die nächste Runde holt den Tausch nach.
+                // Refused because of a different key generation: the next round catches up on the rotation.
                 Ok(reply) if reply.conflicts.is_empty() => return Ok(()),
-                // Ein anderes Gerät war schneller: zusammenführen und noch einmal.
+                // Another device was faster: merge and once more.
                 Ok(reply) => {
                     let theirs = envelopes(&reply.conflicts)?;
                     self.door.enter(|vault| {
@@ -584,9 +584,9 @@ impl<D: Door> Engine<D> {
         Ok(())
     }
 
-    /// Vergleicht den ganzen Stand eines Tresors mit dem des Servers. Hat der Server nur Neueres, wird es
-    /// übernommen (`true`). Fehlt ihm etwas, das hier als abgeglichen gilt, hat er einen älteren Stand: Dann
-    /// ändert sich nichts, der Tresor wird gemeldet und ruht, bis jemand [`Engine::resync`] auslöst (`false`).
+    /// Compares a vault's whole state with the server's. If the server only has newer things, they are
+    /// taken over (`true`). If it lacks something that counts as synced here, it has an older state: then
+    /// nothing changes, the vault is reported and rests until someone triggers [`Engine::resync`] (`false`).
     async fn reconcile(&self, id: &Id, report: &mut Report) -> Result<bool> {
         let full = self.api.pull(id, 0).await?;
         let rows = envelopes(&full.records)?;
@@ -602,12 +602,12 @@ impl<D: Door> Engine<D> {
         })
     }
 
-    /// Sieht sich eine Einladung an: Wer lädt ein, in welcher Rolle, wie heißt der Tresor.
+    /// Looks at an invitation: who invites, in which role, what the vault is called.
     async fn invitation(&self, id: &Id, entry: &VaultEntry) -> Result<Option<Invitation>> {
         let (Some(roster), Some(sealed_key)) = (&entry.roster, &entry.sealed_key) else { return Ok(None) };
         let rows = envelopes(&self.api.pull(id, 0).await?.records)?;
         self.door.enter(|vault| {
-            // Eine Einladung, die die Prüfung nicht besteht, wird nicht gezeigt.
+            // An invitation that fails the check is not shown.
             let Ok((roster, plain)) = vault.peek_invitation(id, &sealed_key.0, &roster.0, &rows) else { return Ok(None) };
             let Some(owner) = roster.owner() else { return Ok(None) };
             let (Some(account), Some(code)) = (unhex::<16>(&owner.account), code_of(&owner.ed25519, &owner.x25519)) else { return Ok(None) };
@@ -622,8 +622,8 @@ impl<D: Door> Engine<D> {
         })
     }
 
-    /// Nimmt einen geteilten Tresor auf dieses Gerät und merkt sich die Schlüssel seines Besitzers.
-    /// Liefert `false`, wenn Liste oder Schlüssel die Prüfung nicht bestehen.
+    /// Takes a shared vault onto this device and remembers its owner's keys.
+    /// Returns `false` if list or key fail the check.
     fn join(&self, id: &Id, entry: &VaultEntry) -> Result<bool> {
         let (Some(roster), Some(sealed_key)) = (&entry.roster, &entry.sealed_key) else { return Ok(false) };
         self.door.enter(|vault| {
@@ -640,8 +640,8 @@ impl<D: Door> Engine<D> {
         })
     }
 
-    /// Der Server hat einen älteren Stand als dieses Gerät (siehe [`Report::rolled_back`]), etwa weil er aus
-    /// einer Sicherung zurückgeholt wurde: Was hier neuer ist, geht wieder hinauf.
+    /// The server has an older state than this device (see [`Report::rolled_back`]), e.g. because it was
+    /// restored from a backup: whatever is newer here goes up again.
     pub async fn resync(&self, vault: &Id) -> Result<Report> {
         let pull = self.api.pull(vault, 0).await?;
         let rows = envelopes(&pull.records)?;
@@ -657,9 +657,9 @@ impl<D: Door> Engine<D> {
         Ok(report)
     }
 
-    // ── Konto und Geräte ─────────────────────────────────────────────────────────────────────────────────
+    // ── Account and devices ──────────────────────────────────────────────────────────────────────────────
 
-    /// Ändert das Master-Passwort: erst beim Server, dann hier. So kennt nie nur dieses Gerät das neue.
+    /// Changes the master password: first at the server, then here. So it never happens that only this device knows the new one.
     pub async fn change_password(&self, old: &str, new: &str, kdf: KdfParams, logout_others: bool) -> Result<()> {
         let (old, new) = (old.to_string(), new.to_string());
         let (wrapping, old_auth, new_auth) = heavy(&self.door, move |vault| Ok(vault.rewrap(&old, &new, kdf)?)).await?;
@@ -693,14 +693,14 @@ impl<D: Door> Engine<D> {
         self.api.rename_device(device, sealed).await
     }
 
-    /// Meldet ein Gerät des Kontos ab. Was es schon hat, bleibt dort lesbar, solange jemand das Master-Passwort kennt.
+    /// Signs out a device of the account. What it already has stays readable there for anyone who knows the master password.
     pub async fn remove_device(&self, device: &Id) -> Result<()> {
         self.api.remove_device(device).await
     }
 
-    /// Meldet dieses Gerät beim Server ab und lässt den Tresor unberührt; vor dem Löschen der Daten dieses PCs.
-    /// Anders als [`Engine::unlink`] meldet es, wenn der Server nicht erreichbar war. Kennt der Server das Gerät
-    /// nicht mehr, ist es schon abgemeldet.
+    /// Signs this device out at the server and leaves the vault untouched; before deleting this PC's data.
+    /// Unlike [`Engine::unlink`] it reports when the server could not be reached. If the server no longer
+    /// knows the device, it is already signed out.
     pub async fn sign_out(&self) -> Result<()> {
         match self.api.remove_device(&self.device).await {
             Err(SyncError::Refused { status: 401 | 403 | 404, .. }) => Ok(()),
@@ -708,9 +708,9 @@ impl<D: Door> Engine<D> {
         }
     }
 
-    /// Trennt dieses Gerät vom Server. Der Tresor bleibt, wie er ist, auch die geteilten.
+    /// Disconnects this device from the server. The vault stays as it is, the shared ones too.
     pub async fn unlink(&self) -> Result<()> {
-        // Gelingt das Abmelden nicht (kein Netz), bleibt das Gerät in der Liste stehen und lässt sich dort abmelden.
+        // If signing out fails (no network), the device stays in the list and can be signed out there.
         let _ = self.api.remove_device(&self.device).await;
         self.door.enter(|vault| {
             for info in vault.vaults()? {
@@ -722,7 +722,7 @@ impl<D: Door> Engine<D> {
 
     // ── Geteilte Tresore ─────────────────────────────────────────────────────────────────────────────────
 
-    /// Legt einen geteilten Tresor an; man selbst ist Besitzer.
+    /// Creates a shared vault; oneself is owner.
     pub async fn create_vault(&self, name: &str) -> Result<Id> {
         let name = name.trim();
         if name.is_empty() || name.chars().count() > 80 {
@@ -742,7 +742,7 @@ impl<D: Door> Engine<D> {
         Ok(id)
     }
 
-    /// Sucht ein Konto zum Einladen und sagt, ob seine Schlüssel zu früher gesehenen passen.
+    /// Looks up an account to invite and says whether its keys match those seen before.
     pub async fn lookup(&self, username: &str) -> Result<Candidate> {
         let keys = self.api.keys(username.trim()).await?;
         let (account, ed25519, x25519) = keys.account_id.array::<16>().zip(keys.ed25519.array::<32>()).zip(keys.x25519.array::<32>()).map(|((a, b), c)| (a, hex(&b), hex(&c))).ok_or(SyncError::Protocol("Schlüssel"))?;
@@ -751,7 +751,7 @@ impl<D: Door> Engine<D> {
         Ok(Candidate { account: hex(&account), username: keys.username, ed25519, x25519, code, known })
     }
 
-    /// Lädt ein Konto in einen eigenen Tresor ein. Nur der Besitzer.
+    /// Invites an account into an own vault. Owner only.
     pub async fn invite(&self, vault: &Id, candidate: &Candidate, role: Role) -> Result<()> {
         if role == Role::Owner {
             return Err(SyncError::Invalid("role"));
@@ -775,7 +775,7 @@ impl<D: Door> Engine<D> {
         })
     }
 
-    /// Ändert die Rolle eines Mitglieds. Mehr Rechte gelten sofort; weniger tauscht den Schlüssel.
+    /// Changes a member's role. More permissions apply at once; fewer rotate the key.
     pub async fn set_role(&self, vault: &Id, account: &Id, role: Role) -> Result<()> {
         let account = hex(account);
         let roster = self.info(vault)?.roster.ok_or(VaultError::NotOwner)?;
@@ -794,7 +794,7 @@ impl<D: Door> Engine<D> {
         }
     }
 
-    /// Entfernt ein Mitglied und tauscht den Schlüssel. Was das Mitglied schon gesehen hat, holt das nicht zurück.
+    /// Removes a member and rotates the key. That does not take back what the member has already seen.
     pub async fn remove_member(&self, vault: &Id, account: &Id) -> Result<()> {
         let account = hex(account);
         let roster = self.info(vault)?.roster.ok_or(VaultError::NotOwner)?;
@@ -806,7 +806,7 @@ impl<D: Door> Engine<D> {
         self.rotate(vault, move |roster| roster.members.retain(|member| member.account != account)).await
     }
 
-    /// Übergibt den Besitz an ein Mitglied; man selbst behält das Schreibrecht.
+    /// Transfers ownership to a member; oneself keeps write permission.
     pub async fn transfer(&self, vault: &Id, account: &Id) -> Result<()> {
         let account = hex(account);
         let roster = self.info(vault)?.roster.ok_or(VaultError::NotOwner)?;
@@ -816,7 +816,7 @@ impl<D: Door> Engine<D> {
         self.door.enter(|v| Ok(v.set_roster(vault, &blob)?))
     }
 
-    /// Neue Mitgliederliste beim selben Schlüsselstand.
+    /// New member list at the same key generation.
     async fn update_roster(&self, vault: &Id, change: impl FnOnce(&mut Roster)) -> Result<()> {
         let blob = self.door.enter(|v| {
             let mut roster = v.vaults()?.into_iter().find(|info| info.id == *vault).and_then(|info| info.roster).ok_or(VaultError::NotFound)?;
@@ -828,11 +828,11 @@ impl<D: Door> Engine<D> {
         self.door.enter(|v| Ok(v.set_roster(vault, &blob)?))
     }
 
-    /// Schlüsseltausch: neue Liste, neuer Schlüssel, alle Datensätze neu verschlüsselt, als ein Paket. Der
-    /// Server nimmt es nur an, wenn inzwischen niemand geschrieben hat; sonst von vorn.
+    /// Key rotation: new list, new key, all records re-encrypted, as one package. The
+    /// server only accepts it if nobody has written in the meantime; otherwise start again.
     async fn rotate(&self, vault: &Id, change: impl Fn(&mut Roster)) -> Result<()> {
         for _ in 0..ROUNDS {
-            // Erst abgleichen: Der Tausch braucht einen Tresor ohne wartende Änderungen und den Stand des Servers.
+            // Sync first: the rotation needs a vault without waiting changes and the server's state.
             self.sync_vault(vault, &mut Report::default()).await?;
             let prepared = self.door.enter(|v| {
                 let mut roster = v.vaults()?.into_iter().find(|info| info.id == *vault).and_then(|info| info.roster).ok_or(VaultError::NotFound)?;
@@ -841,7 +841,7 @@ impl<D: Door> Engine<D> {
                 roster.epoch += 1;
                 match v.prepare_rotation(vault, &roster) {
                     Ok(rotation) => Ok(Some((rotation, v.cursor(vault)?))),
-                    // Zwischen Abgleich und Vorbereitung wurde hier etwas geändert: noch eine Runde.
+                    // Something was changed here between sync and preparation: one more round.
                     Err(VaultError::Pending) => Ok(None),
                     Err(error) => Err(error.into()),
                 }
@@ -867,7 +867,7 @@ impl<D: Door> Engine<D> {
         Err(SyncError::Busy)
     }
 
-    /// Nimmt eine Einladung an.
+    /// Accepts an invitation.
     pub async fn accept(&self, vault: &Id) -> Result<()> {
         let overview = self.api.overview().await?;
         let entry = overview.vaults.iter().find(|entry| entry.id.0 == vault).ok_or(SyncError::Invalid("invitation"))?;
@@ -878,13 +878,13 @@ impl<D: Door> Engine<D> {
         Ok(())
     }
 
-    /// Lehnt eine Einladung ab oder verlässt einen Tresor. Der Besitzer kann nicht gehen.
+    /// Declines an invitation or leaves a vault. The owner cannot leave.
     pub async fn leave(&self, vault: &Id) -> Result<()> {
         self.api.leave(vault).await?;
         self.forget(vault)
     }
 
-    /// Löscht einen eigenen geteilten Tresor für alle.
+    /// Deletes an own shared vault for everyone.
     pub async fn delete_vault(&self, vault: &Id) -> Result<()> {
         self.api.delete_vault(vault).await?;
         self.forget(vault)
@@ -897,7 +897,7 @@ impl<D: Door> Engine<D> {
         })
     }
 
-    // ── Verwaltung des Servers (nur für den Verwalter) ───────────────────────────────────────────────────
+    // ── Server administration (administrators only) ─────────────────────────────────────────────────────
 
     pub async fn invites(&self) -> Result<Vec<Invite>> {
         self.api.invites().await

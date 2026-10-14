@@ -8,8 +8,8 @@ license.workspace = true
 [dependencies]
 glowport-core = { path = "../core" }
 glowport-sync-proto = { path = "../sync-proto" }
-# Dieselbe Einstellung wie beim Updater: rustls ohne mitgebrachten Anbieter; hier wird `ring` ausdrücklich gesetzt
-# (baut unter Windows ohne NASM und CMake) und geprüft wird gegen den Zertifikatsspeicher des Systems.
+# The same setup as for the updater: rustls without a bundled provider; here `ring` is set explicitly
+# (builds on Windows without NASM and CMake) and certificates are checked against the system's store.
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-platform-verifier = "0.7"
@@ -23,8 +23,8 @@ thiserror = "2.0.21"
 base64 = "0.22"
 
 [features]
-# Nur für die eigenen Tests: Verbindungen prüfen gegen ein mitgegebenes Zertifikat statt gegen den Speicher des
-# Systems, damit der Abgleich im Test über `https` und `wss` laufen kann. Das Programm baut ohne diesen Schalter.
+# Only for the own tests: check connections against a given certificate instead of the system's
+# store, so the sync can run over `https` and `wss` in tests. The program is built without this switch.
 test-roots = []
 
 [dev-dependencies]

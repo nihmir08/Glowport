@@ -1,19 +1,19 @@
-//! Startet den Testserver als eigenes Programm, für die Ende-zu-Ende-Prüfung der Programmdatei.
+//! Starts the test server as a program of its own, for the end-to-end test of the executable.
 //!
-//! Lauscht auf einem freien Port von 127.0.0.1 und nennt die Adresse in der ersten Zeile der Ausgabe. Die zweite
-//! Zeile nennt den nachgebauten Proxmox-Server, der mitläuft: `pve <Adresse> <Fingerabdruck seines Zertifikats>`.
-//! Anmeldung: Benutzer `tester`, Passwort `richtig`. Das erste Argument nennt wahlweise ein Heimatverzeichnis:
-//! Wer einen Schlüssel aus `.ssh/authorized_keys` darin besitzt, kommt ohne Passwort hinein, und Befehle laufen
-//! über `sh` mit diesem Ordner als `$HOME` (braucht `sh` im Pfad, unter Windows etwa von Git). Das zweite Argument
-//! nennt wahlweise die Datei mit dem privaten Schlüssel einer Zertifizierungsstelle (ohne Passphrase): Ihre
-//! Benutzer-Zertifikate gelten, und der Server zeigt Clients, die danach fragen, ein Zertifikat von ihr für `127.0.0.1`.
-//! Die dritte und vierte Zeile nennen zwei FTP-Server (`ftp <Adresse>`, `ftps <Adresse> <Fingerabdruck>`; Anmeldung wie
-//! oben) auf einem Ordner mit einem kleinen Webspace oder auf dem, den `GLOWPORT_TEST_FTP` nennt.
-//! Nennt die Umgebungsvariable `GLOWPORT_TEST_FILES` einen Ordner, zeigt der Server ihn über SFTP als sein Dateisystem;
-//! unter `/etc` darf dabei nichts geändert werden.
-//! Nennt `GLOWPORT_TEST_MOSH` eine WSL-Distribution mit mosh, startet der Server `mosh-server` dort und reicht UDP
-//! über `127.0.0.1` weiter; die fünfte Zeile lautet dann `mosh <Adresse im WSL>`, sonst `mosh -`. Die Zeile
-//! `mosh pause` auf der Eingabe hält die Weiterleitung an (Aussetzer), `mosh resume` lässt sie weiterlaufen.
+//! Listens on a free port of 127.0.0.1 and names the address in the first line of output. The second
+//! line names the simulated Proxmox server running alongside: `pve <address> <fingerprint of its certificate>`.
+//! Sign-in: user `tester`, password `richtig`. The first argument optionally names a home directory:
+//! whoever owns a key from `.ssh/authorized_keys` inside it gets in without a password, and commands run
+//! via `sh` with this folder as `$HOME` (needs `sh` on the path, on Windows e.g. from Git). The second argument
+//! optionally names the file with a certificate authority's private key (without passphrase): its
+//! user certificates are valid, and the server shows clients that ask for it a certificate from it for `127.0.0.1`.
+//! The third and fourth lines name two FTP servers (`ftp <address>`, `ftps <address> <fingerprint>`; sign-in as
+//! above) on a folder with a small web space or on the one `GLOWPORT_TEST_FTP` names.
+//! If the environment variable `GLOWPORT_TEST_FILES` names a folder, the server shows it over SFTP as its file system;
+//! nothing may be changed under `/etc` there.
+//! If `GLOWPORT_TEST_MOSH` names a WSL distribution with mosh, the server starts `mosh-server` there and forwards UDP
+//! via `127.0.0.1`; the fifth line then reads `mosh <address in WSL>`, otherwise `mosh -`. The line
+//! `mosh pause` on input pauses the forwarder (dropout), `mosh resume` lets it continue.
 
 use glowport_testserver::{host_certificate, key, start, Options};
 use russh::keys::PrivateKey;
@@ -31,7 +31,7 @@ async fn main() -> std::io::Result<()> {
         forwarding: true,
         files: std::env::var_os("GLOWPORT_TEST_FILES").map(Into::into),
         files_read_only: vec!["/etc".into()],
-        // Für die Seitenleiste: ein Linux mit Docker und systemd, das es auf dem Rechner des Tests nicht gibt.
+        // For the sidebar: a Linux with Docker and systemd, which the test machine does not have.
         admin: Some(Default::default()),
         ..Options::default()
     };
@@ -39,10 +39,10 @@ async fn main() -> std::io::Result<()> {
     let options = Options { mosh: bridge.clone(), ..options };
     let running = start(options, key(1)).await?;
     println!("{}", running.address);
-    // Wie bei Proxmox nennt die Liste der Maschinen nach einem Schalten noch eine Weile den alten Zustand.
+    // As with Proxmox, the list of machines still names the old state for a while after switching.
     let pve = glowport_testserver::pve::start_lagging(std::time::Duration::from_secs(8)).await?;
     println!("pve {} {}", pve.address, glowport_testserver::pve::fingerprint_text(&pve.fingerprint));
-    // Zwei FTP-Server auf demselben Ordner: einer offen, einer über FTPS mit selbst erstelltem Zertifikat.
+    // Two FTP servers on the same folder: one plain, one over FTPS with a self-signed certificate.
     let scratch = std::env::temp_dir().join(format!("glowport-testserver-{}", std::process::id()));
     let root = match std::env::var_os("GLOWPORT_TEST_FTP") {
         Some(root) => std::path::PathBuf::from(root),

@@ -1,4 +1,4 @@
-//! `glowport-sync`: der Sync-Server von Glowport zum Selbstbetreiben (`docs/sync.md`, `docs/sync-server.md`).
+//! `glowport-sync`: Glowport's self-hosted sync server (`docs/sync.md`, `docs/sync-server.md`).
 
 use std::{
     net::{IpAddr, SocketAddr},
@@ -41,20 +41,20 @@ Grenzen (nur über die Umgebung):
 Die Befehle der Verwaltung wirken sofort, auch während der Server läuft. Ohne --data suchen sie den
 Datenbestand in ./data und dann in /var/lib/glowport-sync.";
 
-/// Wo der Dienst seine Daten hält, wenn er nach der Anleitung eingerichtet ist.
+/// Where the service keeps its data when set up according to the guide.
 const SERVICE_DATA: &str = "/var/lib/glowport-sync";
 
 struct Options {
     words: Vec<String>,
     listen: String,
-    /// `None`: nichts angegeben, es gilt die Vorgabe.
+    /// `None`: nothing given, the default applies.
     data: Option<PathBuf>,
-    /// Wessen `X-Forwarded-For` gilt: niemandes, jedes (leere Liste) oder nur das dieser Adressen.
+    /// Whose `X-Forwarded-For` counts: nobody's, everyone's (empty list) or only that of these addresses.
     proxies: Option<Vec<IpAddr>>,
     tls: Option<(PathBuf, PathBuf)>,
 }
 
-/// Die Adressen der Webserver, denen der Absender geglaubt wird, durch Komma getrennt.
+/// The addresses of the web servers whose sender statement is believed, separated by commas.
 fn proxies(text: &str) -> Result<Vec<IpAddr>, String> {
     text.split(',').map(|part| part.trim().parse().map_err(|_| format!("„{}“ ist keine Adresse der Form 10.0.0.10", part.trim()))).collect()
 }
@@ -97,7 +97,7 @@ fn options() -> Result<Options, String> {
     Ok(Options { words, listen, data, proxies: trusted, tls })
 }
 
-/// Eine Grenze aus der Umgebung: eine Zahl größer null, sonst bleibt die Vorgabe.
+/// A limit from the environment: a number greater than zero, otherwise the default stays.
 fn limit(name: &str, target: &mut usize, factor: usize) -> Result<(), String> {
     if let Some(text) = env(name) {
         let value: usize = text.parse().ok().filter(|value| *value > 0).ok_or(format!("{name}: „{text}“ ist keine Zahl größer null"))?;
@@ -106,7 +106,7 @@ fn limit(name: &str, target: &mut usize, factor: usize) -> Result<(), String> {
     Ok(())
 }
 
-/// Eine Größe in der Einheit, in der sie sich lesen lässt.
+/// A size in the unit in which it reads best.
 fn size(bytes: u64) -> String {
     match bytes {
         0..=1023 => format!("{bytes} B"),
@@ -115,8 +115,8 @@ fn size(bytes: u64) -> String {
     }
 }
 
-/// Die Handgriffe der Verwaltung an der Kommandozeile. Sie wirken direkt auf die Datenbank, auch während der
-/// Server läuft.
+/// The administration actions on the command line. They act directly on the database, even while the
+/// server is running.
 fn manage(store: &Store, words: &[String]) -> Result<(), String> {
     let operator = Store::operator();
     let fail = |e: glowport_sync_server::store::Fail| e.to_string();
@@ -175,7 +175,7 @@ fn run() -> Result<(), String> {
     let options = options()?;
     let serving = matches!(options.words.as_slice(), [] | [_] if options.words.first().is_none_or(|word| word == "serve"));
     if !serving {
-        // Ein Befehl legt nie einen neuen Datenbestand an: Ein Einladungscode aus dem falschen Ordner gälte nirgends.
+        // A command never creates a new data store: an invitation code from the wrong folder would be valid nowhere.
         let folders = match &options.data {
             Some(folder) => vec![folder.clone()],
             None => vec![PathBuf::from("data"), PathBuf::from(SERVICE_DATA)],
@@ -195,7 +195,7 @@ fn run() -> Result<(), String> {
     limit("GLOWPORT_SYNC_MAX_RECORDS", &mut store.limits.records_per_vault, 1)?;
     limit("GLOWPORT_SYNC_MAX_VAULTS", &mut store.limits.vaults_per_account, 1)?;
     let address: SocketAddr = options.listen.parse().map_err(|_| format!("{}: keine Adresse der Form 127.0.0.1:8787", options.listen))?;
-    // Aufbewahrt wird nur der Prüfwert; jeder Start gibt deshalb einen neuen Code aus, und nur der letzte gilt.
+    // Only the verifier is kept; every start therefore prints a new code, and only the latest is valid.
     if let Some(code) = store.setup_code().map_err(|e| e.to_string())? {
         println!("Noch kein Konto. Einrichtungscode für das erste Konto (es wird Verwalter): {code}");
     }
@@ -213,7 +213,7 @@ fn run() -> Result<(), String> {
                 let _ = tokio::task::spawn_blocking(move || app.store.purge()).await;
             }
         });
-        // Strg+C am Bildschirm; als Dienst oder im Container kommt stattdessen SIGTERM.
+        // Ctrl+C on screen; as a service or in a container SIGTERM comes instead.
         let stop = async {
             #[cfg(unix)]
             {
@@ -230,7 +230,7 @@ fn run() -> Result<(), String> {
         };
 
         match options.tls {
-            // Hinter einem vorgeschalteten Webserver, der TLS übernimmt (oder nur für den eigenen Rechner).
+            // Behind a web server in front that handles TLS (or only for the own machine).
             None => {
                 let listener = tokio::net::TcpListener::bind(address).await.map_err(|e| format!("{address}: {e}"))?;
                 println!("glowport-sync hört auf {address}");

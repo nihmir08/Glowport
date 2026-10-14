@@ -6,8 +6,8 @@ edition = "2021"
 license = "MIT"
 
 [dependencies]
-# Der Baukasten IronRDP, ohne dessen fertigen Client (`ironrdp-client`): Der nimmt jedes Zertifikat an und schickt
-# bei jeder Änderung das ganze Bild. Der Ablauf hier folgt ihm, prüft aber das Zertifikat und schickt nur Bereiche.
+# The IronRDP library, without its ready-made client (`ironrdp-client`): that one accepts every certificate and sends
+# the whole picture on every change. The flow here follows it, but checks the certificate and only sends regions.
 ironrdp-connector = "0.10"
 ironrdp-session = "0.11"
 ironrdp-tokio = "0.10"
@@ -17,18 +17,18 @@ ironrdp-displaycontrol = "0.8"
 ironrdp-dvc = "0.8"
 ironrdp-core = "0.2"
 tokio = { version = "1", features = ["rt", "net", "sync", "time", "macros", "io-util"] }
-# Dieselbe Einstellung wie bei Proxmox und beim Abgleich: rustls mit `ring`, dazu der Zertifikatsspeicher des Systems.
+# The same setup as for Proxmox and sync: rustls with `ring`, plus the system's certificate store.
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 rustls-platform-verifier = "0.7"
 sha2 = "0.10"
-# Für den öffentlichen Schlüssel aus dem Zertifikat des Servers; die Anmeldung über NLA bindet sich daran.
+# For the public key from the server's certificate; the sign-in via NLA binds itself to it.
 x509-cert = { version = "0.2", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
-# Der nachgebaute RDP-Server, gegen den die Sitzung geprüft wird (`tests/session.rs`). Ohne dessen eigene
-# Bildverfahren (QOI): Ein Windows schickt sie nie, und die Sitzung meldet sie nicht an.
+# The simulated RDP server the session is tested against (`tests/session.rs`). Without its own
+# image codecs (QOI): a Windows never sends them, and the session does not announce them.
 ironrdp-server = { version = "0.13", default-features = false }
 rcgen = { version = "0.14", default-features = false, features = ["ring", "pem"] }
 async-trait = "0.1"

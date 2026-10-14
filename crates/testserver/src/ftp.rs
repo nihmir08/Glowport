@@ -1,5 +1,5 @@
-//! Ein FTP-Server für die Prüfungen: `libunftp` auf einem Ordner dieses Rechners, offen oder mit einem selbst
-//! erstellten Zertifikat (FTPS, ausdrücklich). Anmeldung mit [`USER`] und [`PASSWORD`].
+//! An FTP server for the tests: `libunftp` on a folder of this machine, plain or with a self-signed
+//! certificate (explicit FTPS). Sign-in with [`USER`] and [`PASSWORD`].
 
 use std::{
     net::SocketAddr,
@@ -14,7 +14,7 @@ use unftp_core::auth::{AuthenticationError, Authenticator, Credentials, Principa
 pub const USER: &str = "tester";
 pub const PASSWORD: &str = "richtig";
 
-/// Jede Anmeldung, die der Server zu sehen bekam: Benutzer, und ob das Passwort stimmte.
+/// Every sign-in the server saw: user, and whether the password was right.
 pub type Logins = Arc<Mutex<Vec<(String, bool)>>>;
 
 #[derive(Debug)]
@@ -35,12 +35,12 @@ impl Authenticator for Door {
 
 pub struct Running {
     pub address: SocketAddr,
-    /// SHA-256 über das Zertifikat, wenn der Server TLS anbietet.
+    /// SHA-256 over the certificate, if the server offers TLS.
     pub fingerprint: Option<[u8; 32]>,
     pub logins: Logins,
 }
 
-/// Füllt einen leeren Ordner mit einem kleinen Webspace.
+/// Fills an empty folder with a small web space.
 pub fn sample(root: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(root.join("htdocs/img"))?;
     std::fs::create_dir_all(root.join("logs"))?;
@@ -51,12 +51,12 @@ pub fn sample(root: &Path) -> std::io::Result<()> {
     std::fs::write(root.join("liesmich.txt"), "Hallo vom FTP-Testserver\n")
 }
 
-/// Startet den Server auf `root`. Mit `tls` bekommt er ein selbst erstelltes Zertifikat; dessen Dateien legt er in
-/// `scratch` ab. `ports` sind die Ports für die Datenkanäle.
+/// Starts the server on `root`. With `tls` it gets a self-signed certificate; it puts its files into
+/// `scratch`. `ports` are the ports for the data channels.
 pub async fn start(root: PathBuf, tls: Option<&Path>, ports: std::ops::RangeInclusive<u16>) -> std::io::Result<Running> {
     let failed = |error: &dyn std::fmt::Display| std::io::Error::other(error.to_string());
     std::fs::create_dir_all(&root)?;
-    // Ein freier Port: kurz belegen, Nummer merken, wieder freigeben.
+    // A free port: occupy briefly, remember the number, release again.
     let address = std::net::TcpListener::bind("127.0.0.1:0")?.local_addr()?;
     let logins: Logins = Arc::default();
     let storage = root.clone();
@@ -83,7 +83,7 @@ pub async fn start(root: PathBuf, tls: Option<&Path>, ports: std::ops::RangeIncl
     Ok(Running { address, fingerprint, logins })
 }
 
-/// So zeigen Browser und Server den Fingerabdruck eines Zertifikats: `5F:1A:…`.
+/// This is how browsers and servers show a certificate's fingerprint: `5F:1A:…`.
 pub fn fingerprint_text(fingerprint: &[u8; 32]) -> String {
     fingerprint.iter().map(|byte| format!("{byte:02X}")).collect::<Vec<_>>().join(":")
 }

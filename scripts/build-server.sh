@@ -1,8 +1,8 @@
 #!/bin/sh
-# Baut den Sync-Server für Linux: ein Programm ohne äußere Abhängigkeiten, das auf jedem 64-Bit-Linux (x86) läuft.
-# Aufruf in einem Linux (etwa WSL) im Projektordner:   sh scripts/build-server.sh
-# Braucht dort: Rust mit dem Ziel x86_64-unknown-linux-musl und das Paket musl-tools (für SQLite und ring).
-# Ergebnis: der Ordner dist-server mit allem, was auf den Server gehört (Programm, Dienst-Datei, Einrichtungsskript).
+# Builds the sync server for Linux: a program without external dependencies that runs on any 64-bit Linux (x86).
+# Run on Linux (e.g. WSL) in the project folder:   sh scripts/build-server.sh
+# Needs there: Rust with the target x86_64-unknown-linux-musl and the musl-tools package (for SQLite and ring).
+# Result: the dist-server folder with everything that belongs on the server (program, service file, setup script).
 set -eu
 
 cd "$(dirname "$0")/.."

@@ -1,7 +1,7 @@
-//! Mosh für die Tests: `mosh-server` läuft im WSL dieses Rechners, und eine kleine Weiterleitung für UDP auf
-//! `127.0.0.1` reicht die Pakete hin und her. Nötig, weil WSL (im Modus NAT) UDP nicht über `127.0.0.1` durchreicht,
-//! der Client aber dorthin schickt, wohin seine SSH-Verbindung ging. Die Weiterleitung lässt sich anhalten: So
-//! entsteht ein Aussetzer der Leitung, ohne am Netz dieses Rechners etwas zu ändern.
+//! Mosh for the tests: `mosh-server` runs in this machine's WSL, and a small UDP forwarder on
+//! `127.0.0.1` passes the packets back and forth. Needed because WSL (in NAT mode) does not pass UDP through `127.0.0.1`,
+//! while the client sends where its SSH connection went. The forwarder can be paused: that
+//! creates a line dropout without changing anything about this machine's network.
 
 use std::{
     net::{Ipv4Addr, SocketAddr},
@@ -15,19 +15,19 @@ use std::{
 
 use tokio::{net::UdpSocket, time::timeout};
 
-/// Wie lange eine Weiterleitung ohne Verkehr bestehen bleibt.
+/// How long a forwarding stays without traffic.
 const IDLE: Duration = Duration::from_secs(300);
 
 #[derive(Clone)]
 pub struct Bridge {
     distro: String,
     address: Ipv4Addr,
-    /// Gesetzt: Die Weiterleitung verwirft alle Pakete (Aussetzer).
+    /// Set: the forwarder drops all packets (dropout).
     pub paused: Arc<AtomicBool>,
 }
 
 impl Bridge {
-    /// Findet `mosh-server` im WSL `distro` und dessen Adresse. `None`, wenn es kein WSL oder kein mosh gibt.
+    /// Finds `mosh-server` in the WSL `distro` and its address. `None` if there is no WSL or no mosh.
     pub fn find(distro: &str) -> Option<Self> {
         let output = Command::new("wsl").args(["-d", distro, "--", "sh", "-c", "command -v mosh-server >/dev/null && hostname -I"]).output().ok()?;
         if !output.status.success() {
@@ -37,18 +37,18 @@ impl Bridge {
         Some(Self { distro: distro.into(), address, paused: Arc::default() })
     }
 
-    /// Adresse des WSL, in dem `mosh-server` läuft.
+    /// Address of the WSL in which `mosh-server` runs.
     pub fn address(&self) -> Ipv4Addr {
         self.address
     }
 
-    /// Ist das ein Aufruf von `mosh-server`, den diese Brücke übernimmt?
+    /// Is this a call of `mosh-server` that this bridge takes over?
     pub fn takes(command: &str) -> bool {
         command.trim_start().starts_with("mosh-server ")
     }
 
-    /// Führt `mosh-server` im WSL aus und richtet für seinen Port die Weiterleitung ein. Liefert Ausgabe,
-    /// Fehlerausgabe und Rückgabewert wie ein gewöhnlicher Befehl.
+    /// Runs `mosh-server` in WSL and sets up the forwarding for its port. Returns output,
+    /// error output and exit value like an ordinary command.
     pub async fn run(&self, command: &str) -> (Vec<u8>, Vec<u8>, u32) {
         let (distro, command_line) = (self.distro.clone(), command.to_string());
         let ran = tokio::task::spawn_blocking(move || Command::new("wsl").args(["-d", &distro, "--", "sh", "-c", &command_line]).output()).await;
@@ -64,7 +64,7 @@ impl Bridge {
         (done.stdout, done.stderr, done.status.code().unwrap_or(1) as u32)
     }
 
-    /// Reicht UDP von `127.0.0.1:port` an den Server im WSL weiter und zurück an den, der zuletzt geschickt hat.
+    /// Forwards UDP from `127.0.0.1:port` to the server in WSL and back to whoever sent last.
     async fn relay(&self, port: u16) -> std::io::Result<()> {
         let outside = Arc::new(UdpSocket::bind(("127.0.0.1", port)).await?);
         let inside = Arc::new(UdpSocket::bind(("0.0.0.0", 0)).await?);
@@ -90,7 +90,7 @@ impl Bridge {
                                 let _ = outside.send_to(&down[..n], to).await;
                             }
                         }
-                        // Windows meldet ein Paket an einen geschlossenen Port beim nächsten Lesen als Fehler.
+                        // Windows reports a packet to a closed port as an error on the next read.
                         Err(_) => continue,
                     },
                 }

@@ -1,6 +1,6 @@
-//! TLS zu einem RDP-Server. Windows bringt ein selbst erstelltes Zertifikat mit, dem kein Rechner von sich aus traut.
-//! Der Aufbau lässt deshalb jedes Zertifikat durch und hält fest, was zu sehen war; ob es gilt, entscheidet der
-//! Aufrufer danach, und erst dann geht ein Passwort über die Leitung.
+//! TLS to an RDP server. Windows ships a self-signed certificate that no computer trusts on its own.
+//! Setup therefore lets every certificate pass and records what was seen; whether it is valid is decided by the
+//! caller afterwards, and only then does a password go over the line.
 
 use std::sync::{Arc, Mutex};
 
@@ -12,10 +12,10 @@ use rustls::{
 };
 use sha2::{Digest, Sha256};
 
-/// SHA-256 über das Zertifikat des Servers.
+/// SHA-256 over the server's certificate.
 pub type Fingerprint = [u8; 32];
 
-/// Was beim Verbinden zu sehen war: der Fingerabdruck, und ob das System dem Zertifikat traut.
+/// What was seen while connecting: the fingerprint, and whether the system trusts the certificate.
 pub(crate) type Seen = Arc<Mutex<Option<(Fingerprint, bool)>>>;
 
 struct Check {
@@ -38,7 +38,7 @@ impl ServerCertVerifier for Check {
         Ok(ServerCertVerified::assertion())
     }
 
-    // Dass der Server den Schlüssel zu seinem Zertifikat wirklich hat, wird in jedem Fall geprüft.
+    // That the server really has the key to its certificate is checked in any case.
     fn verify_tls12_signature(&self, message: &[u8], cert: &CertificateDer<'_>, dss: &DigitallySignedStruct) -> Result<HandshakeSignatureValid, rustls::Error> {
         rustls::crypto::verify_tls12_signature(message, cert, dss, &self.provider.signature_verification_algorithms)
     }
@@ -57,12 +57,12 @@ pub(crate) fn config(seen: Seen) -> Result<rustls::ClientConfig, rustls::Error> 
     let system = rustls_platform_verifier::Verifier::new(provider.clone())?;
     let builder = rustls::ClientConfig::builder_with_provider(provider.clone()).with_safe_default_protocol_versions()?;
     let mut config = builder.dangerous().with_custom_certificate_verifier(Arc::new(Check { system, provider, seen })).with_no_client_auth();
-    // Die Anmeldung über NLA (CredSSP) verträgt keine wieder aufgenommenen TLS-Sitzungen.
+    // The sign-in via NLA (CredSSP) does not tolerate resumed TLS sessions.
     config.resumption = rustls::client::Resumption::disabled();
     Ok(config)
 }
 
-/// Der öffentliche Schlüssel aus einem Zertifikat, so wie die Anmeldung über NLA ihn erwartet.
+/// The public key from a certificate, as the sign-in via NLA expects it.
 pub(crate) fn public_key(certificate: &[u8]) -> Option<Vec<u8>> {
     use x509_cert::der::Decode as _;
     let certificate = x509_cert::Certificate::from_der(certificate).ok()?;

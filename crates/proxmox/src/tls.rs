@@ -25,7 +25,7 @@ pub fn fingerprint_text(fingerprint: &Fingerprint) -> String {
     fingerprint.iter().map(|byte| format!("{byte:02X}")).collect::<Vec<_>>().join(":")
 }
 
-/// Liest einen Fingerabdruck, mit oder ohne Doppelpunkte, groß oder klein geschrieben.
+/// Reads a fingerprint, with or without colons, in upper or lower case.
 pub fn parse_fingerprint(text: &str) -> Option<Fingerprint> {
     let hex: String = text.chars().filter(|c| !matches!(c, ':' | ' ')).collect();
     if hex.len() != 64 || !hex.is_ascii() {
@@ -39,11 +39,11 @@ pub fn parse_fingerprint(text: &str) -> Option<Fingerprint> {
 }
 
 pub(crate) enum Mode {
-    /// Es entscheidet der Zertifikatsspeicher des Systems.
+    /// The system's certificate store decides.
     System,
-    /// Es gilt genau das Zertifikat mit diesem Fingerabdruck, was immer das System von ihm hält.
+    /// Exactly the certificate with this fingerprint applies, whatever the system thinks of it.
     Pinned(Fingerprint),
-    /// Nur ansehen: Jedes Zertifikat geht durch. Über eine solche Verbindung geht nie ein Geheimnis.
+    /// Only look: every certificate passes. A secret never goes over such a connection.
     Observe,
 }
 
@@ -80,7 +80,7 @@ impl ServerCertVerifier for Check {
         }
     }
 
-    // Dass der Server den Schlüssel zu seinem Zertifikat wirklich hat, wird in jedem Fall geprüft.
+    // That the server really has the key to its certificate is checked in any case.
     fn verify_tls12_signature(&self, message: &[u8], cert: &CertificateDer<'_>, dss: &DigitallySignedStruct) -> Result<HandshakeSignatureValid, rustls::Error> {
         rustls::crypto::verify_tls12_signature(message, cert, dss, &self.provider.signature_verification_algorithms)
     }

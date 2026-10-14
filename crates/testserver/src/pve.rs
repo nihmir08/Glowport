@@ -1,10 +1,10 @@
-//! Ein nachgebauter Proxmox-Server: über TLS mit einem selbst erstellten Zertifikat, wie Proxmox es mitbringt. Die
-//! Wege und Antworten sind nach der Dokumentation der Schnittstelle gebaut, nicht an einem echten Server
-//! aufgezeichnet.
+//! A simulated Proxmox server: over TLS with a self-signed certificate, as Proxmox ships it. The
+//! routes and answers are built after the API documentation, not recorded on a real
+//! server.
 //!
-//! Es gibt zwei Tokens: [`TOKEN`] darf alles, `leser@pve!test` nur sehen; beide mit [`SECRET`]. Unter `/test/…`
-//! (ohne Anmeldung, nur für Prüfungen) lässt sich der Stand verstellen, so als hätte jemand in Proxmox den Namen
-//! oder die Adresse einer Maschine geändert oder ihr Zertifikat erneuert.
+//! There are two tokens: [`TOKEN`] may do everything, `leser@pve!test` may only look; both with [`SECRET`]. Under `/test/…`
+//! (without sign-in, only for tests) the state can be changed, as if someone had changed a machine's name
+//! or address in Proxmox or renewed its certificate.
 
 use std::{
     collections::HashMap,
@@ -26,27 +26,27 @@ pub const SECRET: &str = "0c6f2c1e-58a1-4c0e-9d3b-7a1f0e2b4c55";
 
 #[derive(Default)]
 pub struct World {
-    /// Jeder Kopf `Authorization`, den der Server zu sehen bekam.
+    /// Every `Authorization` header the server saw.
     pub tokens: Vec<String>,
-    /// Zustand je Maschine, soweit er sich geändert hat.
+    /// State per machine, as far as it changed.
     pub status: HashMap<u32, &'static str>,
-    /// Wie oft nach einem Auftrag gefragt wurde.
+    /// How often a task was asked about.
     pub polls: HashMap<String, u32>,
-    /// Name und feste Adresse der VM 101, soweit sie verstellt wurden.
+    /// Name and fixed address of VM 101, as far as they were changed.
     pub renamed: Option<String>,
     pub readdressed: Option<String>,
-    /// Wie oft die Einstellungen einer Maschine gelesen wurden.
+    /// How often a machine's settings were read.
     pub configs: u32,
-    /// So lange nennt die Liste aller Maschinen nach einem Schalten noch den alten Zustand. Proxmox führt sie aus
-    /// einem Stand, den es nur alle paar Sekunden erneuert; `status/current` einer Maschine stimmt sofort.
+    /// For this long the list of all machines still names the old state after switching. Proxmox keeps it from
+    /// a state it only refreshes every few seconds; a machine's `status/current` is right at once.
     pub lag: Duration,
-    /// Je geschalteter Maschine: ihr Zustand davor und wann geschaltet wurde.
+    /// Per switched machine: its state before and when it was switched.
     pub switched: HashMap<u32, (&'static str, Instant)>,
-    /// Wie oft die Liste einen Zustand nannte, der schon nicht mehr stimmte.
+    /// How often the list named a state that was no longer right.
     pub stale: u32,
 }
 
-/// Der Zustand, in dem eine Maschine anfängt.
+/// The state a machine starts in.
 fn initial(vmid: u32) -> &'static str {
     if matches!(vmid, 130 | 9000) {
         "stopped"
@@ -56,12 +56,12 @@ fn initial(vmid: u32) -> &'static str {
 }
 
 impl World {
-    /// Der wirkliche Zustand einer Maschine.
+    /// A machine's real state.
     fn truth(&self, vmid: u32) -> &'static str {
         self.status.get(&vmid).copied().unwrap_or(initial(vmid))
     }
 
-    /// Der Zustand, den die Liste aller Maschinen nennt.
+    /// The state the list of all machines names.
     fn listed(&mut self, vmid: u32) -> &'static str {
         match self.switched.get(&vmid) {
             Some((before, at)) if at.elapsed() < self.lag && *before != self.truth(vmid) => {
@@ -78,8 +78,8 @@ pub type Shared = Arc<Mutex<World>>;
 async fn handle(State(world): State<Shared>, method: Method, uri: Uri, headers: HeaderMap) -> (StatusCode, Json<Value>) {
     let mut world = world.lock().unwrap();
     let ok = |data: Value| (StatusCode::OK, Json(json!({ "data": data })));
-    // Für Prüfungen: `/test/rename/<name>`, `/test/address/<adresse>` und `/test/reset` verstellen die VM 101;
-    // `/test/seen` nennt, wie viele Tokens der Server zu sehen bekam und wie oft Einstellungen gelesen wurden.
+    // For tests: `/test/rename/<name>`, `/test/address/<address>` and `/test/reset` change VM 101;
+    // `/test/seen` says how many tokens the server saw and how often settings were read.
     if let Some(rest) = uri.path().strip_prefix("/test/") {
         match rest.split('/').collect::<Vec<_>>().as_slice() {
             ["seen"] => return ok(json!({ "tokens": world.tokens.len(), "configs": world.configs, "stale": world.stale })),
@@ -123,7 +123,7 @@ async fn handle(State(world): State<Shared>, method: Method, uri: Uri, headers: 
             { "type": "storage", "node": "pve", "storage": "local" },
             ]))
         }
-        // Die Maschine selbst gefragt: Das stimmt sofort.
+        // The machine asked itself: that is right at once.
         ("GET", ["nodes", "pve", "qemu" | "lxc", vmid, "status", "current"]) => {
             let vmid: u32 = vmid.parse().unwrap_or_default();
             ok(json!({ "vmid": vmid, "status": world.truth(vmid), "qmpstatus": world.truth(vmid) }))
@@ -138,7 +138,7 @@ async fn handle(State(world): State<Shared>, method: Method, uri: Uri, headers: 
         ] })),
         ("GET", ["nodes", "pve", "qemu", "130", "config"]) => ok(json!({ "ostype": "l26", "name": "spielwiese" })),
         ("GET", ["nodes", "pve", "qemu", "9000", "config"]) => ok(json!({ "ostype": "l26", "name": "debian-13-vorlage", "template": 1 })),
-        // Der Gastagent läuft nicht: So antwortet Proxmox dann.
+        // The guest agent is not running: this is how Proxmox answers then.
         ("GET", ["nodes", "pve", "qemu", _, "agent", _]) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "data": null, "message": "QEMU guest agent is not running\n" }))),
         ("GET", ["nodes", "pve", "lxc", "111", "config"]) => ok(json!({ "net0": "name=eth0,bridge=vmbr0,hwaddr=BC:24:11:00:00:01,ip=10.0.0.53/24,gw=10.0.0.1,type=veth", "ostype": "debian", "hostname": "pihole" })),
         ("GET", ["nodes", "pve", "lxc", "112", "config"]) => ok(json!({ "net0": "name=eth0,bridge=vmbr0,ip=dhcp,type=veth", "ostype": "alpine" })),
@@ -158,7 +158,7 @@ async fn handle(State(world): State<Shared>, method: Method, uri: Uri, headers: 
         ("GET", ["nodes", "pve", "tasks", upid, "status"]) => {
             let asked = world.polls.entry(upid.to_string()).or_insert(0);
             *asked += 1;
-            // Der erste Blick sieht den Auftrag noch laufen.
+            // The first look still sees the task running.
             match (*asked, upid.contains(":9000:")) {
                 (1, _) => ok(json!({ "status": "running", "upid": upid })),
                 (_, true) => ok(json!({ "status": "stopped", "exitstatus": "unable to start VM 9000 - VM is a template" })),
@@ -169,17 +169,17 @@ async fn handle(State(world): State<Shared>, method: Method, uri: Uri, headers: 
     }
 }
 
-/// Ein laufender nachgebauter Proxmox-Server.
+/// A running simulated Proxmox server.
 pub struct Running {
     /// `https://localhost:<port>`
     pub address: String,
-    /// SHA-256 über sein Zertifikat.
+    /// SHA-256 over its certificate.
     pub fingerprint: [u8; 32],
     pub world: Shared,
 }
 
-/// Startet den nachgebauten Server an einem freien Port, mit einem frisch erstellten Zertifikat. Seine Liste der
-/// Maschinen stimmt sofort; mit [`start_lagging`] hinkt sie nach einem Schalten hinterher wie bei Proxmox.
+/// Starts the simulated server on a free port with a freshly created certificate. Its list of
+/// machines is right at once; with [`start_lagging`] it lags behind after switching, as with Proxmox.
 pub async fn start() -> std::io::Result<Running> {
     start_lagging(Duration::ZERO).await
 }
@@ -201,7 +201,7 @@ pub async fn start_lagging(lag: Duration) -> std::io::Result<Running> {
     Ok(Running { address: format!("https://localhost:{port}"), fingerprint, world })
 }
 
-/// So zeigt Proxmox einen Fingerabdruck: `5F:1A:…`.
+/// This is how Proxmox shows a fingerprint: `5F:1A:…`.
 pub fn fingerprint_text(fingerprint: &[u8; 32]) -> String {
     fingerprint.iter().map(|byte| format!("{byte:02X}")).collect::<Vec<_>>().join(":")
 }

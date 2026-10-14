@@ -8,17 +8,17 @@ license.workspace = true
 [dependencies]
 russh = { version = "0.63", default-features = false, features = ["ring", "flate2", "rsa"] }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "time", "macros", "io-util"] }
-# Für die Zufallszahl im Zertifikat, das der Testserver sich selbst ausstellen lässt.
+# For the random number in the certificate the test server issues for itself.
 rand = "0.10"
 russh-sftp = "3.0.1"
-# Für den nachgebauten Proxmox-Server (`pve`): HTTPS mit einem selbst erstellten Zertifikat.
+# For the simulated Proxmox server (`pve`): HTTPS with a self-signed certificate.
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"] }
 axum-server = { version = "0.7", default-features = false, features = ["tls-rustls-no-provider"] }
 rcgen = { version = "0.14", default-features = false, features = ["ring", "pem"] }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 serde_json = "1"
 sha2 = "0.10"
-# Für den FTP-Server (`ftp`): offen und über FTPS, auf einem Ordner dieses Rechners.
+# For the FTP server (`ftp`): plain and over FTPS, on a folder of this machine.
 libunftp = { version = "0.23", default-features = false, features = ["ring"] }
 unftp-sbe-fs = "0.4"
 unftp-core = "0.1"

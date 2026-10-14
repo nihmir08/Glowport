@@ -1,5 +1,5 @@
-//! Der Server gegen echte Tresore: Jedes „Gerät“ hier ist eine Tresor-Datei des Kerns, und alles geht durch
-//! dieselben Wege wie später über das Netz (Router, JSON, Geräte-Token).
+//! The server against real vaults: every “device” here is a vault file of the core, and everything goes through
+//! the same paths as later over the network (router, JSON, device token).
 
 use std::{
     path::PathBuf,
@@ -36,7 +36,7 @@ struct Server {
     setup: String,
 }
 
-/// Fehlerantwort: Status und Code.
+/// Error response: status and code.
 type Failure = (u16, String);
 
 impl Server {
@@ -94,7 +94,7 @@ fn fails<T: std::fmt::Debug>(result: Result<T, Failure>, status: u16, code: &str
     }
 }
 
-/// Ein Gerät: eine Tresor-Datei und seine Anmeldung am Server.
+/// A device: a vault file and its sign-in at the server.
 struct Device {
     vault: Vault,
     path: PathBuf,
@@ -129,7 +129,7 @@ impl Device {
         Member { account: crypto::hex(&self.account), name: self.name.clone(), ed25519: crypto::hex(&ed25519), x25519: crypto::hex(&x25519), role }
     }
 
-    /// Schickt, was wartet. Lehnt der Server ab, wird zusammengeführt und noch einmal geschickt.
+    /// Sends what is waiting. If the server refuses, it merges and sends again.
     async fn push(&mut self, server: &Server, vault: &[u8; 16]) -> Result<PushReply, Failure> {
         for _ in 0..3 {
             let outgoing = self.vault.outgoing(vault).unwrap();
@@ -184,7 +184,7 @@ async fn register(server: &Server, name: &str, code: &str) -> Result<Device, Fai
     }
 }
 
-/// Ein weiteres Gerät desselben Kontos: nur Benutzername und Master-Passwort (hier gleich dem Namen).
+/// Another device of the same account: only user name and master password (here equal to the name).
 async fn login(server: &Server, name: &str, password: &str) -> Result<Device, Failure> {
     let salt: PreloginReply = server.post("/v1/prelogin", None, Prelogin { username: name.into() }).await?;
     let auth = glowport_core::vault::auth_key(password, &salt.salt.array().unwrap(), salt.kdf.into()).unwrap();
@@ -216,7 +216,7 @@ async fn accounts_need_a_code_and_logins_are_throttled() {
     fails(server.post::<Invite>("/v1/admin/invites", Some(&bert.token), ()).await, 403, "not_admin");
     fails(server.get::<Overview>("/v1/account", &Bytes(vec![1; 32])).await, 401, "unauthorized");
 
-    // Ein abgelaufener Code gilt nicht mehr.
+    // An expired code is no longer valid.
     let code = invite(&server, &anna).await;
     server.pass(8 * DAY);
     fails(register(&server, "carl", &code).await.map(drop), 403, "code_invalid");
@@ -227,7 +227,7 @@ async fn accounts_need_a_code_and_logins_are_throttled() {
     assert_eq!(unknown("niemand").await.unwrap(), unknown("niemand").await.unwrap());
     assert_ne!(unknown("niemand").await.unwrap().salt, unknown("keiner").await.unwrap().salt);
 
-    // Das zweite Gerät öffnet sich mit dem Master-Passwort; falsche Versuche werden gebremst.
+    // The second device opens with the master password; wrong attempts are slowed down.
     let second = login(&server, "bert", "bert").await.unwrap();
     assert_eq!(second.vault.public_keys().unwrap(), bert.vault.public_keys().unwrap());
     for _ in 0..5 {
@@ -256,7 +256,7 @@ async fn two_devices_of_one_account_converge() {
     assert_eq!(two.names(&personal), one.names(&personal));
     assert!(two.pull(&server, &personal).await.unwrap().records.is_empty(), "nichts Neues seit der letzten Nummer");
 
-    // Beide ändern denselben Host, ohne voneinander zu wissen: Der zweite beim Server führt zusammen.
+    // Both change the same host without knowing of each other: the second one at the server merges.
     two.vault.put(Some(host), br#"{"name":"web","own":{"port":2222}}"#).unwrap();
     one.vault.put(Some(host), br#"{"name":"web-01","own":{"port":22}}"#).unwrap();
     assert!(two.push(&server, &personal).await.unwrap().accepted);
@@ -267,13 +267,13 @@ async fn two_devices_of_one_account_converge() {
     assert_eq!(two.names(&personal), one.names(&personal));
     assert!(one.vault.pending(&personal).unwrap().is_empty() && two.vault.pending(&personal).unwrap().is_empty());
 
-    // Löschen kommt an.
+    // Deleting arrives.
     one.vault.delete(&host).unwrap();
     one.push(&server, &personal).await.unwrap();
     two.pull(&server, &personal).await.unwrap();
     assert_eq!(two.names(&personal), ["eins"]);
 
-    // Alles oder nichts: Ein Paket mit einem veralteten Datensatz bringt auch den neuen nicht hinein.
+    // All or nothing: a package with an outdated record does not get the new one in either.
     let stale = two.vault.pending(&personal).unwrap();
     assert!(stale.is_empty());
     let kept = one.vault.put(None, b"bleibt").unwrap();
@@ -289,7 +289,7 @@ async fn two_devices_of_one_account_converge() {
     assert_eq!((reply.accepted, reply.conflicts.len()), (false, 1));
     assert_eq!(server.get::<Pull>(&format!("{path}?after=0"), &two.token).await.unwrap().records.len(), 3, "eins, der Grabstein, bleibt");
 
-    // Was der Server ohne Schlüssel prüfen kann, prüft er: Signatur und Autor.
+    // What the server can check without a key, it checks: signature and author.
     let mut forged = body.clone();
     forged.records[0].revision += 5;
     fails(server.post::<PushReply>(&path, Some(&two.token), &forged).await, 403, "record_invalid");
@@ -305,7 +305,7 @@ async fn sharing_roles_and_key_rotation() {
     let mut bert = register(&server, "bert", &invite(&server, &anna).await).await.unwrap();
     let mut carl = register(&server, "carl", &invite(&server, &anna).await).await.unwrap();
 
-    // Anna legt einen Tresor an und lädt Bert (schreiben) und Carl (lesen) ein.
+    // Anna creates a vault and invites Bert (write) and Carl (read).
     let shared = anna.vault.create_shared(&anna.account, "anna").unwrap();
     let path = format!("/v1/vaults/{}", crypto::hex(&shared));
     let create = CreateVault { id: shared.into(), roster: anna.vault.roster_blob(&shared).unwrap().into(), sealed_key: anna.vault.seal_key_for(&shared, &anna.vault.public_keys().unwrap().1).unwrap().into() };
@@ -325,13 +325,13 @@ async fn sharing_roles_and_key_rotation() {
     server.post::<()>(&format!("{path}/roster"), Some(&anna.token), &update).await.unwrap();
     anna.vault.set_roster(&shared, &blob).unwrap();
 
-    // Eingeladen heißt: Liste und Schlüssel liegen bereit, und der Inhalt lässt sich schon ansehen.
+    // Invited means: list and key are ready, and the content can already be viewed.
     for device in [&mut bert, &mut carl] {
         let overview: Overview = server.get("/v1/account", &device.token).await.unwrap();
         let entry = overview.vaults.iter().find(|v| v.shared).unwrap();
         assert!(entry.invited);
         assert_eq!(entry.members.len(), 3);
-        // Ansehen geht schon, schreiben erst nach dem Annehmen.
+        // Viewing already works, writing only after accepting.
         server.get::<Pull>(&format!("{path}/records?after=0"), &device.token).await.unwrap();
         fails(server.post::<PushReply>(&format!("{path}/records"), Some(&device.token), Push { epoch: 1, records: Vec::new() }).await, 403, "read_only");
         server.post::<()>(&format!("{path}/accept"), Some(&device.token), ()).await.unwrap();
@@ -348,14 +348,14 @@ async fn sharing_roles_and_key_rotation() {
     anna.pull(&server, &shared).await.unwrap();
     assert_eq!(anna.names(&shared), ["team-host", "von bert"]);
 
-    // Carl darf nur lesen: Auch ein von Bert signierter Datensatz kommt über Carls Anmeldung nicht hinein.
+    // Carl may only read: not even a record signed by Bert gets in through Carl's sign-in.
     bert.vault.put_in(&shared, b"wartet bei bert").unwrap();
     let smuggled = Push { epoch: 1, records: bert.vault.pending(&shared).unwrap().iter().map(WireRecord::from).collect() };
     fails(server.post::<PushReply>(&format!("{path}/records"), Some(&carl.token), &smuggled).await, 403, "record_invalid");
     let own = Push { epoch: 1, records: Vec::new() };
     fails(server.post::<PushReply>(&format!("{path}/records"), Some(&carl.token), &own).await, 403, "read_only");
 
-    // Nur der Besitzer ändert die Liste, und Rechte entzieht nur ein Schlüsseltausch.
+    // Only the owner changes the list, and only a key rotation takes permissions away.
     let mut reduced = roster.clone();
     reduced.version = 3;
     reduced.members.retain(|m| m.name != "carl");
@@ -363,7 +363,7 @@ async fn sharing_roles_and_key_rotation() {
     fails(server.post::<()>(&format!("{path}/roster"), Some(&anna.token), RosterUpdate { roster: blob.into(), keys: vec![] }).await, 403, "needs_rotation");
     fails(server.post::<()>(&format!("{path}/roster"), Some(&bert.token), &update).await, 403, "roster_invalid");
 
-    // Anna entfernt Carl. Berts wartende Änderung überlebt den Tausch.
+    // Anna removes Carl. Bert's waiting change survives the rotation.
     reduced.epoch = 2;
     let seq = anna.pull(&server, &shared).await.unwrap().seq;
     let rotation = anna.vault.prepare_rotation(&shared, &reduced).unwrap();
@@ -397,7 +397,7 @@ async fn sharing_roles_and_key_rotation() {
     assert_eq!(anna.names(&shared), ["team-host", "von bert", "wartet bei bert"]);
     assert_eq!(bert.names(&shared), anna.names(&shared));
 
-    // Bert geht von selbst; Anna als Besitzerin kann nicht gehen, aber löschen.
+    // Bert leaves on his own; Anna as owner cannot leave, but can delete.
     server.post::<()>(&format!("{path}/leave"), Some(&bert.token), ()).await.unwrap();
     fails(server.get::<Pull>(&format!("{path}/records?after=0"), &bert.token).await, 404, "not_found");
     fails(server.post::<()>(&format!("{path}/leave"), Some(&anna.token), ()).await, 403, "owner_cannot_leave");
@@ -412,7 +412,7 @@ async fn devices_password_and_administration() {
     let mut bert = register(&server, "bert", &invite(&server, &anna).await).await.unwrap();
     let second = login(&server, "bert", "bert").await.unwrap();
 
-    // Geräte: Liste, Abmelden eines anderen.
+    // Devices: list, signing out another one.
     let devices: Vec<Device2> = server.get("/v1/devices", &bert.token).await.unwrap();
     assert_eq!((devices.len(), devices.iter().filter(|d| d.current).count()), (2, 1));
     let other = devices.iter().find(|d| !d.current).unwrap();
@@ -420,7 +420,7 @@ async fn devices_password_and_administration() {
     fails(server.get::<Overview>("/v1/account", &second.token).await, 401, "unauthorized");
     fails(server.delete(&format!("/v1/devices/{}", crypto::hex(&other.id.0)), &anna.token).await, 404, "not_found");
 
-    // Passwort ändern: nur mit dem bisherigen Anmeldeschlüssel; danach gilt der neue.
+    // Changing the password: only with the previous sign-in key; afterwards the new one applies.
     let third = login(&server, "bert", "bert").await.unwrap();
     let old_auth = bert.vault.auth_key("bert").unwrap();
     bert.vault.change_password("bert", "neues passwort", FAST).unwrap();
@@ -441,7 +441,7 @@ async fn devices_password_and_administration() {
     let fresh = login(&server, "bert", "neues passwort").await.unwrap();
     assert_eq!(fresh.vault.public_keys().unwrap(), bert.vault.public_keys().unwrap());
 
-    // Verwaltung: sehen, sperren, freigeben, löschen. Nichts davon öffnet einen Tresor.
+    // Administration: view, disable, enable, delete. None of it opens a vault.
     bert.vault.put(None, b"etwas").unwrap();
     let personal = bert.personal();
     bert.push(&server, &personal).await.unwrap();
@@ -459,11 +459,11 @@ async fn devices_password_and_administration() {
     server.delete(&format!("/v1/admin/accounts/{id}"), &anna.token).await.unwrap();
     fails(server.get::<Overview>("/v1/account", &bert.token).await, 401, "unauthorized");
     assert_eq!(server.get::<Vec<AdminAccount>>("/v1/admin/accounts", &anna.token).await.unwrap().len(), 1);
-    // Der Name ist wieder frei.
+    // The name is free again.
     register(&server, "bert", &invite(&server, &anna).await).await.unwrap();
 }
 
-/// Lesbarer Name für das Gerät im Protokoll; im Test heißt die eigene Hilfsstruktur schon `Device`.
+/// Readable name for the device in the log; in the test the own helper struct is already called `Device`.
 type Device2 = glowport_sync_proto::Device;
 
 #[tokio::test]
@@ -485,10 +485,10 @@ async fn old_tombstones_leave_and_late_devices_get_everything() {
     server.pass(2 * DAY);
     assert_eq!(server.app.store.purge().unwrap(), 1);
 
-    // Das zweite Gerät hat das Löschen verpasst: Es bekommt den ganzen Stand statt der Änderungen.
+    // The second device missed the deletion: it gets the whole state instead of the changes.
     let after = two.vault.cursor(&personal).unwrap();
     let pull: Pull = server.get(&format!("/v1/vaults/{}/records?after={after}", crypto::hex(&personal)), &two.token).await.unwrap();
     assert_eq!((pull.full, pull.records.len()), (true, 1));
-    // Wer schon alles hatte, bekommt wie gewohnt nur Neues.
+    // Whoever already had everything gets only what is new, as usual.
     assert!(!one.pull(&server, &personal).await.unwrap().full);
 }

@@ -1,4 +1,4 @@
-//! Die Anfragen an den Sync-Server, eine Funktion je Weg. Kennt keinen Tresor.
+//! The requests to the sync server, one function per route. Knows no vault.
 
 use std::{sync::Arc, time::Duration};
 
@@ -27,15 +27,15 @@ pub struct Api {
 #[cfg(feature = "test-roots")]
 static TEST_ROOT: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
 
-/// Nur für Tests (Schalter `test-roots`): Ab jetzt prüfen alle Verbindungen dieses Prozesses gegen dieses eine
-/// Zertifikat (DER) statt gegen den Speicher des Systems.
+/// Only for tests (switch `test-roots`): from now on all connections of this process are checked against this one
+/// certificate (DER) instead of the system's store.
 #[cfg(feature = "test-roots")]
 pub fn trust_only(root: Vec<u8>) {
     let _ = TEST_ROOT.set(root);
 }
 
-/// TLS mit `ring`, geprüft gegen den Zertifikatsspeicher des Systems. Dieselbe Einstellung gilt für die
-/// Anfragen und für den WebSocket.
+/// TLS with `ring`, checked against the system's certificate store. The same setup applies to the
+/// requests and to the WebSocket.
 fn tls_config() -> Result<rustls::ClientConfig, SyncError> {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let builder = rustls::ClientConfig::builder_with_provider(provider).with_safe_default_protocol_versions().map_err(|e| SyncError::Offline(e.to_string()))?;
@@ -48,15 +48,15 @@ fn tls_config() -> Result<rustls::ClientConfig, SyncError> {
     Ok(builder.with_platform_verifier().map_err(|e| SyncError::Offline(e.to_string()))?.with_no_client_auth())
 }
 
-/// Ob hinter einem Verbindungsfehler ein abgelehntes Zertifikat steckt. Der Grund steckt mehrere Schichten tief
-/// und zum Teil in einem Ein-/Ausgabefehler verpackt.
+/// Whether a rejected certificate is behind a connection error. The reason sits several layers deep
+/// and partly wrapped in an I/O error.
 fn certificate_refused(error: &(dyn std::error::Error + 'static)) -> Option<String> {
     let mut current = Some(error);
     while let Some(error) = current {
         if let Some(rustls::Error::InvalidCertificate(reason)) = error.downcast_ref::<rustls::Error>() {
             return Some(format!("{reason:?}"));
         }
-        // Ein Ein-/Ausgabefehler nennt als Ursache die seines Inhalts; der Inhalt selbst ist die nächste Schicht.
+        // An I/O error names its content's cause as its own; the content itself is the next layer.
         current = match error.downcast_ref::<std::io::Error>().and_then(|io| io.get_ref()) {
             Some(inner) => Some(inner as &(dyn std::error::Error + 'static)),
             None => error.source(),
@@ -65,8 +65,8 @@ fn certificate_refused(error: &(dyn std::error::Error + 'static)) -> Option<Stri
     None
 }
 
-/// Bringt eine eingetippte Adresse in Form. Ohne Angabe gilt `https://`; unverschlüsselt geht es nur zum
-/// eigenen Rechner (für Tests und für einen Server hinter einem Tunnel).
+/// Brings a typed address into shape. Without a scheme `https://` applies; unencrypted only works to the
+/// own machine (for tests and for a server behind a tunnel).
 fn parse(server: &str) -> Result<Url, SyncError> {
     let text = server.trim();
     let text = if text.contains("://") { text.to_string() } else { format!("https://{text}") };
@@ -101,12 +101,12 @@ impl Api {
         Ok(Self { base, http, tls: Arc::new(tls), token: None })
     }
 
-    /// Die Adresse in ihrer festen Form, wie sie gespeichert wird.
+    /// The address in its fixed form, as it is stored.
     pub fn server(&self) -> String {
         self.base.as_str().trim_end_matches('/').to_string()
     }
 
-    /// Dieselbe Verbindung, ausgewiesen mit einem Geräte-Token (Base64).
+    /// The same connection, identified with a device token (Base64).
     pub fn with_token(&self, token: &str) -> Self {
         Self { token: Some(token.to_string()), ..self.clone() }
     }
@@ -121,12 +121,12 @@ impl Api {
 
     fn url(&self, segments: &[&str]) -> Url {
         let mut url = self.base.clone();
-        // Die Adresse endet auf `/`; das leere letzte Stück fällt weg, bevor die eigenen angehängt werden.
+        // The address ends in `/`; the empty last segment is dropped before the own ones are appended.
         url.path_segments_mut().expect("http und https haben immer einen Pfad").pop_if_empty().push("v1").extend(segments);
         url
     }
 
-    /// Adresse des WebSockets für Anstöße: Host, Port, ob verschlüsselt, und die Adresse selbst.
+    /// Address of the WebSocket for nudges: host, port, whether encrypted, and the address itself.
     pub(crate) fn live(&self) -> (String, u16, bool, String) {
         let mut url = self.url(&["live"]);
         let secure = url.scheme() == "https";
@@ -147,7 +147,7 @@ impl Api {
         if let Some(body) = body {
             request = request.json(body);
         }
-        // Ohne die Adresse im Text: Sie stünde sonst in Meldungen und Protokollen.
+        // Without the address in the text: it would otherwise end up in messages and logs.
         let offline = |e: reqwest::Error| match certificate_refused(&e) {
             Some(reason) => SyncError::Certificate(reason),
             None => SyncError::Offline(e.without_url().to_string()),
@@ -272,7 +272,7 @@ impl Api {
     }
 }
 
-/// Ein Geräte-Token in der Form, in der es reist und gespeichert wird.
+/// A device token in the form in which it travels and is stored.
 pub(crate) fn encode_token(token: &[u8]) -> String {
     STANDARD.encode(token)
 }

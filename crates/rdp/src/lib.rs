@@ -1,15 +1,15 @@
-//! RDP-Sitzungen: anmelden an einem Windows-Rechner (oder xrdp), sein Bild empfangen, Eingaben schicken.
+//! RDP sessions: sign in to a Windows machine (or xrdp), receive its picture, send input.
 //!
-//! Wie bei den Terminals bekommt der Aufrufer eine [`Session`]: einen Strom von [`Event`]s und einen Kanal für
-//! [`Command`]s. Statt Bytes für ein Terminal kommen hier Bildbereiche: Der Kern führt das ganze Bild und meldet
-//! nur, was sich geändert hat ([`Event::Region`]).
+//! As with the terminals, the caller gets a [`Session`]: a stream of [`Event`]s and a channel for
+//! [`Command`]s. Instead of bytes for a terminal, picture regions arrive here: the core keeps the whole picture and reports
+//! only what changed ([`Event::Region`]).
 //!
-//! **Zertifikat:** Jede Sitzung läuft über TLS. Traut das System dem Zertifikat nicht und ist kein Fingerabdruck
-//! hinterlegt ([`Connect::pin`]), fragt die Sitzung nach ([`Event::Certificate`]); ist einer hinterlegt und das
-//! Zertifikat ein anderes, endet sie mit [`End::CertificateChanged`]. Das Passwort geht erst danach an den Server.
+//! **Certificate:** every session runs over TLS. If the system does not trust the certificate and no fingerprint
+//! is stored ([`Connect::pin`]), the session asks ([`Event::Certificate`]); if one is stored and the
+//! certificate differs, it ends with [`End::CertificateChanged`]. Only then does the password go to the server.
 //!
-//! Jede Sitzung läuft in einem eigenen Thread: Das Auspacken der Bilder ist Rechenarbeit, die anderen Verbindungen
-//! nicht im Weg stehen soll.
+//! Every session runs on a thread of its own: unpacking the pictures is computing work that should not get
+//! in the way of other connections.
 
 mod tls;
 
@@ -50,35 +50,35 @@ pub use tls::Fingerprint;
 
 pub const DEFAULT_PORT: u16 = 3389;
 
-/// Für den Aufbau der Leitung und für jeden Schritt der Anmeldung.
+/// For setting up the line and for every step of the sign-in.
 const STEP_TIMEOUT: Duration = Duration::from_secs(20);
-/// So viele Ereignisse dürfen auf den Empfänger warten. Ist der Kanal voll, liest die Sitzung nicht weiter vom
-/// Server; der bremst dann von selbst.
+/// This many events may wait for the receiver. If the channel is full, the session stops reading from the
+/// server; the server then slows down by itself.
 const EVENT_QUEUE: usize = 64;
 
-/// Wohin und als wer.
+/// Where to and as whom.
 #[derive(Clone)]
 pub struct Connect {
     pub host: String,
     pub port: u16,
-    /// `benutzer`, `DOMÄNE\benutzer` oder `benutzer@domäne`.
+    /// `user`, `DOMAIN\user` or `user@domain`.
     pub user: String,
     pub password: String,
-    /// Gewünschte Größe des Bildes; der Server darf eine andere nennen ([`Event::Ready`]).
+    /// Desired picture size; the server may name a different one ([`Event::Ready`]).
     pub width: u16,
     pub height: u16,
-    /// Vergrößerung der Anzeige in Prozent (100 bis 500), damit die Schrift am entfernten Rechner passt.
+    /// Display scaling in percent (100 to 500), so text fits on the remote machine.
     pub scale: u32,
-    /// Tastaturbelegung dieses Rechners, wie Windows sie nummeriert (etwa `0x407` für Deutsch); 0 überlässt sie
-    /// dem Server.
+    /// This machine's keyboard layout as Windows numbers it (e.g. `0x407` for German); 0 leaves it to
+    /// the server.
     pub keyboard_layout: u32,
-    /// Der Fingerabdruck, den der Nutzer für diesen Server bestätigt hat.
+    /// The fingerprint the user confirmed for this server.
     pub pin: Option<Fingerprint>,
 }
 
 impl std::fmt::Debug for Connect {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // Ohne das Passwort.
+        // Without the password.
         write!(f, "Connect({}@{}:{})", self.user, self.host, self.port)
     }
 }
@@ -92,23 +92,23 @@ pub enum Phase {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Pointer {
-    /// Der gewöhnliche Pfeil.
+    /// The ordinary arrow.
     Default,
     Hidden,
-    /// Ein eigener Zeiger des entfernten Rechners; `pixels` sind `width * height` Bildpunkte in RGBA.
+    /// A pointer of the remote machine's own; `pixels` are `width * height` pixels in RGBA.
     Bitmap { width: u16, height: u16, hot_x: u16, hot_y: u16, pixels: Vec<u8> },
-    /// Der Server hat den Zeiger versetzt.
+    /// The server moved the pointer.
     Position { x: u16, y: u16 },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum End {
-    /// Vom Nutzer getrennt oder eine Rückfrage abgebrochen.
+    /// Disconnected by the user or a prompt was cancelled.
     User,
-    /// Der Server hat die Sitzung beendet (abgemeldet, von einer anderen Anmeldung verdrängt …).
+    /// The server ended the session (signed out, pushed out by another sign-in …).
     Server(String),
     ConnectFailed(String),
-    /// Das Zertifikat ist nicht das, das der Nutzer bestätigt hat.
+    /// The certificate is not the one the user confirmed.
     CertificateChanged(Fingerprint),
     AuthFailed,
     ConnectionLost(String),
@@ -117,14 +117,14 @@ pub enum End {
 #[derive(Debug)]
 pub enum Event {
     Phase(Phase),
-    /// Das System traut dem Zertifikat nicht, und es ist keines hinterlegt. `true` verbindet weiter; der Aufrufer
-    /// merkt sich dann den Fingerabdruck für [`Connect::pin`].
+    /// The system does not trust the certificate, and none is stored. `true` continues connecting; the caller
+    /// then remembers the fingerprint for [`Connect::pin`].
     Certificate { fingerprint: Fingerprint, reply: oneshot::Sender<bool> },
-    /// Angemeldet. Das Bild hat diese Größe und ist anfangs schwarz.
+    /// Signed in. The picture has this size and is black at first.
     Ready { width: u16, height: u16 },
-    /// Dieser Bereich des Bildes hat sich geändert; `pixels` sind `width * height` Bildpunkte in RGBA, Zeile für Zeile.
+    /// This region of the picture changed; `pixels` are `width * height` pixels in RGBA, row by row.
     Region { x: u16, y: u16, width: u16, height: u16, pixels: Vec<u8> },
-    /// Das Bild hat eine neue Größe und ist wieder schwarz.
+    /// The picture has a new size and is black again.
     Resized { width: u16, height: u16 },
     Pointer(Pointer),
     End(End),
@@ -139,18 +139,18 @@ pub enum Button {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
-    /// Eine Taste nach ihrer Lage auf der Tastatur (Scancode, Satz 1); welches Zeichen daraus wird, entscheidet
-    /// die Belegung des entfernten Rechners.
+    /// A key by its position on the keyboard (scancode, set 1); which character results is decided by
+    /// the remote machine's layout.
     Key { code: u8, extended: bool, down: bool },
-    /// Ein Zeichen ohne Taste (UTF-16), etwa aus einer Eingabehilfe.
+    /// A character without a key (UTF-16), e.g. from an input method.
     Unicode { unit: u16, down: bool },
     Move { x: u16, y: u16 },
     Button { button: Button, down: bool, x: u16, y: u16 },
-    /// Mausrad; ein Rastschritt sind 120, nach oben und nach rechts positiv.
+    /// Mouse wheel; one notch is 120, up and right positive.
     Wheel { delta: i16, horizontal: bool, x: u16, y: u16 },
-    /// Stand der Feststelltasten, wenn die Sitzung den Fokus bekommt.
+    /// State of the lock keys when the session gets the focus.
     Locks { caps: bool, num: bool, scroll: bool },
-    /// Wunsch nach einer neuen Bildgröße. Kann der Server das nicht, bleibt die alte.
+    /// Request for a new picture size. If the server cannot do it, the old one stays.
     Resize { width: u16, height: u16, scale: u32 },
     Close,
 }
@@ -160,7 +160,7 @@ pub struct Session {
     pub events: mpsc::Receiver<Event>,
 }
 
-/// Trennt `DOMÄNE\benutzer` in seine Teile. `benutzer@domäne` bleibt ganz: So meldet sich Windows damit an.
+/// Splits `DOMAIN\user` into its parts. `user@domain` stays whole: that is how Windows signs in with it.
 pub fn split_user(user: &str) -> (String, Option<String>) {
     match user.split_once('\\') {
         Some((domain, name)) if !domain.is_empty() && !name.is_empty() => (name.to_string(), Some(domain.to_string())),
@@ -168,7 +168,7 @@ pub fn split_user(user: &str) -> (String, Option<String>) {
     }
 }
 
-/// Die Größe, die ein Server annimmt: 200 bis 8192 Bildpunkte, die Breite gerade.
+/// The size a server accepts: 200 to 8192 pixels, the width even.
 pub fn fit_size(width: u16, height: u16) -> (u16, u16) {
     let (width, height) = MonitorLayoutEntry::adjust_display_size(u32::from(width), u32::from(height));
     (width as u16, height as u16)
@@ -178,7 +178,7 @@ trait Wire: AsyncRead + AsyncWrite + Unpin + Send + Sync {}
 impl<T: AsyncRead + AsyncWrite + Unpin + Send + Sync> Wire for T {}
 type Boxed = Box<dyn Wire>;
 
-/// Verbindet sich direkt mit dem Server.
+/// Connects directly to the server.
 pub fn open(connect: Connect) -> Session {
     start(connect, |connect, events| async move {
         let _ = events.send(Event::Phase(Phase::Connecting)).await;
@@ -193,7 +193,7 @@ pub fn open(connect: Connect) -> Session {
     })
 }
 
-/// Führt die Sitzung über eine Leitung, die schon steht, etwa einen Tunnel durch einen Sprung-Server.
+/// Runs the session over a line that already stands, e.g. a tunnel through a jump host.
 pub fn open_on<S>(connect: Connect, stream: S) -> Session
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
@@ -230,8 +230,8 @@ where
     Session { commands, events }
 }
 
-/// Die Anmeldung über NLA könnte für Kerberos einen Anmeldeserver im Netz fragen. Glowport meldet sich mit NTLM an
-/// und fragt niemanden.
+/// The sign-in via NLA could ask a logon server on the network for Kerberos. Glowport signs in with NTLM
+/// and asks nobody.
 struct NoNetwork;
 
 impl NetworkClient for NoNetwork {
@@ -264,11 +264,11 @@ fn settings(connect: &Connect) -> ironrdp_connector::Config {
         hardware_id: None,
         license_cache: None,
         enable_server_pointer: true,
-        // Mit der Anmeldung über TLS allein (xrdp, Windows ohne NLA) meldet der Server gleich mit diesen Daten an.
+        // With sign-in over TLS alone (xrdp, Windows without NLA) the server signs in right away with these details.
         autologon: true,
         enable_audio_playback: false,
         request_data: None,
-        // Den Zeiger zeichnet das Fenster selbst, nicht der Kern ins Bild.
+        // The window draws the pointer itself; the core does not draw it into the picture.
         pointer_software_rendering: false,
         multitransport_flags: None,
         compression_type: Some(CompressionType::K64),
@@ -279,7 +279,7 @@ fn settings(connect: &Connect) -> ironrdp_connector::Config {
     }
 }
 
-/// Liest aus einem Fehler der Anmeldung, woran es lag.
+/// Reads from a sign-in error what caused it.
 fn refused(error: ConnectorError) -> End {
     match error.kind() {
         ConnectorErrorKind::Credssp(_) | ConnectorErrorKind::AccessDenied => End::AuthFailed,
@@ -314,7 +314,7 @@ where
     Ok(session(result, framed, events, commands).await)
 }
 
-/// Wartet, bis der Nutzer schließt; alles andere, was vor der Anmeldung kommt, verfällt.
+/// Waits until the user closes; everything else that comes before the sign-in is dropped.
 async fn closed(commands: &mut mpsc::UnboundedReceiver<Command>) {
     while !matches!(commands.recv().await, Some(Command::Close) | None) {}
 }
@@ -337,7 +337,7 @@ async fn establish(connect: &Connect, stream: Boxed, local: SocketAddr, events: 
     };
     stream.flush().await.map_err(|error| End::ConnectionLost(error.to_string()))?;
 
-    // Erst das Zertifikat, dann das Passwort.
+    // First the certificate, then the password.
     let (fingerprint, recognised) = seen.lock().unwrap_or_else(|p| p.into_inner()).ok_or_else(|| End::ConnectFailed("the server showed no certificate".into()))?;
     match connect.pin {
         Some(pin) if pin != fingerprint => return Err(End::CertificateChanged(fingerprint)),
@@ -359,12 +359,12 @@ async fn establish(connect: &Connect, stream: Boxed, local: SocketAddr, events: 
     Ok((result, framed))
 }
 
-/// Die Bildpunkte eines Bereichs, Zeile für Zeile; `None`, wenn er ganz außerhalb des Bildes liegt.
+/// The pixels of a region, row by row; `None` if it lies completely outside the picture.
 fn region(image: &DecodedImage, rect: &InclusiveRectangle) -> Option<Event> {
     cut(image.data(), image.stride(), image.width(), image.height(), rect)
 }
 
-/// Schneidet einen Bereich aus einem Bild in RGBA, dessen Zeilen `stride` Bytes lang sind.
+/// Cuts a region out of an RGBA picture whose rows are `stride` bytes long.
 fn cut(data: &[u8], stride: usize, width: u16, height: u16, rect: &InclusiveRectangle) -> Option<Event> {
     if width == 0 || height == 0 || rect.left >= width || rect.top >= height || rect.right < rect.left || rect.bottom < rect.top {
         return None;
@@ -383,7 +383,7 @@ fn mouse(flags: PointerFlags, units: i16, x: u16, y: u16) -> FastPathInputEvent 
     FastPathInputEvent::MouseEvent(MousePdu { flags, number_of_wheel_rotation_units: units, x_position: x, y_position: y })
 }
 
-/// Was aus einem Befehl über die Leitung geht. `Resize` und `Close` sind keine Eingaben.
+/// What goes over the line from a command. `Resize` and `Close` are not input.
 fn input(command: &Command) -> Option<FastPathInputEvent> {
     Some(match *command {
         Command::Key { code, extended, down } => {
@@ -439,7 +439,7 @@ async fn session(result: ConnectionResult, framed: LocalTokioFramed<Boxed>, even
         return End::User;
     }
 
-    // Nach dem Wunsch des Nutzers zu trennen antwortet der Server noch; bleibt das aus, ist nach kurzer Zeit Schluss.
+    // After the user asks to disconnect, the server still answers; if that does not happen, it is over after a short time.
     let mut closing: Option<tokio::time::Instant> = None;
     loop {
         let outputs = tokio::select! {
@@ -466,7 +466,7 @@ async fn session(result: ConnectionResult, framed: LocalTokioFramed<Boxed>, even
                     match stage.encode_resize(u32::from(width), u32::from(height), scale, None) {
                         Some(Ok(frame)) => vec![ActiveStageOutput::ResponseFrame(frame)],
                         Some(Err(error)) => return lost(&error),
-                        // Der Server kann die Größe im Betrieb nicht ändern; das Bild bleibt, wie es ist.
+                        // The server cannot change the size while running; the picture stays as it is.
                         None => Vec::new(),
                     }
                 }
@@ -496,8 +496,8 @@ async fn session(result: ConnectionResult, framed: LocalTokioFramed<Boxed>, even
                     Some(Event::Pointer(Pointer::Bitmap { width: pointer.width, height: pointer.height, hot_x: pointer.hotspot_x, hot_y: pointer.hotspot_y, pixels: pointer.bitmap_data.clone() }))
                 }
                 ActiveStageOutput::DeactivateAll => {
-                    // Der Server stellt die Sitzung neu ein, etwa nach einer Größenänderung: Die Einstellungen
-                    // werden noch einmal ausgehandelt, danach gibt es ein neues, leeres Bild.
+                    // The server reconfigures the session, e.g. after a resize: the settings
+                    // are negotiated once more, after which there is a new, empty picture.
                     let mut activation = activation_factory.create();
                     let mut buffer = WriteBuf::new();
                     loop {
@@ -538,7 +538,7 @@ async fn session(result: ConnectionResult, framed: LocalTokioFramed<Boxed>, even
                         GracefulDisconnectReason::Other(text) => End::Server(text),
                     };
                 }
-                // Der schnellere Weg über UDP und die Messung der Leitung sind nicht gebaut; der Server kommt ohne aus.
+                // The faster path over UDP and measuring the line are not built; the server manages without.
                 _ => None,
             };
             if let Some(event) = event {
@@ -587,7 +587,7 @@ mod tests {
 
     #[test]
     fn a_region_is_cut_out_of_the_picture_row_by_row() {
-        // Jeder Bildpunkt trägt seine Lage: Rot die Spalte, Grün die Zeile. Die Zeilen sind länger als das Bild breit.
+        // Every pixel carries its position: red the column, green the row. The rows are longer than the picture is wide.
         let (width, height, stride) = (4u16, 3u16, 20usize);
         let mut data = vec![0u8; stride * usize::from(height)];
         for y in 0..height {
@@ -598,7 +598,7 @@ mod tests {
         let Some(Event::Region { x, y, width: w, height: h, pixels }) = cut(&data, stride, width, height, &InclusiveRectangle { left: 1, top: 1, right: 2, bottom: 2 }) else { panic!("kein Bereich") };
         assert_eq!((x, y, w, h), (1, 1, 2, 2));
         assert_eq!(pixels.chunks(4).map(|p| (p[0], p[1])).collect::<Vec<_>>(), [(1, 1), (2, 1), (1, 2), (2, 2)]);
-        // Ragt ein Bereich über das Bild hinaus, wird er beschnitten; liegt er ganz daneben, gibt es keinen.
+        // If a region sticks out of the picture, it is clipped; if it lies completely outside, there is none.
         let Some(Event::Region { width: w, height: h, .. }) = cut(&data, stride, width, height, &InclusiveRectangle { left: 3, top: 2, right: 90, bottom: 90 }) else { panic!("kein Bereich") };
         assert_eq!((w, h), (1, 1));
         assert!(cut(&data, stride, width, height, &InclusiveRectangle { left: 4, top: 0, right: 9, bottom: 0 }).is_none());

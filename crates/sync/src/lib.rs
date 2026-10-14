@@ -1,11 +1,11 @@
-//! Abgleich mit dem Sync-Server: die Seite des Programms (`docs/sync.md`).
+//! Syncing with the sync server: the program's side (`docs/sync.md`).
 //!
-//! - [`api`]: die Anfragen an den Server, eine Funktion je Weg.
-//! - [`engine`]: was mit dem Tresor geschieht: einrichten, anmelden, holen, schicken, zusammenführen, teilen.
-//! - [`live`]: läuft im Hintergrund, hört auf Anstöße des Servers und gleicht ab.
+//! - [`api`]: the requests to the server, one function per route.
+//! - [`engine`]: what happens with the vault: set up, sign in, fetch, send, merge, share.
+//! - [`live`]: runs in the background, listens for the server's nudges and syncs.
 //!
-//! Der Tresor gehört dem Programm, nicht diesem Crate. Deshalb geht jeder Zugriff durch eine [`Door`]: kurz
-//! hinein, lesen oder schreiben, wieder heraus. Über das Netz wird nie gewartet, während die Tür offen steht.
+//! The vault belongs to the program, not to this crate. That is why every access goes through a [`Door`]: briefly
+//! in, read or write, out again. Nobody ever waits on the network while the door is open.
 
 pub mod api;
 pub mod engine;
@@ -23,11 +23,11 @@ pub use live::{status_of, Runner, Status};
 pub enum SyncError {
     #[error("Keine Verbindung zum Sync-Server ({0})")]
     Offline(String),
-    /// Der Server ist da, aber sein Zertifikat gilt nicht: abgelaufen, für einen anderen Namen, oder von
-    /// niemandem ausgestellt, dem dieser Rechner traut.
+    /// The server is there, but its certificate is not valid: expired, for another name, or issued by
+    /// nobody this machine trusts.
     #[error("Das Zertifikat des Sync-Servers wird nicht anerkannt ({0})")]
     Certificate(String),
-    /// Der Server hat geantwortet und abgelehnt. `code` ist sein Grund, etwa `unauthorized` oder `code_invalid`.
+    /// The server answered and refused. `code` is its reason, e.g. `unauthorized` or `code_invalid`.
     #[error("Der Sync-Server lehnt ab ({code})")]
     Refused { status: u16, code: String },
     #[error("Unerwartete Antwort des Sync-Servers ({0})")]
@@ -42,12 +42,12 @@ pub enum SyncError {
     NotLinked,
     #[error("Der Abgleich ist schon eingerichtet")]
     AlreadyLinked,
-    /// Der Tresor dieses Geräts gehört zu einem anderen Konto als dem, an dem angemeldet wurde.
+    /// This device's vault belongs to a different account than the one signed in to.
     #[error("Dieser Tresor gehört zu einem anderen Konto")]
     OtherAccount,
     #[error("Das geht hier nicht ({0})")]
     Invalid(&'static str),
-    /// Der Tresor wurde während eines Schlüsseltauschs immer wieder von anderen geändert.
+    /// The vault was changed by others again and again during a key rotation.
     #[error("Der Tresor wird gerade von anderen geändert; bitte noch einmal versuchen")]
     Busy,
     #[error(transparent)]
@@ -55,7 +55,7 @@ pub enum SyncError {
 }
 
 impl SyncError {
-    /// Kurzer Grund für die Oberfläche.
+    /// Short reason for the interface.
     pub fn code(&self) -> &str {
         match self {
             SyncError::Offline(_) => "offline",
@@ -83,9 +83,9 @@ impl SyncError {
     }
 }
 
-/// Zugang zum Tresor des Programms.
+/// Access to the program's vault.
 pub trait Door: Send + Sync + 'static {
-    /// Führt `work` am Tresor aus. Ist er gesperrt, scheitert schon der erste Zugriff darin mit `Locked`.
+    /// Runs `work` on the vault. If it is locked, the first access inside already fails with `Locked`.
     fn enter<T>(&self, work: impl FnOnce(&mut Vault) -> Result<T, SyncError>) -> Result<T, SyncError>;
 }
 
@@ -95,16 +95,16 @@ impl Door for Mutex<Vault> {
     }
 }
 
-/// Die Anmeldung dieses Geräts am Server. Liegt mit dem Kontoschlüssel verschlüsselt in der Tresor-Datei.
+/// This device's sign-in at the server. Stored in the vault file, encrypted with the account key.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Link {
     pub server: String,
-    /// Kennung des Kontos (Hex).
+    /// ID of the account (hex).
     pub account: String,
     pub username: String,
-    /// Kennung dieses Geräts (Hex).
+    /// ID of this device (hex).
     pub device: String,
-    /// Geräte-Token (Base64). Weist das Gerät bei jeder Anfrage aus.
+    /// Device token (Base64). Identifies the device on every request.
     pub token: String,
     pub admin: bool,
 }

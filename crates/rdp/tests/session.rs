@@ -1,6 +1,6 @@
-//! Die Sitzung gegen einen nachgebauten RDP-Server (`ironrdp-server`): Zertifikat, Anmeldung, Bild, Eingaben,
-//! Größenänderung, Trennen. Der Server ist nach dem Protokoll gebaut, kein Windows; was nur ein echtes Windows
-//! zeigt, prüft dieser Test nicht.
+//! The session against a simulated RDP server (`ironrdp-server`): certificate, sign-in, picture, input,
+//! resizing, disconnecting. The server is built after the protocol, not a Windows; what only a real Windows
+//! shows is not covered by this test.
 
 use std::{
     net::SocketAddr,
@@ -18,16 +18,16 @@ use ironrdp_server::{
 use tokio::sync::mpsc;
 
 const USER: &str = "tester";
-/// Gilt nur für den nachgebauten Server in diesem Test.
+/// Only applies to the simulated server in this test.
 const PASSWORD: &str = "richtig";
-/// Farbe des ganzen Bildes und die des Rechtecks, das der Server nach der Taste „A“ malt (Rot, Grün, Blau).
+/// Color of the whole picture and that of the rectangle the server paints after the key “A” (red, green, blue).
 const BACKGROUND: [u8; 3] = [0xc0, 0x80, 0x40];
 const PAINTED: [u8; 3] = [0x10, 0xf0, 0x20];
 const PATCH: (u16, u16, u16, u16) = (64, 64, 128, 64);
 
 #[derive(Default)]
 struct World {
-    /// Jede Anmeldung, die der Server zu sehen bekam: Benutzer, Domäne, und ob das Passwort stimmte.
+    /// Every sign-in the server saw: user, domain, and whether the password was right.
     logins: Vec<(String, Option<String>, bool)>,
     inputs: Vec<String>,
     size: (u16, u16),
@@ -65,7 +65,7 @@ struct Input(Shared);
 impl RdpServerInputHandler for Input {
     fn keyboard(&mut self, event: KeyboardEvent) {
         let mut world = self.0.lock().unwrap();
-        // Auf die Taste „A“ malt der Server ein Rechteck, so wie ein Programm auf eine Eingabe hin etwas zeichnet.
+        // On the key “A” the server paints a rectangle, the way a program draws something in response to input.
         if matches!(event, KeyboardEvent::Pressed { code: 0x1e, extended: false }) {
             if let Some(updates) = &world.updates {
                 let _ = updates.send(bitmap(PATCH.0, PATCH.1, PATCH.2, PATCH.3, PAINTED));
@@ -123,7 +123,7 @@ struct Running {
     world: Shared,
 }
 
-/// Startet den Server in einem eigenen Thread; `nla` verlangt die Anmeldung über CredSSP wie ein Windows.
+/// Starts the server on a thread of its own; `nla` requires sign-in via CredSSP like a Windows.
 fn serve(nla: bool) -> Running {
     let certified = rcgen::generate_simple_self_signed(vec!["127.0.0.1".to_string()]).unwrap();
     let der = certified.cert.der().clone();
@@ -133,7 +133,7 @@ fn serve(nla: bool) -> Running {
     let acceptor = TlsAcceptor::from(Arc::new(config));
     let public_key = certified.signing_key.public_key_raw().to_vec();
 
-    // Ein freier Port: kurz belegen, Nummer merken, wieder freigeben.
+    // A free port: occupy briefly, remember the number, release again.
     let address = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap();
     let world: Shared = Arc::new(Mutex::new(World { size: (640, 480), ..World::default() }));
     let shared = world.clone();
@@ -147,7 +147,7 @@ fn serve(nla: bool) -> Running {
             let _ = server.run().await;
         });
     });
-    // Bis der Server lauscht.
+    // Until the server listens.
     for _ in 0..100 {
         if std::net::TcpStream::connect(address).is_ok() {
             break;
@@ -165,7 +165,7 @@ async fn next(session: &mut Session) -> Event {
     tokio::time::timeout(Duration::from_secs(20), session.events.recv()).await.expect("die Sitzung meldet sich nicht").expect("die Sitzung endete ohne Ende")
 }
 
-/// Liest, bis ein Ereignis passt; Phasen, Zeiger und andere Bereiche gehen vorbei.
+/// Reads until an event matches; phases, pointers and other regions pass by.
 async fn until<T>(session: &mut Session, mut pick: impl FnMut(Event) -> Option<T>) -> T {
     loop {
         let event = next(session).await;
@@ -183,14 +183,14 @@ async fn end(session: &mut Session) -> End {
     until(session, |event| if let Event::End(end) = event { Some(end) } else { None }).await
 }
 
-/// Der Bildpunkt an einer Stelle eines Bereichs, mit etwas Spiel: Der Server darf verlustbehaftet packen.
+/// The pixel at one spot of a region, with some tolerance: the server may compress lossily.
 fn near(pixels: &[u8], width: u16, x: u16, y: u16, [r, g, b]: [u8; 3]) -> bool {
     let at = (usize::from(y) * usize::from(width) + usize::from(x)) * 4;
     let close = |a: u8, b: u8| a.abs_diff(b) <= 12;
     close(pixels[at], r) && close(pixels[at + 1], g) && close(pixels[at + 2], b)
 }
 
-/// Führt ein Bild aus den gemeldeten Bereichen mit, so wie das Fenster es tut.
+/// Keeps a picture from the reported regions, the way the window does.
 struct Canvas {
     width: u16,
     height: u16,
@@ -215,7 +215,7 @@ impl Canvas {
         near(&self.pixels, self.width, x, y, colour)
     }
 
-    /// Nimmt Bereiche an, bis das Bild an der Stelle die Farbe zeigt.
+    /// Takes regions until the picture shows the color at that spot.
     async fn wait(&mut self, session: &mut Session, x: u16, y: u16, colour: [u8; 3]) {
         while !self.shows(x, y, colour) {
             match next(session).await {
@@ -236,16 +236,16 @@ async fn ready(session: &mut Session) -> Canvas {
 async fn an_unknown_certificate_is_asked_about_before_any_password_leaves() {
     for nla in [false, true] {
         let running = serve(nla);
-        // Abgelehnt: Die Sitzung endet, und der Server hat keine Anmeldung gesehen.
+        // Refused: the session ends, and the server saw no sign-in.
         let mut session = open(connect(&running, USER, PASSWORD, None));
         let (fingerprint, reply) = until(&mut session, |event| if let Event::Certificate { fingerprint, reply } = event { Some((fingerprint, reply)) } else { None }).await;
         assert_eq!(fingerprint, running.fingerprint, "gezeigt wird der Fingerabdruck des Zertifikats, das der Server hat");
         reply.send(false).unwrap();
         assert_eq!(end(&mut session).await, End::User);
-        // Über NLA zeigt der nachgebaute Server Anmeldungen nicht vor; der Ablauf bis hierher ist derselbe.
+        // Over NLA the simulated server does not show sign-ins; the flow up to here is the same.
         assert!(running.world.lock().unwrap().logins.is_empty(), "nla={nla}: ohne Bestätigung geht keine Anmeldung an den Server");
 
-        // Bestätigt: Es geht weiter bis zum Bild.
+        // Confirmed: it continues up to the picture.
         let mut session = open(connect(&running, USER, PASSWORD, None));
         let reply = until(&mut session, |event| if let Event::Certificate { reply, .. } = event { Some(reply) } else { None }).await;
         reply.send(true).unwrap();
@@ -259,7 +259,7 @@ async fn an_unknown_certificate_is_asked_about_before_any_password_leaves() {
 
 #[tokio::test]
 async fn a_confirmed_certificate_is_not_asked_about_and_a_different_one_stops_the_session() {
-    // Ohne NLA, weil der nachgebaute Server nur dann zeigt, welche Anmeldungen bei ihm ankamen.
+    // Without NLA, because only then does the simulated server show which sign-ins reached it.
     let running = serve(false);
     let mut session = open(connect(&running, USER, PASSWORD, Some(running.fingerprint)));
     let mut asked = false;
@@ -291,7 +291,7 @@ async fn a_wrong_password_is_refused() {
     let mut session = open(connect(&running, USER, "falsch", Some(running.fingerprint)));
     assert_eq!(end(&mut session).await, End::AuthFailed, "über NLA lehnt der Server schon die Anmeldung ab");
 
-    // Ohne NLA prüft der Server das Passwort erst nach dem Aufbau und trennt dann.
+    // Without NLA the server only checks the password after setup and then disconnects.
     let running = serve(false);
     let mut session = open(connect(&running, USER, "falsch", Some(running.fingerprint)));
     let end = end(&mut session).await;
@@ -309,7 +309,7 @@ async fn the_picture_arrives_and_follows_what_the_server_paints() {
     canvas.wait(&mut session, 639, 479, BACKGROUND).await;
     assert!(canvas.shows(PATCH.0 + 5, PATCH.1 + 5, BACKGROUND));
 
-    // Eingaben kommen an, und was der Server daraufhin malt, kommt als Bereich zurück.
+    // Input arrives, and what the server paints in response comes back as a region.
     session.commands.send(Command::Move { x: 100, y: 200 }).unwrap();
     session.commands.send(Command::Button { button: Button::Left, down: true, x: 100, y: 200 }).unwrap();
     session.commands.send(Command::Button { button: Button::Left, down: false, x: 100, y: 200 }).unwrap();

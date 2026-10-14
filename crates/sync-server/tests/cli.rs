@@ -1,5 +1,5 @@
-//! `glowport-sync` als gebautes Programm: die Befehle so, wie man sie auf dem Server eintippt, und der Start
-//! mit und ohne eigenes TLS.
+//! `glowport-sync` as a built program: the commands as they are typed on the server, and starting
+//! with and without its own TLS.
 
 use std::{
     io::{BufRead, BufReader, Read, Write},
@@ -10,7 +10,7 @@ use std::{
     time::Duration,
 };
 
-/// Räumt einen Ordner weg, sobald der Test endet.
+/// Clears away a folder as soon as the test ends.
 struct Temp(PathBuf);
 
 impl Temp {
@@ -30,7 +30,7 @@ impl Drop for Temp {
 
 fn program(data: &Path) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_glowport-sync"));
-    // Was auf diesem Rechner zufällig gesetzt ist, soll den Test nicht lenken.
+    // Whatever happens to be set on this machine should not steer the test.
     for name in ["LISTEN", "DATA", "TRUST_PROXY", "TLS_CERT", "TLS_KEY", "MAX_RECORD_KIB", "MAX_RECORDS", "MAX_VAULTS"] {
         command.env_remove(format!("GLOWPORT_SYNC_{name}"));
     }
@@ -38,24 +38,24 @@ fn program(data: &Path) -> Command {
     command
 }
 
-/// Ein Befehl: ob er gelang, was er ausgab, was er als Fehler meldete.
+/// A command: whether it succeeded, what it printed, what it reported as an error.
 fn run(data: &Path, args: &[&str]) -> (bool, String, String) {
     let output = program(data).args(args).output().unwrap();
     (output.status.success(), String::from_utf8_lossy(&output.stdout).into_owned(), String::from_utf8_lossy(&output.stderr).into_owned())
 }
 
-/// Ein laufender Server. Endet mit dem Test, auch wenn dieser scheitert.
+/// A running server. Ends with the test, even if the test fails.
 struct Running {
     child: Child,
     port: u16,
-    /// Was der Server bis zur Meldung „hört auf“ ausgegeben hat.
+    /// What the server printed up to the message “listening on”.
     banner: String,
-    /// Was er danach ausgibt: sein Protokoll.
+    /// What it prints afterwards: its log.
     log: Arc<Mutex<Vec<String>>>,
 }
 
 impl Running {
-    /// Wartet, bis eine Zeile mit diesem Text im Protokoll steht.
+    /// Waits until a line with this text is in the log.
     fn logged(&self, text: &str) -> String {
         for _ in 0..100 {
             if let Some(line) = self.log.lock().unwrap().iter().find(|line| line.contains(text)) {
@@ -102,7 +102,7 @@ fn request() -> &'static [u8] {
     b"GET /v1/info HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
 }
 
-/// Eine Anfrage ohne TLS; liefert die Statuszeile.
+/// A request without TLS; returns the status line.
 fn plain(port: u16, method: &str, path: &str, body: &str) -> String {
     let mut stream = connect(port);
     write!(stream, "{method} {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", body.len()).unwrap();
@@ -122,7 +122,7 @@ fn commands_as_typed_on_the_server() {
     let data = Temp::new("befehle");
     let dir = &data.0;
 
-    // Ein Befehl legt keinen Datenbestand an: Im falschen Ordner sagt er das, statt einen leeren Server zu erfinden.
+    // A command does not create a data store: in the wrong folder it says so instead of inventing an empty server.
     let (ok, out, err) = run(dir, &["invite"]);
     assert!(!ok && out.is_empty() && err.contains("Kein Datenbestand") && !dir.join("sync.db").exists(), "{err}");
     drop(start(dir, &[]));
@@ -132,7 +132,7 @@ fn commands_as_typed_on_the_server() {
     let code = out.lines().next().and_then(|line| line.strip_prefix("Einladungscode: ")).expect("Einladungscode in der Ausgabe").to_string();
     assert!(ok && code.len() >= 8 && out.contains("Gilt einmal, bis 20"), "{out}");
     assert!(run(dir, &["invites"]).1.starts_with(&code));
-    // Beim Abtippen darf klein geschrieben werden.
+    // When typing it in, lower case is allowed.
     assert_eq!(run(dir, &["revoke", &code.to_lowercase()]), (true, "Einladungscode widerrufen.\n".into(), String::new()));
     assert_eq!(run(dir, &["invites"]).1, "Keine offenen Einladungscodes.\n");
     let (ok, _, err) = run(dir, &["revoke", &code]);
@@ -143,13 +143,13 @@ fn commands_as_typed_on_the_server() {
         assert!(!ok && out.is_empty() && err.contains("Ein Konto „niemand“ gibt es nicht"), "{command}: {err}");
     }
 
-    // Die Sicherung ist eine vollständige Datenbank und überschreibt nichts.
+    // The backup is a complete database and overwrites nothing.
     let copy = dir.join("sicherung.db");
     assert!(run(dir, &["backup", copy.to_str().unwrap()]).0);
     assert!(std::fs::read(&copy).unwrap().starts_with(b"SQLite format 3"));
     assert!(!run(dir, &["backup", copy.to_str().unwrap()]).0);
 
-    // Vertippt: eine Erklärung statt eines Starts.
+    // Mistyped: an explanation instead of a start.
     for args in [&["quatsch"][..], &["invite", "zu viel"], &["--unbekannt"], &["--help"]] {
         let (ok, _, err) = run(dir, args);
         assert!(!ok && err.contains("Aufruf:"), "{args:?}: {err}");
@@ -178,18 +178,18 @@ fn serves_while_commands_run_beside_it() {
     stream.read_to_string(&mut answer).unwrap();
     assert!(answer.starts_with("HTTP/1.1 200") && answer.contains("\"fresh\":true"), "{answer}");
 
-    // Dieselbe Datenbank, während der Server läuft.
+    // The same database while the server is running.
     let (ok, out, err) = run(&data.0, &["invite"]);
     assert!(ok && out.starts_with("Einladungscode: "), "{out}{err}");
     assert!(run(&data.0, &["backup", data.0.join("im-betrieb.db").to_str().unwrap()]).0);
 
-    // Das Protokoll: was etwas ändert oder scheitert, mit Zeit, Ergebnis, Art und Konto; Lesen bleibt still.
+    // The log: what changes something or fails, with time, status, kind and account; reading stays silent.
     assert!(plain(server.port, "POST", "/v1/prelogin", r#"{"username":"anna"}"#).contains("200"));
     let line = server.logged("POST /v1/prelogin");
     assert!(line.starts_with("20") && line.ends_with(" 200 POST /v1/prelogin -"), "{line}");
     assert!(plain(server.port, "GET", "/v1/account", "").contains("401"));
     assert!(server.logged("GET /v1/account").ends_with(" 401 GET /v1/account -"));
-    // Was es nicht gibt, steht ohne den erfragten Pfad da; Kennungen in Adressen erscheinen als Muster.
+    // What does not exist appears without the requested path; IDs in addresses appear as patterns.
     assert!(plain(server.port, "GET", "/geheim/abc123", "").contains("404"));
     assert!(server.logged(" 404 ").ends_with(" 404 GET ? -"));
     assert!(plain(server.port, "DELETE", "/v1/devices/0123456789abcdef0123456789abcdef", "").contains("401"));
@@ -215,19 +215,19 @@ fn serves_with_its_own_certificate() {
     let mut stream = rustls::StreamOwned::new(session, connect(server.port));
     stream.write_all(request()).unwrap();
     let mut answer = Vec::new();
-    // Das Ende der Verbindung darf ohne Abschiedsgruß kommen; was bis dahin da ist, zählt.
+    // The end of the connection may come without a goodbye; whatever is there until then counts.
     let _ = stream.read_to_end(&mut answer);
     let answer = String::from_utf8_lossy(&answer);
     assert!(answer.starts_with("HTTP/1.1 200") && answer.contains("\"fresh\":true"), "{answer}");
 
-    // Ohne TLS antwortet dieser Port nicht mit Inhalt.
+    // Without TLS this port does not answer with content.
     let mut plain = connect(server.port);
     plain.write_all(request()).unwrap();
     let mut answer = Vec::new();
     let _ = plain.read_to_end(&mut answer);
     assert!(!String::from_utf8_lossy(&answer).contains("fresh"));
 
-    // Ein Schlüssel, der keiner ist: Der Server startet nicht und sagt, an welchen Dateien es liegt.
+    // A key that is none: the server does not start and says which files are the reason.
     std::fs::write(&key, "kein Schlüssel").unwrap();
     let (ok, _, err) = run(&data.0, &["serve", "--listen", &format!("127.0.0.1:{}", free_port()), "--tls-cert", cert.to_str().unwrap(), "--tls-key", key.to_str().unwrap()]);
     assert!(!ok && err.contains("Zertifikat") && err.contains("key.pem"), "{err}");

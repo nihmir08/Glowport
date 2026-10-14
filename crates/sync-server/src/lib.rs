@@ -1,5 +1,5 @@
-//! Sync-Server von Glowport (`docs/sync.md`). Dieses Crate ist die Bibliothek hinter dem Programm
-//! `glowport-sync`: [`store`] entscheidet, hier steht nur die Schnittstelle nach außen.
+//! Glowport's sync server (`docs/sync.md`). This crate is the library behind the program
+//! `glowport-sync`: [`store`] decides, this is only the interface to the outside.
 
 pub mod store;
 
@@ -22,10 +22,10 @@ use serde::Deserialize;
 use store::{Caller, Fail, Id, Store};
 use tokio::sync::broadcast;
 
-/// Größtes Paket: ein Schlüsseltausch mit allen Datensätzen eines vollen Tresors.
+/// Largest package: a key rotation with all records of a full vault.
 const MAX_BODY: usize = 64 * 1024 * 1024;
 
-/// Wem eine Nachricht über den WebSocket gilt.
+/// Whom a message over the WebSocket is for.
 #[derive(Debug, Clone)]
 struct Notice {
     accounts: Vec<Id>,
@@ -35,11 +35,11 @@ struct Notice {
 pub struct App {
     pub store: Store,
     hub: broadcast::Sender<Notice>,
-    /// Hinter einem vorgeschalteten Webserver steht die Adresse des Absenders in `X-Forwarded-For`. Wessen
-    /// Angabe gilt: niemandes (`None`), die jeder Verbindung (leere Liste; nur richtig, wenn allein der
-    /// Webserver den Server erreicht, etwa über `127.0.0.1`) oder nur die von diesen Adressen.
+    /// Behind a web server in front, the sender's address is in `X-Forwarded-For`. Whose
+    /// statement counts: nobody's (`None`), every connection's (empty list; only right if only the
+    /// web server reaches the server, e.g. via `127.0.0.1`) or only those from these addresses.
     proxies: Option<Vec<std::net::IpAddr>>,
-    /// Ob Anfragen ins Protokoll geschrieben werden (im Betrieb ja, in Tests nein).
+    /// Whether requests are written to the log (yes in operation, no in tests).
     log: std::sync::atomic::AtomicBool,
 }
 
@@ -48,19 +48,19 @@ impl App {
         Self::with_proxies(store, trust_proxy.then(Vec::new))
     }
 
-    /// Wie [`App::new`], mit der Angabe, wessen `X-Forwarded-For` gilt (siehe das Feld `proxies`).
+    /// Like [`App::new`], with the statement whose `X-Forwarded-For` counts (see the field `proxies`).
     pub fn with_proxies(store: Store, proxies: Option<Vec<std::net::IpAddr>>) -> Arc<Self> {
         Arc::new(Self { store, hub: broadcast::channel(256).0, proxies, log: false.into() })
     }
 
-    /// Schreibt ab jetzt ins Protokoll (Standardausgabe), was etwas ändert oder scheitert: Zeit, Ergebnis, Art
-    /// der Anfrage, Konto. Nie Inhalte, Token oder Anmeldeschlüssel, und keine Adressen der Absender.
+    /// From now on writes to the log (standard output) what changes something or fails: time, status, kind
+    /// of request, account. Never contents, tokens or sign-in keys, and no sender addresses.
     pub fn log_requests(&self) {
         self.log.store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
     fn tell(&self, accounts: Vec<Id>, event: Event) {
-        // Hört gerade niemand zu, ist das kein Fehler: Jedes Gerät holt nach dem Verbinden ohnehin.
+        // If nobody is listening right now, that is not an error: every device fetches after connecting anyway.
         let _ = self.hub.send(Notice { accounts, event });
     }
 }
@@ -71,13 +71,13 @@ type Reply<T> = Result<Json<T>, Fail>;
 impl IntoResponse for Fail {
     fn into_response(self) -> Response {
         let status = StatusCode::from_u16(self.status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-        // Was intern schiefging, geht den Anfragenden nichts an.
+        // What went wrong internally is none of the requester's business.
         let message = if matches!(self, Fail::Internal(_)) { "Interner Fehler".to_string() } else { self.to_string() };
         (status, Json(ApiError { code: self.code().into(), message })).into_response()
     }
 }
 
-/// Führt eine Entscheidung des Speichers abseits der Netz-Threads aus.
+/// Runs a decision of the store away from the network threads.
 async fn run<T: Send + 'static>(app: &Arc<App>, work: impl FnOnce(&App) -> Result<T, Fail> + Send + 'static) -> Result<T, Fail> {
     let app = app.clone();
     tokio::task::spawn_blocking(move || work(&app)).await.map_err(|e| Fail::Internal(e.to_string()))?
@@ -93,18 +93,18 @@ async fn caller(app: &Arc<App>, headers: &HeaderMap) -> Result<Caller, Fail> {
     run(app, move |app| app.store.authenticate(&token)).await
 }
 
-/// Adresse des Absenders für die Bremse gegen Rateversuche.
+/// The sender's address for the brake on guessing attempts.
 fn address(app: &App, headers: &HeaderMap, extensions: &Extensions) -> String {
     let peer = extensions.get::<ConnectInfo<SocketAddr>>().map(|info| info.0.ip().to_canonical());
     let trusted = app.proxies.as_ref().is_some_and(|list| list.is_empty() || peer.is_some_and(|peer| list.contains(&peer)));
-    // Der letzte Eintrag ist der, den der Webserver selbst angehängt hat; davor steht, was der Absender behauptet.
+    // The last entry is the one the web server appended itself; before it is what the sender claims.
     let forwarded = trusted.then(|| headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()).and_then(|v| v.rsplit(',').next()).map(|v| v.trim().to_string())).flatten();
     forwarded.filter(|v| !v.is_empty()).or_else(|| peer.map(|ip| ip.to_string())).unwrap_or_else(|| "unbekannt".into())
 }
 
-/// Ein Tag als `2026-10-10` (UTC), aus Millisekunden seit 1970.
+/// A day as `2026-10-10` (UTC), from milliseconds since 1970.
 pub fn day(ms: i64) -> String {
-    // Bürgerlicher Kalender aus der Zahl der Tage, ohne eine Bibliothek nur dafür.
+    // Civil calendar from the number of days, without a library just for that.
     let z = ms.div_euclid(86_400_000) + 719_468;
     let (era, doe) = (z.div_euclid(146_097), z.rem_euclid(146_097));
     let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
@@ -115,21 +115,21 @@ pub fn day(ms: i64) -> String {
     format!("{year:04}-{month:02}-{day:02}")
 }
 
-/// Ein Zeitpunkt als `2026-10-10 14:03:27` (UTC).
+/// A point in time as `2026-10-10 14:03:27` (UTC).
 fn moment(ms: i64) -> String {
     let seconds = ms.rem_euclid(86_400_000) / 1000;
     format!("{} {:02}:{:02}:{:02}", day(ms), seconds / 3600, seconds / 60 % 60, seconds % 60)
 }
 
-/// Das Protokoll: eine Zeile für alles, was etwas ändert oder scheitert. Gelesen wird ständig, das bleibt still.
-/// Statt der Adresse der Anfrage steht ihr Muster da, also keine Kennungen und keine Codes.
+/// The log: one line for everything that changes something or fails. Reading happens constantly and stays silent.
+/// Instead of the request's address its pattern appears, i.e. no IDs and no codes.
 async fn log(State(app): Shared, request: axum::extract::Request, next: axum::middleware::Next) -> Response {
     if !app.log.load(std::sync::atomic::Ordering::Relaxed) {
         return next.run(request).await;
     }
     let method = request.method().clone();
     let route = request.extensions().get::<axum::extract::MatchedPath>().map_or_else(|| "?".to_string(), |path| path.as_str().to_string());
-    // Vorher nachsehen: Die Anfrage kann genau dieses Gerät abmelden.
+    // Look beforehand: the request may sign out exactly this device.
     let who = match token(request.headers()) {
         Ok(token) => run(&app, move |app| Ok(app.store.username_of(&token))).await.ok().flatten(),
         Err(_) => None,
@@ -234,7 +234,7 @@ async fn push(State(app): Shared, headers: HeaderMap, Path(vault): Path<String>,
     Ok(Json(reply))
 }
 
-/// Eine Änderung an Mitgliedschaften: Alle Betroffenen sehen nach, was sich an ihrem Konto geändert hat.
+/// A change to memberships: everyone affected checks what changed on their account.
 async fn membership(app: Arc<App>, headers: HeaderMap, vault: String, work: impl FnOnce(&Store, &Caller, &Id) -> Result<Vec<Id>, Fail> + Send + 'static) -> Reply<()> {
     let (caller, vault) = (caller(&app, &headers).await?, id(&vault)?);
     let mut accounts = run(&app, move |app| {
@@ -312,8 +312,8 @@ async fn delete_account(State(app): Shared, headers: HeaderMap, Path(account): P
     Ok(Json(()))
 }
 
-/// WebSocket: Die erste Nachricht ist das Geräte-Token (so steht es in keiner Adresse und keinem Protokoll),
-/// danach kommen nur noch Anstöße vom Server.
+/// WebSocket: the first message is the device token (so it appears in no address and no log),
+/// after that only nudges come from the server.
 async fn live(State(app): Shared, upgrade: WebSocketUpgrade) -> Response {
     upgrade.on_upgrade(move |socket| async move {
         let _ = listen(app, socket).await;
@@ -328,7 +328,7 @@ async fn listen(app: Arc<App>, mut socket: WebSocket) -> Result<(), ()> {
     let caller = run(&app, move |app| app.store.authenticate(&check)).await.map_err(drop)?;
     let mut events = app.hub.subscribe();
     socket.send(Message::Text("ok".into())).await.map_err(drop)?;
-    // Ein abgemeldetes Gerät oder ein gesperrtes Konto soll nicht ewig weiter zuhören.
+    // A signed-out device or a disabled account should not keep listening forever.
     let mut recheck = tokio::time::interval(Duration::from_secs(60));
     recheck.tick().await;
     loop {
@@ -339,7 +339,7 @@ async fn listen(app: Arc<App>, mut socket: WebSocket) -> Result<(), ()> {
                     socket.send(Message::Text(text.into())).await.map_err(drop)?;
                 }
                 Ok(_) => {}
-                // Zu langsam gelesen und etwas verpasst: Das Gerät soll alles nachsehen.
+                // Read too slowly and missed something: the device should check everything.
                 Err(broadcast::error::RecvError::Lagged(_)) => socket.send(Message::Text("{\"event\":\"account\"}".into())).await.map_err(drop)?,
                 Err(broadcast::error::RecvError::Closed) => return Ok(()),
             },
@@ -386,9 +386,9 @@ pub fn router(app: Arc<App>) -> Router {
         .with_state(app)
 }
 
-/// Bedient Anfragen mit eigenem TLS, bis `stop` endet: für den Betrieb ohne vorgeschalteten Webserver.
-/// Zertifikat und Schlüssel sind PEM-Dateien. Ändern sie sich (eine Verlängerung), gelten die neuen binnen
-/// einer Stunde, ohne Neustart; lassen sie sich dann nicht lesen, bleibt es beim bisherigen Zertifikat.
+/// Serves requests with its own TLS until `stop` ends: for running without a web server in front.
+/// Certificate and key are PEM files. If they change (a renewal), the new ones apply within
+/// an hour, without a restart; if they cannot be read then, the previous certificate stays.
 pub async fn serve_tls(
     app: Arc<App>,
     listener: std::net::TcpListener,
@@ -398,14 +398,14 @@ pub async fn serve_tls(
 ) -> std::io::Result<()> {
     use axum_server::tls_rustls::RustlsConfig;
 
-    // Schon gesetzt heißt: von uns, an anderer Stelle im selben Prozess.
+    // Already set means: by us, elsewhere in the same process.
     let _ = rustls::crypto::ring::default_provider().install_default();
     let config = RustlsConfig::from_pem_file(&cert, &key).await?;
     let handle = axum_server::Handle::new();
     let stopper = handle.clone();
     tokio::spawn(async move {
         stop.await;
-        // Offene WebSockets enden nicht von selbst; nach der Frist wird geschlossen.
+        // Open WebSockets do not end by themselves; after the grace period they are closed.
         stopper.graceful_shutdown(Some(Duration::from_secs(5)));
     });
     let renew = tokio::spawn({
@@ -430,7 +430,7 @@ pub async fn serve_tls(
     result
 }
 
-/// Bedient Anfragen, bis `stop` endet.
+/// Serves requests until `stop` ends.
 pub async fn serve(app: Arc<App>, listener: tokio::net::TcpListener, stop: impl std::future::Future<Output = ()> + Send + 'static) -> std::io::Result<()> {
     axum::serve(listener, router(app).into_make_service_with_connect_info::<SocketAddr>()).with_graceful_shutdown(stop).await
 }
@@ -456,19 +456,19 @@ mod tests {
             address(app, &headers, &extensions)
         };
 
-        // Ohne Vorschaltung zählt allein, wer verbunden ist; was er über sich behauptet, nicht.
+        // Without anything in front, only who is connected counts; not what they claim about themselves.
         let direct = app(None);
         assert_eq!(seen(&direct, "203.0.113.7", Some("198.51.100.1")), "203.0.113.7");
-        // Jeder Verbindung glauben: der letzte Eintrag, den der Webserver angehängt hat.
+        // Believe every connection: the last entry the web server appended.
         let any = app(Some(vec![]));
         assert_eq!(seen(&any, "127.0.0.1", Some("198.51.100.1")), "198.51.100.1");
         assert_eq!(seen(&any, "127.0.0.1", Some("10.9.9.9, 198.51.100.1")), "198.51.100.1");
         assert_eq!(seen(&any, "127.0.0.1", None), "127.0.0.1");
-        // Nur dem Webserver glauben: Wer den Server direkt erreicht, kann sich keine Adresse geben.
+        // Only believe the web server: whoever reaches the server directly cannot assign themselves an address.
         let only = app(Some(vec!["10.0.0.10".parse().unwrap()]));
         assert_eq!(seen(&only, "10.0.0.10", Some("198.51.100.1")), "198.51.100.1");
         assert_eq!(seen(&only, "10.0.0.66", Some("198.51.100.1")), "10.0.0.66");
-        // Dieselbe Adresse des Webservers, über einen Anschluss für IPv6 gesehen.
+        // The same web server address, seen through an IPv6 socket.
         assert_eq!(seen(&only, "::ffff:10.0.0.10", Some("198.51.100.1")), "198.51.100.1");
         assert_eq!(address(&only, &HeaderMap::new(), &Extensions::new()), "unbekannt");
     }

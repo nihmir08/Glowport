@@ -1,7 +1,7 @@
-//! SFTP des Testservers: ein Ordner dieses Rechners als Dateisystem des „Servers“.
+//! The test server's SFTP: a folder of this machine as the “server's” file system.
 //!
-//! Rechte und Besitzer führt der Server selbst in einer Tabelle, weil Windows sie nicht kennt; so lässt sich
-//! auch dort prüfen, was der Client mit `chmod` und `chown` anrichtet.
+//! The server keeps permissions and owners itself in a table, because Windows does not know them; that way
+//! what the client does with `chmod` and `chown` can be checked there too.
 
 use std::{
     collections::HashMap,
@@ -14,25 +14,25 @@ use std::{
 
 use russh_sftp::protocol::{Attrs, Data, File, FileAttributes, Handle, Name, OpenFlags, Status, StatusCode, Version};
 
-/// Heimatverzeichnis des Benutzers im Dateisystem des Servers.
+/// The user's home directory in the server's file system.
 pub const HOME: &str = "/home/tester";
 const UID: u32 = 1000;
 const GID: u32 = 1000;
-/// So viele Einträge gibt der Server je Antwort auf `readdir` heraus.
+/// This many entries the server hands out per answer to `readdir`.
 const BATCH: usize = 64;
 
-/// Rechte, Benutzer und Gruppe je Pfad.
+/// Permissions, user and group per path.
 type Modes = HashMap<String, (u32, u32, u32)>;
 
-/// Das Dateisystem des Servers; alle Verbindungen sehen dasselbe.
+/// The server's file system; all connections see the same.
 #[derive(Clone)]
 pub struct Files {
     root: PathBuf,
-    /// Pfade (wie der Client sie nennt), unter denen nichts geändert werden darf.
+    /// Paths (as the client names them) under which nothing may be changed.
     read_only: Vec<String>,
-    /// Pause vor jedem Lesen und Schreiben, damit Tests einen Transfer mittendrin erwischen.
+    /// Pause before every read and write, so tests catch a transfer in the middle.
     delay: Option<Duration>,
-    /// Rechte, Benutzer und Gruppe je Pfad, soweit sie von der Vorgabe abweichen.
+    /// Permissions, user and group per path, as far as they differ from the default.
     modes: Arc<Mutex<Modes>>,
 }
 
@@ -46,13 +46,13 @@ impl Files {
         SftpSession { files: self.clone(), handles: HashMap::new(), next: 0 }
     }
 
-    /// Rechte eines Pfads, wie der Server sie führt (für Tests).
+    /// A path's permissions as the server keeps them (for tests).
     pub fn mode(&self, path: &str) -> Option<u32> {
         self.modes.lock().ok()?.get(&clean(path)).map(|entry| entry.0)
     }
 }
 
-/// Bringt einen Pfad des Clients in die Form `/a/b`: absolut, ohne `.` und `..`.
+/// Brings a client's path into the form `/a/b`: absolute, without `.` and `..`.
 fn clean(path: &str) -> String {
     let absolute = if path.starts_with('/') { path.to_string() } else { format!("{HOME}/{path}") };
     let mut parts: Vec<&str> = Vec::new();
@@ -68,7 +68,7 @@ fn clean(path: &str) -> String {
 
 enum Open {
     File(fs::File),
-    /// Was von einem Ordner noch nicht ausgegeben ist.
+    /// What has not been handed out of a folder yet.
     Dir(Vec<File>),
 }
 
@@ -260,7 +260,7 @@ impl russh_sftp::server::Handler for SftpSession {
         self.writable(&oldpath)?;
         self.writable(&newpath)?;
         let target = self.local(&newpath);
-        // Wie bei SFTP üblich: Umbenennen überschreibt nichts.
+        // As usual with SFTP: renaming overwrites nothing.
         if target.exists() {
             return Err(StatusCode::Failure);
         }
