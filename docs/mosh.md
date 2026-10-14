@@ -1,110 +1,99 @@
 # Mosh
 
-Beschreibung für Meilenstein 12. **Stand:** vom User freigegeben am 2026-10-14.
+Design document. Built and released with Glowport 1.0.
 
-## Kurzfassung
+## Summary
 
-- **Mosh ist ein Schalter an einem SSH-Host:** „Über Mosh verbinden“. Angemeldet wird wie immer per SSH (Passwort, Schlüssel, Agent, Sprung-Server, alle Rückfragen wie gewohnt). Danach startet Glowport auf dem Server `mosh-server`, und das Terminal läuft über Mosh: verschlüsselt über UDP, übersteht WLAN-Wechsel, Ruhezustand und Aussetzer, und Getipptes erscheint sofort, auch bei langsamer Leitung.
-- **Seitenleiste, Dateien und Snippets** laufen über eine SSH-Verbindung daneben. Reißt sie ab, läuft das Terminal weiter; die SSH-Verbindung baut Glowport bei Bedarf von selbst neu auf.
-- **Fehlt `mosh-server` auf dem Server**, verbindet Glowport ganz normal per SSH und zeigt im Tab einen Hinweis mit dem Befehl zum Installieren.
-- Schnellverbindung: `mosh benutzer@host`.
+- **Mosh is a switch on an SSH host:** “Connect via Mosh”. Signing in works as always over SSH (password, key, agent, jump hosts, all the usual prompts). Glowport then starts `mosh-server` on the server and the terminal runs over Mosh: encrypted over UDP, it survives Wi-Fi changes, sleep and dropouts, and what you type appears right away, even on a slow line.
+- **Sidebar, files and snippets** run over an SSH connection next to it. If that one drops, the terminal keeps running; Glowport re-establishes the SSH connection by itself when needed.
+- **If `mosh-server` is missing on the server**, Glowport connects over plain SSH and shows a hint in the tab with the command to install it.
+- Quick connect: `mosh user@host`.
 
-## Entscheidungen des Users (2026-10-14, über das Auswahl-Werkzeug)
+## Design decisions
 
-| Frage | Entscheidung |
+| Question | Decision |
 |---|---|
-| Welche Bibliothek? | **`mosh-client`** (MIT oder Apache-2.0). Glowport bleibt MIT. Mosh geht damit nur über IPv4. Die übrigen Rust-Umsetzungen sind GPL-3 und hätten Glowport insgesamt zu GPL gemacht. |
-| Wie wählt man Mosh? | **Schalter am SSH-Host**, dazu Schnellverbindung `mosh benutzer@host`. Kein eigenes Protokoll in der Auswahl. |
-| Seitenleiste, Dateien, Snippets im Mosh-Tab? | **SSH-Verbindung daneben offen**, die sich nach einem Abriss selbst neu aufbaut. |
-| `mosh-server` fehlt auf dem Server? | **Per SSH verbinden mit Hinweis** samt Installationsbefehl. |
+| Which library? | **`mosh-client`** (MIT or Apache-2.0), so Glowport stays MIT. With it, Mosh only works over IPv4. The other Rust implementations are GPL-3 and would have turned all of Glowport into GPL. |
+| How do you choose Mosh? | **A switch on the SSH host**, plus quick connect `mosh user@host`. No protocol of its own in the selection. |
+| Sidebar, files, snippets in a Mosh tab? | **An SSH connection stays open next to it** and re-establishes itself after a drop. |
+| `mosh-server` missing on the server? | **Connect over SSH with a hint** including the install command. |
 
-## Ergebnis des Versuchs (2026-10-14)
+## Result of the trial
 
-`mosh-client` 0.1.4 gegen `mosh-server` 1.4.0 im WSL-Ubuntu dieses PCs: Sitzung steht 25–40 ms nach dem Start des Servers. Eingabe und Ausgabe, Umlaute, neue Fenstergröße, viel Ausgabe (`seq 1 200000` in 30 ms, Mosh schickt nur den Endstand des Bildschirms), Vollbild-Programme, sauberes Ende nach `exit`. **Sechs Sekunden ohne Leitung** (UDP im WSL verworfen): Was der Server währenddessen schrieb, kam 0,13 s nach der Freigabe an. Nicht geprüft: ein echter Netzwechsel mit neuer Adresse (laut der Bibliothek getestet), fremde Server.
+`mosh-client` 0.1.4 against `mosh-server` 1.4.0 in Ubuntu on WSL: the session is up 25–40 ms after the server starts. Input and output, non-ASCII characters, a new window size, lots of output (`seq 1 200000` in 30 ms; Mosh only sends the final state of the screen), full-screen programs, a clean end after `exit`. **Six seconds without a line** (UDP dropped in WSL): what the server wrote in the meantime arrived 0.13 s after the line came back. Not tested: a real network change with a new address (tested by the library according to its author), third-party servers.
 
-## Host anlegen
+## Setting up a host
 
-Im Host-Editor bei SSH, im Bereich der Verbindung:
+In the host editor for SSH, in the connection section:
 
-- **Schalter „Über Mosh verbinden“** (Vorgabe aus). Wie die anderen SSH-Einstellungen auch an einer Gruppe einstellbar und vererbt.
-- Darunter, nur bei eingeschaltetem Schalter, unter „Erweitert“:
-  - **Lokales Echo:** Automatisch (Vorgabe, wie Mosh selbst: zeigt Getipptes sofort, sobald die Leitung langsam ist), Immer, Aus.
-  - **UDP-Port oder Bereich** (leer = Mosh wählt selbst, 60000–61000). Für Server hinter einer Firewall, die nur einen Port freigibt, etwa `60001` oder `60001:60010`.
-  - **Pfad zu `mosh-server`** (leer = wie auf dem Server gefunden). Für Installationen außerhalb des Suchpfads, etwa `~/.local/bin/mosh-server`.
+- **Switch “Connect via Mosh”** (default off). Like the other SSH settings it can also be set on a group and is inherited.
+- Below it, only when the switch is on, under “Advanced”:
+  - **Local echo:** Automatic (default, like Mosh itself: shows typed text right away as soon as the line is slow), Always, Off.
+  - **UDP port or range** (empty = Mosh chooses, 60000–61000). For servers behind a firewall that only opens one port, e.g. `60001` or `60001:60010`.
+  - **Path to `mosh-server`** (empty = as found on the server). For installations outside the search path, e.g. `~/.local/bin/mosh-server`.
 
-Die Host-Karte und die Liste zeigen ein kleines „Mosh“ neben „SSH“.
+The host card and the list show a small “Mosh” next to “SSH”.
 
-## Verbinden
+## Connecting
 
-1. SSH-Verbindung wie bisher, mit allen Rückfragen (unbekannter Server, Passwort, Einmalcode).
-2. Glowport ruft auf dem Server `mosh-server new -s -c 256 -l LANG=…` auf (Sprache aus der Umgebung des Hosts, sonst `C.UTF-8`; mit Port und Pfad aus den Einstellungen). Der Server antwortet mit Port und einem frischen Sitzungsschlüssel.
-3. **Adresse für UDP:** bei direkter Verbindung die IPv4-Adresse, mit der die SSH-Verbindung tatsächlich zustande kam; mit Proxy oder Sprung-Server die IPv4-Adresse des Hosts, wie dieser PC sie auflöst.
-4. Das Terminal wechselt auf Mosh. Die SSH-Verbindung bleibt für die Seitenleiste offen.
+1. SSH connection as before, with all prompts (unknown server, password, one-time code).
+2. Glowport runs `mosh-server new -s -c 256 -l LANG=…` on the server (language from the host's environment, otherwise `C.UTF-8`; with port and path from the settings). The server answers with a port and a fresh session key.
+3. **Address for UDP:** for a direct connection, the IPv4 address the SSH connection actually used; with a proxy or jump host, the host's IPv4 address as this PC resolves it.
+4. The terminal switches to Mosh. The SSH connection stays open for the sidebar.
 
-**Geht Mosh nicht zustande, wird es eine normale SSH-Sitzung mit Hinweis im Tab** (die SSH-Verbindung steht ja schon). Gründe und Hinweise:
+**If Mosh cannot be established, the tab becomes a normal SSH session with a hint** (the SSH connection is already up). Reasons and hints:
 
-| Lage | Hinweis |
+| Situation | Hint |
 |---|---|
-| `mosh-server` fehlt | „mosh-server ist auf dem Server nicht installiert. Per SSH verbunden.“ Dazu der passende Befehl, je nach erkanntem System: `sudo apt install mosh` (Debian, Ubuntu), `sudo dnf install mosh` (Fedora, RHEL), `sudo pacman -S mosh` (Arch), `sudo apk add mosh` (Alpine), sonst ein Verweis auf mosh.org. Kopierbar. |
-| Keine IPv4-Adresse | „Mosh braucht eine IPv4-Adresse; dieser Host hat nur IPv6. Per SSH verbunden.“ |
-| Keine Antwort über UDP (10 s) | „Mosh-Server antwortet nicht über UDP (Port …). Meist sperrt eine Firewall die Ports 60000–61000. Per SSH verbunden.“ |
-| `mosh-server` meldet einen Fehler | Seine erste Zeile, gekürzt, dazu „Per SSH verbunden.“ |
+| `mosh-server` missing | “mosh-server is not installed on the server. Connected over SSH.” Plus the matching command for the detected system: `sudo apt install mosh` (Debian, Ubuntu), `sudo dnf install mosh` (Fedora, RHEL), `sudo pacman -S mosh` (Arch), `sudo apk add mosh` (Alpine), otherwise a pointer to mosh.org. Copyable. |
+| No IPv4 address | “Mosh needs an IPv4 address; this host only has IPv6. Connected over SSH.” |
+| No answer over UDP (10 s) | “The Mosh server does not answer over UDP (port …). Usually a firewall blocks ports 60000–61000. Connected over SSH.” |
+| `mosh-server` reports an error | Its first line, shortened, plus “Connected over SSH.” |
 
-Der Hinweis steht als Leiste oben im Terminal, schließbar; der Tab trägt dann kein „Mosh“.
+The hint appears as a bar at the top of the terminal and can be closed; the tab then carries no “Mosh”.
 
-## Der Tab
+## The tab
 
-- Im Kopf des Terminals ein Zeichen **„Mosh“** neben „Verbunden“.
-- **Unterbrochene Leitung:** Hört Glowport länger als ein paar Sekunden nichts vom Server, erscheint oben eine Leiste wie beim Original: „Keine Verbindung zum Server seit 12 s. Mosh verbindet von selbst wieder.“ Tippen geht weiter, das Lokale Echo zeigt es unterstrichen an, bis der Server es bestätigt. Kommt die Leitung zurück, verschwindet die Leiste. Der Tab endet nicht; die Einstellung „Verhalten bei Abriss“ betrifft Mosh-Tabs nicht.
-- **Ende:** wenn die Shell endet (`exit`), wenn man den Tab schließt, oder wenn der Server die Sitzung beendet. Schließen beendet `mosh-server` sauber.
-- **Seitenleiste, Dateien, Snippets, Port-Regeln dieser Sitzung** nutzen die SSH-Verbindung daneben. Ist sie gerade getrennt, zeigen sie „SSH-Verbindung getrennt, das Terminal läuft weiter über Mosh“ und versuchen es beim nächsten Öffnen oder Aktualisieren neu, mit denselben Anmeldedaten wie beim ersten Mal (aus dem Tresor oder aus dem Speicher dieser Sitzung, nie auf die Platte). Wäre dafür eine neue Rückfrage nötig (Einmalcode), fragt Glowport erst, wenn man in der Seitenleiste auf „Neu verbinden“ klickt.
-- **Zurückscrollen:** Mosh überträgt nur den sichtbaren Bildschirm, keinen Verlauf. Der Verlauf im Tab enthält, was Glowport zu sehen bekam; bei viel Ausgabe auf einmal fehlen Zeilen. Das ist eine Eigenart von Mosh; wer Verlauf braucht, nimmt `tmux` oder `screen`. Steht einmal im Tab, als Hinweis beim ersten Mosh-Tab.
-- **Mitschnitt** zeichnet auf, was im Terminal ankommt (also ohne die übersprungenen Zwischenstände).
-- **Teilen, Mehrfach-Eingabe, eigenes Fenster** gehen wie bei SSH.
+- In the terminal's header a **“Mosh”** badge next to “Connected”.
+- **Interrupted line:** if Glowport hears nothing from the server for more than a few seconds, a bar appears at the top, like in the original: “No connection to the server for 12 s. Mosh reconnects by itself.” Typing keeps working; local echo shows it underlined until the server confirms it. When the line comes back, the bar disappears. The tab does not end; the “On disconnect” setting does not apply to Mosh tabs.
+- **End:** when the shell ends (`exit`), when the tab is closed, or when the server ends the session. Closing ends `mosh-server` cleanly.
+- **Sidebar, files, snippets and port rules of this session** use the SSH connection next to it. While it is disconnected they show “SSH connection lost, the terminal keeps running over Mosh” and try again the next time they are opened or refreshed, with the same credentials as the first time (from the vault or from this session's memory, never from disk). If that would need a new prompt (one-time code), Glowport only asks when you click “Reconnect” in the sidebar.
+- **Scrollback:** Mosh only transfers the visible screen, no history. The tab's history contains what Glowport got to see; with a lot of output at once, lines are missing. That is how Mosh works; whoever needs history uses `tmux` or `screen`. A hint says so once, in the first Mosh tab.
+- **Recording** records what arrives in the terminal (i.e. without the skipped intermediate states).
+- **Splitting, multi-exec, separate windows** work as with SSH.
 
-## Schnellverbindung
+## Quick connect
 
-`mosh benutzer@host` und `mosh benutzer@host:port` (Port ist der SSH-Port) in der Suche oder Schnellverbindung. Angemeldet wird wie bei `ssh benutzer@host`.
+`mosh user@host` and `mosh user@host:port` (the port is the SSH port) in search or quick connect. Signing in works as with `ssh user@host`.
 
-## Importe
+## Import and export
 
-- CSV-Tabelle: Die Spalte Protokoll „mosh“ wird ein SSH-Host mit eingeschaltetem Mosh (heute wird daraus ein gewöhnlicher SSH-Host).
-- MobaXterm: Sitzungen der Art Mosh werden SSH-Hosts mit Mosh, sofern sich die Art in der Datei sicher erkennen lässt; sonst wie bisher als SSH mit Hinweis in der Vorschau.
-- Export als Tabelle schreibt „mosh“ in die Spalte Protokoll.
+- CSV table: the protocol column value “mosh” becomes an SSH host with Mosh switched on.
+- Exporting as a table writes “mosh” into the protocol column.
+- MobaXterm: Mosh sessions are skipped like other unsupported protocols, because their type and structure in the file are not reliably known.
 
-## Abgleich (Sync)
+## Sync
 
-Die neuen Einstellungen sind gewöhnliche Felder am Host und gehen mit. Ältere Glowport-Fassungen auf anderen Geräten verbinden solche Hosts einfach per SSH. Der Sync-Server ändert sich nicht.
+The new settings are ordinary fields on the host and are synced along. Older Glowport versions on other devices simply connect such hosts over SSH. The sync server does not change.
 
-## Sicherheit
+## Security
 
-- Der Sitzungsschlüssel kommt über die schon geprüfte SSH-Verbindung, lebt nur im Speicher und wird nirgends gespeichert. Jedes UDP-Paket ist mit AES-128-OCB verschlüsselt und geprüft; fremde Pakete verwirft die Bibliothek.
-- Mosh vertraut nur der Adresse, die aus der SSH-Verbindung stammt; Pakete von anderswo nimmt es erst an, wenn sie gültig verschlüsselt sind (so funktioniert der Netzwechsel).
-- Die Ausgabe von `mosh-server` gilt als nicht vertrauenswürdig: begrenzt gelesen, nur die eine Zeile `MOSH CONNECT` wird ausgewertet.
-- Agent-Weiterleitung und Umgebungsvariablen wirken wie bei SSH auf die Shell, die `mosh-server` startet.
+- The session key arrives over the already verified SSH connection, lives only in memory and is stored nowhere. Every UDP packet is encrypted and authenticated with AES-128-OCB; the library discards foreign packets.
+- Mosh only trusts the address that comes from the SSH connection; it only accepts packets from elsewhere once they are validly encrypted (this is how network changes work).
+- The output of `mosh-server` is treated as untrusted: read with a limit, only the single `MOSH CONNECT` line is evaluated.
+- Agent forwarding and environment variables apply, as with SSH, to the shell that starts `mosh-server`.
 
-## Prüfung
+## Tests
 
-- Kern: Tests gegen `mosh-server` im WSL, wenn er da ist (sonst übersprungen, mit Meldung): Aufbau, Eingabe, Ausgabe, Größe, Ausfall der Leitung, Ende, fehlender `mosh-server`, Rückfall auf SSH.
-- Ende-zu-Ende: Der Testserver bekommt eine Weiterleitung für UDP (`127.0.0.1` → WSL), weil WSL kein UDP über `127.0.0.1` durchreicht. Damit lassen sich Aussetzer und ein Wechsel des Absender-Ports nachstellen. Ohne WSL-Mosh werden diese Fälle übersprungen und als übersprungen gezählt.
-- Am Ende ein Versuch von dir gegen einen deiner echten Server.
+- Core: tests against `mosh-server` in WSL if present (otherwise skipped, with a message): setup, input, output, size, line failure, end, missing `mosh-server`, fallback to SSH.
+- End-to-end: the test server gets a UDP forwarder (`127.0.0.1` → WSL), because WSL does not pass UDP through `127.0.0.1`. This makes it possible to simulate dropouts and a change of the sender port. Without Mosh in WSL these cases are skipped and counted as skipped.
 
-## Nicht in dieser Fassung
+## Not in this version
 
-- IPv6 für Mosh (kann die Bibliothek nicht).
-- Mosh ohne SSH (etwa mit einem von Hand gestarteten `mosh-server`).
-- Weiterleiten von Ports über Mosh (gibt es bei Mosh nicht; Port-Regeln laufen über die SSH-Verbindung daneben).
+- IPv6 for Mosh (the library cannot do it).
+- Mosh without SSH (e.g. with a `mosh-server` started by hand).
+- Port forwarding over Mosh (Mosh has none; port rules run over the SSH connection next to it).
 
-## Offene Punkte
+## Notes
 
-- Die Bibliothek ist jung (ein Entwickler, Version 0.1.4, nur als Git-Abhängigkeit). Sie nagelt `aes` auf 0.9.1; russh nimmt damit dieselbe Fassung (0.9.2 und 0.9.3 bringen nur Leistung, keine Sicherheitskorrekturen).
-- Wann die Leiste „Keine Verbindung“ erscheint, richtet sich nach der Meldung der Bibliothek; die Schwelle prüfe ich beim Bau.
-
-## Reihenfolge des Baus
-
-1. **Kern:** `mosh-client` einbinden; im Netz-Teil nach dem Anmelden `mosh-server` starten, Antwort lesen, Adresse bestimmen, Mosh-Sitzung mit denselben Ereignissen und Befehlen wie eine SSH-Sitzung (Ausgabe, Eingabe, Größe, Schließen, Kanal für Seitenleiste über SSH); Rückfall auf die Shell bei jedem Fehlschlag vor dem ersten Bild; neues Ereignis für Erreichbarkeit. Tests gegen den WSL-Server.
-2. **SSH daneben:** Neuaufbau nach Abriss für die Kanäle der Seitenleiste.
-3. **Tresor und Modell:** Felder `mosh`, `mosh_predict`, `mosh_port`, `mosh_server` an den SSH-Einstellungen, vererbt über Gruppen; Brücke.
-4. **Oberfläche:** Schalter und Felder im Host-Editor, „Mosh“ an Karte, Liste und Tab, Leiste bei Unterbrechung, Hinweis beim Rückfall, Schnellverbindung `mosh …`, Texte deutsch und englisch.
-5. **Importe und Export** (CSV, MobaXterm).
-6. **Testserver mit UDP-Weiterleitung**, Ende-zu-Ende-Fälle, „Glowport Dev“ bauen und dir mit Prüfliste übergeben.
+- The library is young (one developer, version 0.1.4, only as a Git dependency). It pins `aes` to 0.9.1; russh uses the same version with it (0.9.2 and 0.9.3 only bring performance improvements, no security fixes).

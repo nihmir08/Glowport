@@ -155,7 +155,7 @@ Glowport needs the Microsoft WebView2 runtime, which ships with Windows 11 and i
 
 ## Self-hosted sync
 
-`glowport-sync` is a single program for Linux (or a Docker image). Put it behind your own domain, create the first account with the setup code, invite others from within Glowport. The setup guide is in [docs/sync-server.md](docs/sync-server.md) (German), the protocol in [docs/sync.md](docs/sync.md).
+`glowport-sync` is a single program for Linux (or a Docker image). Put it behind your own domain, create the first account with the setup code, invite others from within Glowport. The setup guide is in [docs/sync-server.md](docs/sync-server.md), the protocol in [docs/sync.md](docs/sync.md) and the vault format in [docs/vault.md](docs/vault.md).
 
 ## Building from source
 

@@ -1,133 +1,133 @@
-# Den Sync-Server betreiben
+# Running the sync server
 
-Diese Anleitung richtet `glowport-sync` auf einem eigenen Linux-Server ein. Was der Server tut und was er nie zu sehen bekommt, steht in [`sync.md`](sync.md).
+This guide sets up `glowport-sync` on a Linux server of your own. What the server does, and what it never gets to see, is described in [`sync.md`](sync.md).
 
-**Stand:** Weg A ist auf einem Ubuntu (WSL) durchlaufen, von Hand und mit `install.sh`, samt Befehlen, Sicherung und Zurückholen; Glowport hat gegen diesen Dienst vollständig abgeglichen. Auf einem Debian-Server läuft er hinter NGINX mit einem Zertifikat von Let's Encrypt (Dienst über `install.sh`, die Seite von Hand mit TLS geschrieben). Noch nicht gelaufen sind Weg B (Docker), `certbot --nginx` mit der Vorlage, Caddy, das Beispiel unter Proxmox und der Dienst mit eigenem Zertifikat auf Port 443.
+**Status:** Option A has been run through on Ubuntu (WSL), by hand and with `install.sh`, including the commands, backup and restore; Glowport synced fully against that service. On a Debian server it runs behind NGINX with a Let's Encrypt certificate (service via `install.sh`, the site written by hand with TLS). Not run yet: option B (Docker), `certbot --nginx` with the template, Caddy, the Proxmox example and the service with its own certificate on port 443.
 
-## Was es ist
+## What it is
 
-- **Ein einzelnes Programm**, `glowport-sync`. Es braucht nichts außer sich selbst.
-- **Eine Datei**, `sync.db`, im Datenordner. Darin liegt alles: Konten, Geräte, die verschlüsselten Datensätze.
-- Es hört in der Vorgabe auf `127.0.0.1:8787`, also nur für denselben Rechner. Nach außen geht es über einen Webserver, der HTTPS übernimmt. Glowport verbindet sich ausschließlich über `https://`.
+- **A single program**, `glowport-sync`. It needs nothing but itself.
+- **A single file**, `sync.db`, in the data folder. It holds everything: accounts, devices, the encrypted records.
+- By default it listens on `127.0.0.1:8787`, i.e. only for the same machine. It reaches the outside world through a web server that handles HTTPS. Glowport only ever connects via `https://`.
 
-## Was du brauchst
+## What you need
 
-- Einen Linux-Rechner (64 Bit, x86), der dauerhaft läuft: der Dedi selbst oder eine VM oder ein Container darauf.
-- Eine Adresse für den Server, am besten eine eigene Unteradresse wie `sync.deine-domain.de`, deren DNS-Eintrag auf den Rechner zeigt.
-- Von außen erreichbar: Port 443 (und Port 80, damit das Zertifikat ausgestellt werden kann).
+- A Linux machine (64-bit, x86) that runs permanently: a dedicated server, or a VM or container on it.
+- An address for the server, ideally a subdomain such as `sync.your-domain.com` whose DNS record points to the machine.
+- Reachable from outside: port 443 (and port 80, so the certificate can be issued).
 
-In den Beispielen steht überall `sync.example.de`. Ersetze es durch deine Adresse.
+The examples use `sync.example.com` throughout. Replace it with your address.
 
-## Weg A: als Dienst (empfohlen)
+## Option A: as a service (recommended)
 
-**Kurz:** Den Ordner `dist-server` aus dem Projekt auf den Server laden (Programm, Dienst-Datei, `install.sh`) und dort als `root` ausführen:
+**In short:** upload the `dist-server` folder of the project to the server (program, service file, `install.sh`) and run as `root`:
 
 ```bash
 sh install.sh
 ```
 
-Das Skript macht die Schritte 1 bis 4 von unten und zeigt am Ende den Einrichtungscode. Ein weiterer Aufruf tauscht nur das Programm aus (Aktualisieren). Läuft der Webserver auf einem anderen Rechner oder Container, bekommt das Skript dessen innere Adresse mit: `PROXY=10.0.0.10 sh install.sh`.
+The script performs steps 1 to 4 below and prints the setup code at the end. Running it again only replaces the program (update). If the web server runs on another machine or container, pass its internal address to the script: `PROXY=10.0.0.10 sh install.sh`.
 
-**Von Hand, Schritt für Schritt:**
+**By hand, step by step:**
 
-1. **Programm auf den Server legen.** Das Linux-Programm liegt im Projekt unter `dist-server/glowport-sync` (gebaut mit `sh scripts/build-server.sh` in einem Linux, etwa WSL; es läuft auf jedem 64-Bit-Linux ohne weitere Pakete). Lade es hoch, zum Beispiel mit dem Dateimanager von Glowport, und lege es nach `/usr/local/bin`:
+1. **Put the program on the server.** The Linux program is in the project under `dist-server/glowport-sync` (built with `sh scripts/build-server.sh` on Linux, e.g. WSL; it runs on any 64-bit Linux without further packages). Upload it, for example with Glowport's file manager, and place it in `/usr/local/bin`:
 
    ```bash
    install -m 755 glowport-sync /usr/local/bin/glowport-sync
    ```
 
-2. **Einen eigenen Benutzer anlegen.** Der Dienst läuft nicht als `root`:
+2. **Create a dedicated user.** The service does not run as `root`:
 
    ```bash
    useradd --system --home-dir /var/lib/glowport-sync --shell /usr/sbin/nologin glowport-sync
    ```
 
-3. **Den Dienst einrichten.** Lege `server/glowport-sync.service` aus dem Projekt nach `/etc/systemd/system/` und starte:
+3. **Set up the service.** Copy `server/glowport-sync.service` from the project to `/etc/systemd/system/` and start it:
 
    ```bash
    systemctl daemon-reload
    systemctl enable --now glowport-sync
    ```
 
-4. **Nachsehen, ob er läuft:**
+4. **Check that it runs:**
 
    ```bash
    journalctl -u glowport-sync -n 20
    ```
 
-   Dort steht `glowport-sync hört auf 127.0.0.1:8787` und, solange es noch kein Konto gibt, der **Einrichtungscode**.
+   It shows `glowport-sync listening on 127.0.0.1:8787` and, as long as there is no account yet, the **setup code**.
 
-5. **HTTPS davorsetzen:** siehe den Abschnitt „HTTPS“.
+5. **Put HTTPS in front:** see the section “HTTPS”.
 
-Die Daten liegen in `/var/lib/glowport-sync`. Nur der Dienst darf in diesen Ordner.
+The data lives in `/var/lib/glowport-sync`. Only the service may access this folder.
 
-## Weg B: mit Docker
+## Option B: with Docker
 
-1. Kopiere den Projektordner auf den Server. Die Ordner `target`, `node_modules` und `dist` braucht es dafür nicht.
-2. Im Ordner `server`:
+1. Copy the project folder to the server. The folders `target`, `node_modules` and `dist` are not needed.
+2. In the `server` folder:
 
    ```bash
    docker compose up -d --build
    ```
 
-   Der erste Bau dauert einige Minuten.
-3. Einrichtungscode und Lebenszeichen:
+   The first build takes a few minutes.
+3. Setup code and signs of life:
 
    ```bash
    docker compose logs glowport-sync
    ```
 
-Der Container ist nur über `127.0.0.1:8787` erreichbar. Die Daten liegen im Docker-Volume `glowport-sync-data`.
+The container is only reachable via `127.0.0.1:8787`. The data lives in the Docker volume `glowport-sync-data`.
 
 ## HTTPS
 
-### Mit Caddy (am einfachsten)
+### With Caddy (easiest)
 
-Caddy holt und verlängert das Zertifikat selbst. Die ganze Einrichtung steht in `server/Caddyfile`:
+Caddy obtains and renews the certificate by itself. The whole configuration is in `server/Caddyfile`:
 
 ```
-sync.example.de {
+sync.example.com {
     reverse_proxy 127.0.0.1:8787
 }
 ```
 
-### Mit NGINX
+### With NGINX
 
-1. `server/nginx.conf` nach `/etc/nginx/sites-available/glowport-sync` legen, die Adresse eintragen, nach `sites-enabled` verknüpfen.
-2. Das Zertifikat holen und eintragen lassen:
+1. Copy `server/nginx.conf` to `/etc/nginx/sites-available/glowport-sync`, enter your address, link it into `sites-enabled`.
+2. Obtain the certificate and let certbot add it:
 
    ```bash
-   certbot --nginx -d sync.example.de
+   certbot --nginx -d sync.example.com
    ```
 
-Wichtig an der Vorlage sind die Zeilen für den WebSocket (`Upgrade`, `Connection`) und die langen Wartezeiten. Fehlen sie, kommen Änderungen auf anderen Geräten erst nach bis zu einer Minute an statt sofort.
+The important parts of the template are the WebSocket lines (`Upgrade`, `Connection`) and the long timeouts. Without them, changes reach other devices only after up to a minute instead of right away.
 
-Ob der WebSocket durchgeht, zeigt das Zugriffsprotokoll von NGINX mit einer Zeile für `/v1/live` und dem Ergebnis `101`. NGINX schreibt diese Zeile aber erst, wenn die Verbindung endet, also nachdem Glowport geschlossen wurde:
+Whether the WebSocket gets through is shown by NGINX's access log as a line for `/v1/live` with the status `101`. NGINX writes that line only when the connection ends, i.e. after Glowport was closed:
 
 ```bash
 grep "/v1/live" /var/log/nginx/access.log | tail -1
 ```
 
-### Der Webserver läuft auf einem anderen Rechner oder Container
+### The web server runs on another machine or container
 
-Dann reicht `127.0.0.1` nicht: Der Sync-Server muss dort hören, wo der Webserver ihn erreicht, also auf seiner Adresse im inneren Netz. In den Beispielen hat der Webserver die innere Adresse `10.0.0.10`, der Sync-Server `10.0.0.20`.
+Then `127.0.0.1` is not enough: the sync server has to listen where the web server can reach it, i.e. on its address in the internal network. In the examples the web server has the internal address `10.0.0.10`, the sync server `10.0.0.20`.
 
-- In der Dienst-Datei (oder gleich mit `PROXY=10.0.0.10 sh install.sh`):
+- In the service file (or directly with `PROXY=10.0.0.10 sh install.sh`):
 
   ```
   Environment=GLOWPORT_SYNC_LISTEN=0.0.0.0:8787
   Environment=GLOWPORT_SYNC_TRUST_PROXY=10.0.0.10
   ```
 
-  Die zweite Zeile nennt die Adresse des Webservers: Nur ihm glaubt der Sync-Server, wer der Absender ist. Wer Port 8787 direkt erreicht, kann sich so keine fremde Adresse geben.
-- Im Webserver statt `127.0.0.1:8787` die innere Adresse des Sync-Servers eintragen: `proxy_pass http://10.0.0.20:8787;`
-- Port 8787 gehört nicht ins Internet. Zwischen Webserver und Sync-Server läuft die Verbindung unverschlüsselt; sie soll das innere Netz des Rechners nie verlassen.
+  The second line names the web server's address: only it is trusted to say who the sender is. Anyone who reaches port 8787 directly therefore cannot pretend to have a different address.
+- In the web server, use the internal address of the sync server instead of `127.0.0.1:8787`: `proxy_pass http://10.0.0.20:8787;`
+- Port 8787 does not belong on the internet. The connection between web server and sync server is unencrypted; it must never leave the machine's internal network.
 
-### Beispiel: eigener Container unter Proxmox, NGINX in einem anderen
+### Example: a container of its own on Proxmox, NGINX in another one
 
-1. **DNS:** einen Eintrag für die Adresse anlegen (`sync.example.de`), der auf die öffentliche IP zeigt, unter der der NGINX erreichbar ist.
-2. **Container anlegen** (Proxmox → „Erstelle CT“): Vorlage Debian 13, „Unprivilegierter Container“ und „Nesting“ angehakt lassen, 1 Kern, 256 MB Arbeitsspeicher, 4 GB Platte, dieselbe Bridge wie der NGINX und eine feste innere Adresse aus demselben Netz. Danach unter Optionen „Beim Booten starten“ einschalten.
-3. **Dateien hineinlegen und einrichten.** Den Ordner `dist-server` auf den Proxmox-Host laden, dort in den Ordner wechseln und (mit der Nummer des Containers statt `120` und der inneren Adresse des NGINX):
+1. **DNS:** create a record for the address (`sync.example.com`) that points to the public IP under which NGINX is reachable.
+2. **Create the container** (Proxmox → “Create CT”): Debian 13 template, keep “Unprivileged container” and “Nesting” ticked, 1 core, 256 MB memory, 4 GB disk, the same bridge as NGINX and a fixed internal address from the same network. Then enable “Start at boot” under Options.
+3. **Copy the files in and set up.** Upload the `dist-server` folder to the Proxmox host, change into it and run (with the number of your container instead of `120` and the internal address of NGINX):
 
    ```bash
    pct push 120 glowport-sync /root/glowport-sync
@@ -136,144 +136,144 @@ Dann reicht `127.0.0.1` nicht: Der Sync-Server muss dort hören, wo der Webserve
    pct exec 120 -- env PROXY=10.0.0.10 sh /root/install.sh
    ```
 
-   Am Ende steht der Einrichtungscode.
-4. **NGINX:** `server/nginx.conf` als neue Seite ablegen, darin die Adresse und bei `proxy_pass` die innere Adresse des Containers eintragen, `nginx -t`, neu laden, dann `certbot --nginx -d sync.example.de`.
-5. **Prüfen** wie unten, dann das erste Konto anlegen.
+   The setup code is shown at the end.
+4. **NGINX:** add `server/nginx.conf` as a new site, enter the address and, at `proxy_pass`, the container's internal address, run `nginx -t`, reload, then `certbot --nginx -d sync.example.com`.
+5. **Check** as described below, then create the first account.
 
-Befehle der Verwaltung gehen später vom Host aus so: `pct exec 120 -- runuser -u glowport-sync -- glowport-sync accounts`
+Administration commands are later run from the host like this: `pct exec 120 -- runuser -u glowport-sync -- glowport-sync accounts`
 
-### Ohne Webserver davor
+### Without a web server in front
 
-`glowport-sync` kann HTTPS auch selbst, wenn es Zertifikat und Schlüssel als Dateien bekommt (PEM, wie von Let's Encrypt). In `server/glowport-sync.service` stehen die Zeilen dafür auskommentiert. Zu beachten:
+`glowport-sync` can also do HTTPS itself if it is given the certificate and key as files (PEM, as issued by Let's Encrypt). The lines for this are commented out in `server/glowport-sync.service`. Keep in mind:
 
-- Der Benutzer `glowport-sync` muss beide Dateien lesen können. Die Dateien unter `/etc/letsencrypt` darf er das nicht; sie müssen nach jeder Verlängerung in seinen Ordner kopiert werden, etwa nach `/var/lib/glowport-sync/tls/`.
-- Geänderte Dateien übernimmt der Server binnen einer Stunde von selbst, ohne Neustart.
+- The user `glowport-sync` must be able to read both files. It may not read the files under `/etc/letsencrypt`; they have to be copied into its folder after every renewal, e.g. to `/var/lib/glowport-sync/tls/`.
+- The server picks up changed files by itself within an hour, without a restart.
 
-Für den Anfang ist ein Webserver davor der einfachere Weg.
+To start with, a web server in front is the easier way.
 
-### Prüfen
+### Check
 
 ```bash
-curl https://sync.example.de/v1/info
+curl https://sync.example.com/v1/info
 ```
 
-Die Antwort ist eine kurze Zeile in geschweiften Klammern. Dann ist der Server von außen erreichbar und das Zertifikat in Ordnung.
+The answer is a short line in curly braces. The server is then reachable from outside and the certificate is fine.
 
-## Das erste Konto
+## The first account
 
-1. In Glowport links auf **Sync**, dann **Sync einrichten**, **Neues Konto**.
-2. Bei „Adresse des Sync-Servers“ die Adresse eintragen (`sync.example.de`) und **Prüfen**.
-3. Glowport meldet, dass der Server noch kein Konto hat, und fragt nach dem **Einrichtungscode**. Er steht in der Ausgabe des Servers (`journalctl -u glowport-sync` oder `docker compose logs glowport-sync`).
+1. In Glowport click **Sync** on the left, then **Set up sync**, **New account**.
+2. Enter the address under “Sync server address” (`sync.example.com`) and click **Check**.
+3. Glowport reports that the server has no account yet and asks for the **setup code**. It is in the server's output (`journalctl -u glowport-sync` or `docker compose logs glowport-sync`).
 
-   Der Server gibt bei jedem Start einen neuen Einrichtungscode aus. Es gilt immer nur der letzte.
-4. Benutzername wählen, Master-Passwort bestätigen, dem Gerät einen Namen geben, **Sync einrichten**.
+   The server prints a new setup code every time it starts. Only the latest one is valid.
+4. Choose a user name, confirm your master password, give the device a name, click **Set up sync**.
 
-Dieses erste Konto verwaltet den Server. Sobald es besteht, gibt es keinen Einrichtungscode mehr.
+This first account administers the server. Once it exists, there is no setup code any more.
 
-## Weitere Personen und Geräte
+## More people and devices
 
-- **Ein weiteres eigenes Gerät:** Auf einem frischen Glowport beim Start „Mit Konto anmelden“ wählen, mit Adresse, Benutzername und Master-Passwort. Hat das Gerät schon einen Tresor: Sync → Sync einrichten → „Ich habe schon ein Konto“. Ein Code ist dafür nicht nötig.
-- **Eine weitere Person:** In Glowport unter Sync → **Server verwalten** → **Einladungscode erzeugen**. Der Code gilt einmal und sieben Tage. Die Person wählt bei sich „Neues Konto“ und trägt ihn ein.
+- **Another device of your own:** on a fresh Glowport choose “Sign in with an account” at startup and enter address, user name and master password. If the device already has a vault: Sync → Set up sync → “I already have an account”. No code is needed for this.
+- **Another person:** in Glowport go to Sync → **Manage server** → **Create invitation code**. The code is valid once and for seven days. The person chooses “New account” and enters it.
 
-## Verwalten per Befehl
+## Administration by command
 
-Alles, was „Server verwalten“ in Glowport kann, geht auch auf dem Server selbst. Das ist für den Fall gedacht, dass kein Verwalter mehr hineinkommt, etwa weil das Master-Passwort verloren ist.
+Everything “Manage server” can do in Glowport also works on the server itself. This is meant for the case that no administrator can get in any more, for example because the master password is lost.
 
-| Befehl | Wirkung |
+| Command | Effect |
 |---|---|
-| `glowport-sync accounts` | Konten auflisten: Geräte, Speicher, letzter Besuch |
-| `glowport-sync invite` | Einladungscode erzeugen |
-| `glowport-sync invites` | offene Einladungscodes auflisten |
-| `glowport-sync revoke <Code>` | offenen Einladungscode widerrufen |
-| `glowport-sync disable <Name>` | Konto sperren: keine Anmeldung, kein Abgleich, die Daten bleiben |
-| `glowport-sync enable <Name>` | Konto wieder freigeben |
-| `glowport-sync delete <Name>` | Konto samt Geräten und persönlichem Tresor löschen |
-| `glowport-sync admin <Name>` | Konto zum Verwalter machen |
-| `glowport-sync noadmin <Name>` | einem Konto die Verwaltung nehmen |
-| `glowport-sync backup <Datei>` | Sicherung schreiben |
+| `glowport-sync accounts` | list accounts: devices, storage, last seen |
+| `glowport-sync invite` | create an invitation code |
+| `glowport-sync invites` | list open invitation codes |
+| `glowport-sync revoke <code>` | revoke an open invitation code |
+| `glowport-sync disable <name>` | disable an account: no sign-in, no sync, the data stays |
+| `glowport-sync enable <name>` | enable an account again |
+| `glowport-sync delete <name>` | delete an account with its devices and personal vault |
+| `glowport-sync admin <name>` | make an account an administrator |
+| `glowport-sync noadmin <name>` | take administration away from an account |
+| `glowport-sync backup <file>` | write a backup |
 
-Die Befehle wirken sofort, auch während der Server läuft. So werden sie aufgerufen:
+The commands take effect immediately, even while the server is running. This is how to call them:
 
-- **Als Dienst:** als Benutzer des Dienstes, damit die Dateien ihm gehören. Der Datenordner wird von selbst gefunden:
+- **As a service:** as the service's user, so the files belong to it. The data folder is found automatically:
 
   ```bash
   runuser -u glowport-sync -- glowport-sync accounts
   ```
 
-- **Mit Docker**, im Ordner `server`:
+- **With Docker**, in the `server` folder:
 
   ```bash
   docker compose exec glowport-sync glowport-sync accounts
   ```
 
-Kein Befehl kann ein Passwort zurücksetzen oder in einen Tresor hineinsehen. Wer sein Master-Passwort verliert, braucht ein neues Konto; `admin` macht es dann wieder zum Verwalter.
+No command can reset a password or look into a vault. Whoever loses their master password needs a new account; `admin` then makes it an administrator again.
 
-## Sicherung
+## Backup
 
 ```bash
-runuser -u glowport-sync -- glowport-sync backup /var/lib/glowport-sync/sicherung-2026-10-10.db
+runuser -u glowport-sync -- glowport-sync backup /var/lib/glowport-sync/backup-2026-10-10.db
 ```
 
-Das geht im laufenden Betrieb und schreibt eine vollständige, in sich stimmige Kopie. Nimm dafür immer diesen Befehl: Solange der Server läuft, steht ein Teil der Daten noch nicht in `sync.db` selbst, eine bloße Kopie der Datei wäre unvollständig. Eine vorhandene Datei wird nicht überschrieben. Die Sicherung enthält dasselbe wie der Server: verschlüsselte Datensätze, die ohne die Master-Passwörter niemand lesen kann. Lege sie trotzdem nicht offen ab, und kopiere sie vom Server herunter.
+This works while the server is running and writes a complete, consistent copy. Always use this command: while the server runs, part of the data is not yet in `sync.db` itself, so a plain copy of the file would be incomplete. An existing file is never overwritten. The backup contains the same as the server: encrypted records that nobody can read without the master passwords. Still, do not leave it lying around openly, and copy it off the server.
 
-**Zurückholen:** Dienst anhalten, die Sicherung als `sync.db` in den Datenordner legen, die Dateien `sync.db-wal` und `sync.db-shm` löschen, falls vorhanden, Dienst starten.
+**Restore:** stop the service, put the backup into the data folder as `sync.db`, delete the files `sync.db-wal` and `sync.db-shm` if present, start the service.
 
 ```bash
 systemctl stop glowport-sync
-install -o glowport-sync -g glowport-sync -m 600 sicherung-2026-10-10.db /var/lib/glowport-sync/sync.db
+install -o glowport-sync -g glowport-sync -m 600 backup-2026-10-10.db /var/lib/glowport-sync/sync.db
 rm -f /var/lib/glowport-sync/sync.db-wal /var/lib/glowport-sync/sync.db-shm
 systemctl start glowport-sync
 ```
 
-Geräte, die inzwischen weiter waren als die Sicherung, merken das. Glowport zeigt am betroffenen Tresor „Server älter“ und bietet **Stand dieses Geräts hochladen** an. Verloren geht dabei nichts: Jedes Gerät hat ohnehin eine vollständige Kopie seiner Tresore.
+Devices that had moved on beyond the backup notice this. Glowport shows “Server behind” on the affected vault and offers **Upload this device's state**. Nothing is lost: every device has a complete copy of its vaults anyway.
 
-## Aktualisieren
+## Updating
 
-- **Als Dienst:** das neue `glowport-sync` nach `/usr/local/bin` legen, dann `systemctl restart glowport-sync`.
-- **Mit Docker:** den neuen Projektordner hochladen, dann `docker compose up -d --build`.
+- **As a service:** put the new `glowport-sync` into `/usr/local/bin`, then `systemctl restart glowport-sync`.
+- **With Docker:** upload the new project folder, then `docker compose up -d --build`.
 
-Server und Glowport nennen einander ihre Version. Passt es einmal nicht, sagt Glowport, welche Seite ein Update braucht.
+Server and Glowport tell each other their version. If they ever do not match, Glowport says which side needs an update.
 
-## Protokoll
+## Log
 
 ```bash
 journalctl -u glowport-sync -f
 ```
 
-Eine Zeile für alles, was etwas ändert oder scheitert:
+One line for everything that changes something or fails:
 
 ```
 2026-10-10 14:03:27 200 POST /v1/vaults/{vault}/records alex
 2026-10-10 14:05:02 401 POST /v1/login -
 ```
 
-Das sind Zeit (UTC), Ergebnis, Art der Anfrage und Konto. Inhalte, Token, Passwörter und die Adressen der Absender stehen nie darin. Reines Lesen wird nicht protokolliert.
+That is time (UTC), status, kind of request and account. Contents, tokens, passwords and the senders' addresses never appear in it. Plain reads are not logged.
 
-## Einstellungen
+## Settings
 
-Als Angabe beim Start oder über die Umgebung (in der Dienst-Datei als `Environment=`, bei Docker unter `environment:`):
+As an argument at startup or via the environment (in the service file as `Environment=`, with Docker under `environment:`):
 
-| Angabe | Umgebung | Vorgabe | Bedeutung |
+| Argument | Environment | Default | Meaning |
 |---|---|---|---|
-| `--listen` | `GLOWPORT_SYNC_LISTEN` | `127.0.0.1:8787` | wo der Server hört |
-| `--data` | `GLOWPORT_SYNC_DATA` | `./data` | Datenordner |
-| `--trust-proxy` | `GLOWPORT_SYNC_TRUST_PROXY=1` | aus | hinter einem Webserver auf demselben Rechner: Der Absender steht in `X-Forwarded-For` |
-| `--trust-proxy-from` | `GLOWPORT_SYNC_TRUST_PROXY=10.0.0.10` | – | dasselbe, aber geglaubt wird es nur Verbindungen von dieser Adresse (mehrere mit Komma): der Webserver auf einem anderen Rechner |
-| `--tls-cert` | `GLOWPORT_SYNC_TLS_CERT` | – | Zertifikat (PEM) für HTTPS ohne Webserver davor |
-| `--tls-key` | `GLOWPORT_SYNC_TLS_KEY` | – | zugehöriger privater Schlüssel (PEM) |
-| – | `GLOWPORT_SYNC_MAX_RECORD_KIB` | 256 | Größe eines Datensatzes in KiB |
-| – | `GLOWPORT_SYNC_MAX_RECORDS` | 20000 | Datensätze je Tresor |
-| – | `GLOWPORT_SYNC_MAX_VAULTS` | 50 | Tresore je Konto |
+| `--listen` | `GLOWPORT_SYNC_LISTEN` | `127.0.0.1:8787` | where the server listens |
+| `--data` | `GLOWPORT_SYNC_DATA` | `./data` | data folder |
+| `--trust-proxy` | `GLOWPORT_SYNC_TRUST_PROXY=1` | off | behind a web server on the same machine: the sender is in `X-Forwarded-For` |
+| `--trust-proxy-from` | `GLOWPORT_SYNC_TRUST_PROXY=10.0.0.10` | – | the same, but only trusted for connections from this address (several separated by commas): the web server on another machine |
+| `--tls-cert` | `GLOWPORT_SYNC_TLS_CERT` | – | certificate (PEM) for HTTPS without a web server in front |
+| `--tls-key` | `GLOWPORT_SYNC_TLS_KEY` | – | matching private key (PEM) |
+| – | `GLOWPORT_SYNC_MAX_RECORD_KIB` | 256 | size of one record in KiB |
+| – | `GLOWPORT_SYNC_MAX_RECORDS` | 20000 | records per vault |
+| – | `GLOWPORT_SYNC_MAX_VAULTS` | 50 | vaults per account |
 
-`GLOWPORT_SYNC_TRUST_PROXY=1` nur einschalten, wenn der Server auf `127.0.0.1` hört, ihn also allein der Webserver desselben Rechners erreicht. In jedem anderen Fall die Adresse des Webservers nennen. Sonst könnte sich jeder, der den Server direkt erreicht, eine beliebige Absender-Adresse geben und die Bremse gegen Rateversuche umgehen.
+Only enable `GLOWPORT_SYNC_TRUST_PROXY=1` if the server listens on `127.0.0.1`, so that only the web server on the same machine can reach it. In every other case name the web server's address. Otherwise anyone who reaches the server directly could claim any sender address and get around the brake on guessing attempts.
 
-## Wenn etwas nicht geht
+## When something does not work
 
-| Glowport meldet | Woran es meist liegt |
+| Glowport says | Usual cause |
 |---|---|
-| „Der Sync-Server ist nicht erreichbar.“ | Der DNS-Eintrag zeigt nicht auf den Rechner, Port 443 ist zu, oder der Dienst läuft nicht. `curl https://sync.example.de/v1/info` zeigt, wie weit man kommt. |
-| „Das Zertifikat des Sync-Servers wird nicht anerkannt …“ | Das Zertifikat ist abgelaufen, für eine andere Adresse ausgestellt oder selbst erstellt. Glowport traut denselben Ausstellern wie Windows. |
-| „Dieser Code gilt nicht (mehr).“ beim Einrichtungscode | Der Server wurde seitdem neu gestartet. Es gilt der Code vom letzten Start. |
-| „Zu viele Fehlversuche. Bitte in einer Viertelstunde noch einmal.“ | Nach fünf falschen Anmeldungen an einem Konto ist für eine Viertelstunde Pause. Steht ein Webserver davor und fehlt `--trust-proxy`, teilen sich alle Absender eine Adresse und bremsen sich gegenseitig. |
-| Der Dienst startet nicht, im Journal steht `226/NAMESPACE` | Die Abschottung des Dienstes braucht in einem Container unter Proxmox die Option „Nesting“ (Container → Optionen → Features). Einschalten, Container neu starten. |
-| Änderungen kommen erst nach etwa einer Minute an | Der Webserver davor reicht den WebSocket nicht durch. Bei NGINX fehlen die Zeilen `Upgrade` und `Connection` aus der Vorlage. |
+| “The sync server cannot be reached.” | The DNS record does not point to the machine, port 443 is closed, or the service is not running. `curl https://sync.example.com/v1/info` shows how far you get. |
+| “The sync server's certificate is not accepted …” | The certificate has expired, was issued for another address or is self-made. Glowport trusts the same issuers as Windows. |
+| “This code is not valid (any more).” for the setup code | The server has been restarted since. The code from the last start applies. |
+| “Too many failed attempts. Please try again in a quarter of an hour.” | After five wrong sign-ins to an account there is a quarter-hour pause. If a web server sits in front and `--trust-proxy` is missing, all senders share one address and slow each other down. |
+| The service does not start, the journal says `226/NAMESPACE` | Inside a Proxmox container the service's sandboxing needs the “Nesting” option (Container → Options → Features). Enable it and restart the container. |
+| Changes arrive only after about a minute | The web server in front does not pass the WebSocket through. With NGINX, the `Upgrade` and `Connection` lines from the template are missing. |
