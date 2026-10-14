@@ -1,12 +1,12 @@
-//! Port-Weiterleitungen über eine eigene Verbindung, ohne Terminal.
+//! Port forwarding over a connection of its own, without a terminal.
 //!
-//! [`open`] verbindet wie eine Sitzung (Rückfragen kommen als Ereignisse) und richtet danach die Regel ein.
-//! Steht sie, kommt als letztes Ereignis [`Event::Forward`] mit dem [`Tunnel`]; er läuft, bis er fallen
-//! gelassen wird oder die Verbindung abreißt.
+//! [`open`] connects like a session (prompts arrive as events) and then sets up the rule.
+//! Once it stands, the last event is [`Event::Forward`] with the [`Tunnel`]; it runs until it is
+//! dropped or the connection breaks.
 //!
-//! - `Local`: Ein Port dieses Rechners nimmt Verbindungen an; jede geht über den Server (`direct-tcpip`) zum Ziel.
-//! - `Dynamic`: dasselbe, nur nennt jede Verbindung ihr Ziel selbst (SOCKS 5, 4 und 4a).
-//! - `Remote`: Der Server lauscht (`tcpip-forward`) und reicht Verbindungen hierher; sie gehen von hier zum Ziel.
+//! - `Local`: a port on this machine accepts connections; each goes through the server (`direct-tcpip`) to the destination.
+//! - `Dynamic`: the same, except that every connection names its destination itself (SOCKS 5, 4 and 4a).
+//! - `Remote`: the server listens (`tcpip-forward`) and hands connections over here; they go from here to the destination.
 
 use std::pin::Pin;
 use std::sync::{
@@ -27,37 +27,37 @@ use tokio::{
 
 use crate::{closed_early, establish, Command, Connect, End, Event, Link, Phase, Session};
 
-/// Was weitergeleitet wird. Adressen und Ports sind schon geprüft, wenn sie hier ankommen.
+/// What is forwarded. Addresses and ports are already checked when they arrive here.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Rule {
-    /// Verbindungen an `listener` gehen über den Server nach `host:port`.
+    /// Connections to `listener` go through the server to `host:port`.
     Local { host: String, port: u16 },
-    /// Verbindungen an `listener` nennen ihr Ziel selbst (SOCKS).
+    /// Connections to `listener` name their destination themselves (SOCKS).
     Dynamic,
-    /// Der Server lauscht an `bind:bind_port`; was dort ankommt, geht von diesem Rechner aus nach `host:port`.
+    /// The server listens on `bind:bind_port`; whatever arrives there goes from this machine to `host:port`.
     Remote { bind: String, bind_port: u16, host: String, port: u16 },
 }
 
-/// Zähler einer laufenden Regel. Sie gehören dem Aufrufer und überleben ein Neuverbinden.
+/// Counters of a running rule. They belong to the caller and survive a reconnect.
 #[derive(Debug, Default)]
 pub struct Counters {
     /// Gerade offene Verbindungen.
     pub open: AtomicU32,
-    /// Alle Verbindungen seit dem Einschalten.
+    /// All connections since switching on.
     pub total: AtomicU64,
-    /// Bytes in Richtung Ziel und zurück.
+    /// Bytes towards the destination and back.
     pub sent: AtomicU64,
     pub received: AtomicU64,
 }
 
-/// Eine laufende Weiterleitung. Fallen lassen beendet sie und trennt die Verbindung.
+/// A running forward. Dropping it ends it and disconnects.
 pub struct Tunnel {
     stop: Option<oneshot::Sender<()>>,
     task: JoinHandle<End>,
 }
 
 impl Tunnel {
-    /// Wartet, bis die Weiterleitung endet: [`End::ConnectionLost`] nach einem Abriss, sonst [`End::User`].
+    /// Waits until the forward ends: [`End::ConnectionLost`] after a drop, otherwise [`End::User`].
     pub async fn closed(&mut self) -> End {
         (&mut self.task).await.unwrap_or(End::User)
     }
@@ -65,25 +65,25 @@ impl Tunnel {
 
 impl Drop for Tunnel {
     fn drop(&mut self) {
-        // Die Aufgabe räumt selbst auf (trennen, offene Verbindungen schließen), sobald das Signal kommt.
+        // The task cleans up itself (disconnect, close open connections) as soon as the signal comes.
         if let Some(stop) = self.stop.take() {
             let _ = stop.send(());
         }
     }
 }
 
-/// Wie lange das Ziel einer einzelnen Verbindung Zeit hat, erreichbar zu sein.
+/// How long the destination of a single connection has to become reachable.
 const DIAL_TIMEOUT: Duration = Duration::from_secs(20);
-/// Wie lange ein Programm für seine SOCKS-Begrüßung Zeit hat.
+/// How long a program has for its SOCKS greeting.
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
-/// Wie oft nachgesehen wird, ob die Verbindung zum Server noch steht.
+/// How often to check whether the connection to the server still stands.
 const WATCH_INTERVAL: Duration = Duration::from_secs(1);
 
-/// Verbindet zu `connect` und betreibt darüber `rule`.
+/// Connects to `connect` and runs `rule` over it.
 ///
-/// Für `Local` und `Dynamic` bringt der Aufrufer den schon geöffneten `listener` mit: So zeigt sich ein belegter
-/// Port, bevor irgendeine Rückfrage gestellt wird. Ereignisse wie bei [`crate::open`]; das letzte ist bei Erfolg
-/// [`Event::Forward`], sonst [`Event::End`]. Lehnt der Server das Lauschen ab, endet es mit [`End::Refused`].
+/// For `Local` and `Dynamic` the caller brings the already opened `listener`: that way a port in use
+/// shows before any prompt is asked. Events as with [`crate::open`]; on success the last one is
+/// [`Event::Forward`], otherwise [`Event::End`]. If the server refuses to listen, it ends with [`End::Refused`].
 pub fn open(connect: Connect, rule: Rule, listener: Option<TcpListener>, counters: Arc<Counters>) -> Session {
     let (event_tx, events) = mpsc::channel(64);
     let (commands, mut command_rx) = mpsc::unbounded_channel::<Command>();
@@ -106,11 +106,11 @@ pub fn open(connect: Connect, rule: Rule, listener: Option<TcpListener>, counter
     Session { commands, events }
 }
 
-/// Richtet die Regel auf einer stehenden Verbindung ein und lässt sie in einer eigenen Aufgabe laufen.
+/// Sets up the rule on a standing connection and lets it run in a task of its own.
 async fn start(link: Link, rule: Rule, listener: Option<TcpListener>, counters: Arc<Counters>) -> Result<Tunnel, End> {
     let mut incoming = None;
     if let Rule::Remote { bind, bind_port, .. } = &rule {
-        // Erst die Annahmestelle, dann die Bitte an den Server: So geht keine frühe Verbindung verloren.
+        // First the acceptor, then the request to the server: that way no early connection is lost.
         let (sender, receiver) = mpsc::unbounded_channel();
         *link.forwarded.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(sender);
         incoming = Some(receiver);
@@ -126,9 +126,9 @@ async fn start(link: Link, rule: Rule, listener: Option<TcpListener>, counters: 
     Ok(Tunnel { stop: Some(stop), task })
 }
 
-/// Nimmt Verbindungen an, bis die Regel ausgeschaltet wird oder die Verbindung zum Server abreißt.
+/// Accepts connections until the rule is switched off or the connection to the server breaks.
 async fn serve(link: Arc<Link>, rule: Rule, listener: Option<TcpListener>, mut incoming: Option<mpsc::UnboundedReceiver<Channel<client::Msg>>>, counters: Arc<Counters>, mut stopped: oneshot::Receiver<()>) -> End {
-    // Jede Verbindung ist eine eigene Aufgabe; mit dieser Sammlung enden sie alle, sobald die Regel endet.
+    // Every connection is a task of its own; with this set they all end as soon as the rule ends.
     let mut connections = JoinSet::new();
     let mut watch = tokio::time::interval(WATCH_INTERVAL);
     let end = loop {
@@ -138,7 +138,7 @@ async fn serve(link: Arc<Link>, rule: Rule, listener: Option<TcpListener>, mut i
                 if link.handle.is_closed() {
                     break End::ConnectionLost("the connection was lost".into());
                 }
-                // Fertige Verbindungen abräumen, damit die Sammlung nicht wächst.
+                // Clear away finished connections so the set does not grow.
                 while connections.try_join_next().is_some() {}
             }
             accepted = next_local(&listener) => {
@@ -165,7 +165,7 @@ async fn serve(link: Arc<Link>, rule: Rule, listener: Option<TcpListener>, mut i
                 let (counters, target) = (Arc::clone(&counters), (host.clone(), *port));
                 connections.spawn(async move {
                     let _guard = Open::new(&counters);
-                    // Ist das Ziel hier nicht erreichbar, schließt sich der Kanal; der Server meldet das seinem Gegenüber.
+                    // If the destination cannot be reached from here, the channel closes; the server tells its counterpart.
                     if let Ok(Ok(stream)) = timeout(DIAL_TIMEOUT, TcpStream::connect(target)).await {
                         let _ = stream.set_nodelay(true);
                         pipe(channel.into_stream(), stream, &counters).await;
@@ -184,7 +184,7 @@ async fn serve(link: Arc<Link>, rule: Rule, listener: Option<TcpListener>, mut i
     end
 }
 
-/// Die nächste Verbindung am eigenen Port; ohne eigenen Port (Regel `Remote`) kommt nie eine.
+/// The next connection on the own port; without an own port (rule `Remote`) none ever comes.
 async fn next_local(listener: &Option<TcpListener>) -> Option<(TcpStream, std::net::SocketAddr)> {
     match listener {
         Some(listener) => listener.accept().await.ok(),
@@ -192,7 +192,7 @@ async fn next_local(listener: &Option<TcpListener>) -> Option<(TcpStream, std::n
     }
 }
 
-/// Die nächste Verbindung, die der Server hereinreicht; ohne Regel `Remote` kommt nie eine.
+/// The next connection the server hands in; without a `Remote` rule none ever comes.
 async fn next_remote(incoming: &mut Option<mpsc::UnboundedReceiver<Channel<client::Msg>>>) -> Option<Channel<client::Msg>> {
     match incoming {
         Some(incoming) => incoming.recv().await,
@@ -200,7 +200,7 @@ async fn next_remote(incoming: &mut Option<mpsc::UnboundedReceiver<Channel<clien
     }
 }
 
-/// Zählt eine Verbindung als offen, solange der Wächter lebt.
+/// Counts a connection as open as long as the guard lives.
 struct Open<'a>(&'a Counters);
 
 impl<'a> Open<'a> {
@@ -217,24 +217,24 @@ impl Drop for Open<'_> {
     }
 }
 
-/// Reicht Daten in beide Richtungen durch, bis beide Seiten fertig sind, und zählt mit.
-/// `near` ist die Seite, an der gelauscht wurde, `far` das Ziel.
+/// Passes data through in both directions until both sides are done, and counts along.
+/// `near` is the side that was listened on, `far` the destination.
 async fn pipe<A, B>(near: A, mut far: B, counters: &Counters)
 where
     A: AsyncRead + AsyncWrite + Unpin,
     B: AsyncRead + AsyncWrite + Unpin,
 {
-    // Das Durchreichen selbst macht tokio; gezählt wird an der nahen Seite.
+    // tokio does the passing through itself; counting happens on the near side.
     let mut near = Counted { inner: near, counters };
     let _ = tokio::io::copy_bidirectional_with_sizes(&mut near, &mut far, BUFFER, BUFFER).await;
 }
 
-/// Puffer je Richtung einer Verbindung. Größer ist hier langsamer: Der Kanal der SSH-Bibliothek kommt mit kleinen
-/// Stücken am besten zurecht. Gemessen am 2026-10-08 mit `measures_tunnel_throughput`, 512 MB über 127.0.0.1:
-/// 4 KiB 192 MB/s, 8 KiB rund 500 MB/s, 16 KiB 170 MB/s, 24 KiB 128 MB/s, 64 KiB 61 MB/s.
+/// Buffer per direction of a connection. Bigger is slower here: the SSH library's channel copes best with small
+/// pieces. Measured on 2026-10-08 with `measures_tunnel_throughput`, 512 MB over 127.0.0.1:
+/// 4 KiB 192 MB/s, 8 KiB about 500 MB/s, 16 KiB 170 MB/s, 24 KiB 128 MB/s, 64 KiB 61 MB/s.
 const BUFFER: usize = 8 * 1024;
 
-/// Zählt mit, was durch einen Strom geht: Gelesenes ist auf dem Weg zum Ziel, Geschriebenes kommt von dort zurück.
+/// Counts what passes through a stream: what is read is on its way to the destination, what is written comes back from there.
 struct Counted<'a, S> {
     inner: S,
     counters: &'a Counters,
@@ -271,7 +271,7 @@ impl<S: AsyncWrite + Unpin> AsyncWrite for Counted<'_, S> {
 
 // ---------- SOCKS ----------
 
-/// Das Ziel, das ein Programm über SOCKS nennt, und in welcher Fassung es gefragt hat.
+/// The destination a program names over SOCKS, and which version it asked in.
 #[derive(Debug, PartialEq, Eq)]
 struct Request {
     version: u8,
@@ -279,8 +279,8 @@ struct Request {
     port: u16,
 }
 
-/// Liest die Begrüßung und die Bitte eines SOCKS-Clients. `None`: Die Anfrage ist unbrauchbar oder verlangt etwas,
-/// das es hier nicht gibt (Anmeldung, `BIND`, UDP); die passende Absage ist dann schon geschrieben.
+/// Reads a SOCKS client's greeting and request. `None`: the request is unusable or asks for something
+/// that does not exist here (authentication, `BIND`, UDP); the matching refusal has then already been written.
 async fn handshake<S: AsyncRead + AsyncWrite + Unpin>(stream: &mut S) -> Option<Request> {
     let version = stream.read_u8().await.ok()?;
     match version {
@@ -288,7 +288,7 @@ async fn handshake<S: AsyncRead + AsyncWrite + Unpin>(stream: &mut S) -> Option<
             let count = stream.read_u8().await.ok()?;
             let mut methods = vec![0u8; usize::from(count)];
             stream.read_exact(&mut methods).await.ok()?;
-            // Nur „ohne Anmeldung“: Der Port hört ohnehin nur auf diesem Rechner.
+            // Only “no authentication”: the port only listens on this machine anyway.
             if !methods.contains(&0) {
                 let _ = stream.write_all(&[5, 0xFF]).await;
                 return None;
@@ -297,7 +297,7 @@ async fn handshake<S: AsyncRead + AsyncWrite + Unpin>(stream: &mut S) -> Option<
             let mut head = [0u8; 4];
             stream.read_exact(&mut head).await.ok()?;
             if head[0] != 5 || head[1] != 1 {
-                // 7 = Befehl nicht unterstützt
+                // 7 = command not supported
                 let _ = stream.write_all(&[5, 7, 0, 1, 0, 0, 0, 0, 0, 0]).await;
                 return None;
             }
@@ -319,7 +319,7 @@ async fn handshake<S: AsyncRead + AsyncWrite + Unpin>(stream: &mut S) -> Option<
                     std::net::Ipv6Addr::from(ip).to_string()
                 }
                 _ => {
-                    // 8 = Adressart nicht unterstützt
+                    // 8 = address type not supported
                     let _ = stream.write_all(&[5, 8, 0, 1, 0, 0, 0, 0, 0, 0]).await;
                     return None;
                 }
@@ -333,7 +333,7 @@ async fn handshake<S: AsyncRead + AsyncWrite + Unpin>(stream: &mut S) -> Option<
             let mut ip = [0u8; 4];
             stream.read_exact(&mut ip).await.ok()?;
             read_until_zero(stream).await?;
-            // 4a: Eine Adresse der Form 0.0.0.x heißt, dass der Name als Text folgt.
+            // 4a: an address of the form 0.0.0.x means the name follows as text.
             let host = if ip[..3] == [0, 0, 0] && ip[3] != 0 { String::from_utf8(read_until_zero(stream).await?).ok().filter(|name| !name.is_empty())? } else { std::net::Ipv4Addr::from(ip).to_string() };
             if command != 1 {
                 let _ = stream.write_all(&[0, 0x5B, 0, 0, 0, 0, 0, 0]).await;
@@ -345,7 +345,7 @@ async fn handshake<S: AsyncRead + AsyncWrite + Unpin>(stream: &mut S) -> Option<
     }
 }
 
-/// Liest bis zum Nullbyte; es selbst gehört nicht zum Ergebnis. Länger als ein Name sein kann, wird es nicht.
+/// Reads up to the zero byte; that byte itself is not part of the result. It never gets longer than a name can be.
 async fn read_until_zero<S: AsyncRead + Unpin>(stream: &mut S) -> Option<Vec<u8>> {
     let mut text = Vec::new();
     loop {
@@ -357,7 +357,7 @@ async fn read_until_zero<S: AsyncRead + Unpin>(stream: &mut S) -> Option<Vec<u8>
     }
 }
 
-/// Antwort auf eine SOCKS-Bitte: Die Verbindung zum Ziel steht oder kam nicht zustande.
+/// Answer to a SOCKS request: the connection to the destination stands or did not come about.
 async fn answer<S: AsyncWrite + Unpin>(stream: &mut S, version: u8, connected: bool) -> std::io::Result<()> {
     match (version, connected) {
         (5, true) => stream.write_all(&[5, 0, 0, 1, 0, 0, 0, 0, 0, 0]).await,
@@ -368,7 +368,7 @@ async fn answer<S: AsyncWrite + Unpin>(stream: &mut S, version: u8, connected: b
     }
 }
 
-/// Bedient eine Verbindung an einem dynamischen Port: Ziel erfragen, über den Server öffnen, durchreichen.
+/// Serves a connection on a dynamic port: ask for the destination, open it through the server, pass through.
 async fn socks(mut stream: TcpStream, link: &Link, origin: (String, u32), counters: &Counters) {
     let Ok(Some(request)) = timeout(HANDSHAKE_TIMEOUT, handshake(&mut stream)).await else { return };
     let opened = timeout(DIAL_TIMEOUT, link.handle.channel_open_direct_tcpip(request.host, u32::from(request.port), origin.0, origin.1)).await;
@@ -386,11 +386,11 @@ async fn socks(mut stream: TcpStream, link: &Link, origin: (String, u32), counte
 mod tests {
     use super::*;
 
-    /// Schickt Bytes an `handshake` und liefert, was er daraus liest und was er antwortet.
+    /// Sends bytes to `handshake` and returns what it reads from them and what it answers.
     async fn greet(bytes: &[u8]) -> (Option<Request>, Vec<u8>) {
         let (mut client, mut server) = tokio::io::duplex(1024);
         client.write_all(bytes).await.unwrap();
-        // Mehr kommt nicht: Eine abgeschnittene Anfrage soll enden statt zu warten.
+        // Nothing more comes: a truncated request should end instead of waiting.
         client.shutdown().await.unwrap();
         let request = handshake(&mut server).await;
         drop(server);
@@ -413,13 +413,13 @@ mod tests {
         v6.extend_from_slice(&[0, 22]);
         assert_eq!(greet(&v6).await.0, Some(Request { version: 5, host: "::1".into(), port: 22 }));
 
-        // Nur Anmeldung mit Passwort angeboten: abgelehnt.
+        // Only password authentication offered: refused.
         assert_eq!(greet(&[5, 1, 2]).await, (None, vec![5, 0xFF]));
-        // BIND statt CONNECT: „Befehl nicht unterstützt“.
+        // BIND instead of CONNECT: “command not supported”.
         assert_eq!(greet(&[5, 1, 0, 5, 2, 0, 1, 1, 2, 3, 4, 0, 80]).await, (None, vec![5, 0, 5, 7, 0, 1, 0, 0, 0, 0, 0, 0]));
         // Unbekannte Adressart.
         assert_eq!(greet(&[5, 1, 0, 5, 1, 0, 9]).await.1[2..4], [5, 8]);
-        // Abgeschnitten oder kein SOCKS.
+        // Truncated or not SOCKS.
         assert_eq!(greet(&[5, 1, 0, 5, 1, 0, 3, 5, b'a']).await.0, None);
         assert_eq!(greet(b"GET / HTTP/1.1\r\n").await, (None, vec![]));
     }
@@ -464,7 +464,7 @@ mod tests {
             let mut back = [0u8; 7];
             app.read_exact(&mut back).await.unwrap();
             assert_eq!(&back, b"antwort");
-            // Beide Seiten schließen: Erst dann ist die Verbindung zu Ende.
+            // Both sides close: only then is the connection over.
             app.shutdown().await.unwrap();
             target.shutdown().await.unwrap();
         };

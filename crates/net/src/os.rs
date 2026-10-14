@@ -1,4 +1,4 @@
-//! Bestimmt das Betriebssystem eines Servers für das Symbol des Hosts.
+//! Determines a server's operating system for the host's icon.
 
 use std::time::Duration;
 
@@ -7,9 +7,9 @@ use tokio::time::timeout;
 
 use crate::Client;
 
-/// Läuft in `sh`, damit die Abfrage auch dort gelingt, wo die Anmelde-Shell eine andere Schreibweise hat (csh auf
-/// FreeBSD). Jede Zeile `GLOWPORT_MARK=…` meldet eine Datei, an der sich ein Aufsatz verrät, der sich sonst als sein
-/// Unterbau ausgibt (Proxmox als Debian, OPNsense als FreeBSD). Unter Windows gibt es kein `sh`; dann antwortet `ver`.
+/// Runs in `sh` so the query also works where the login shell has a different syntax (csh on
+/// FreeBSD). Every line `GLOWPORT_MARK=…` reports a file that gives away a derivative that otherwise poses as its
+/// base (Proxmox as Debian, OPNsense as FreeBSD). Windows has no `sh`; then `ver` answers.
 const PROBE: &str = "sh -c 'uname -s 2>/dev/null; cat /etc/os-release 2>/dev/null; \
 test -d /etc/pve && echo GLOWPORT_MARK=pve; test -d /etc/proxmox-backup && echo GLOWPORT_MARK=pbs; \
 test -f /etc/rpi-issue && echo GLOWPORT_MARK=rpi; test -f /etc/synoinfo.conf && echo GLOWPORT_MARK=synology; \
@@ -17,7 +17,7 @@ test -f /etc/unraid-version && echo GLOWPORT_MARK=unraid; test -d /usr/local/opn
 grep -qi pfsense /etc/platform 2>/dev/null && echo GLOWPORT_MARK=pfsense; true' || ver";
 const MAX_OUTPUT: usize = 8192;
 
-/// Fragt den Server auf einem eigenen Kanal. Scheitert das, gibt es eben kein Ergebnis; die Sitzung stört es nicht.
+/// Asks the server on a channel of its own. If that fails, there is simply no result; it does not bother the session.
 pub(crate) async fn probe(handle: &Handle<Client>) -> Option<String> {
     let mut channel = handle.channel_open_session().await.ok()?;
     channel.exec(true, PROBE).await.ok()?;
@@ -36,7 +36,7 @@ pub(crate) async fn probe(handle: &Handle<Client>) -> Option<String> {
     classify(&String::from_utf8_lossy(&output))
 }
 
-/// Kennung eines Systems zu seiner `ID` aus `/etc/os-release`.
+/// ID of a system for its `ID` from `/etc/os-release`.
 fn by_id(id: &str) -> Option<&'static str> {
     Some(match id {
         "ubuntu" => "Ub",
@@ -64,10 +64,10 @@ fn by_id(id: &str) -> Option<&'static str> {
     })
 }
 
-/// Ordnet die Ausgabe von [`PROBE`] einer Kennung zu. Die Kennungen sind dieselben wie in `src/lib/os.ts`.
+/// Maps the output of [`PROBE`] to an ID. The IDs are the same as in `src/lib/os.ts`.
 pub fn classify(output: &str) -> Option<String> {
     let marked = |name: &str| output.lines().any(|line| line.trim().strip_prefix("GLOWPORT_MARK=") == Some(name));
-    // Aufsätze zuerst: Ihr Unterbau meldet sich zwar auch, gemeint ist aber das, was darauf läuft.
+    // Derivatives first: their base reports itself too, but what runs on top is what is meant.
     for (mark, key) in [("pve", "PVE"), ("pbs", "PBS"), ("synology", "Synology"), ("unraid", "Unraid"), ("opnsense", "OPNsense"), ("pfsense", "pfSense")] {
         if marked(mark) {
             return Some(key.into());
@@ -75,11 +75,11 @@ pub fn classify(output: &str) -> Option<String> {
     }
     let field = |name: &str| output.lines().find_map(|line| line.strip_prefix(name)).map(|value| value.trim().trim_matches('"').to_lowercase());
     let own = field("ID=");
-    // Raspberry Pi OS nennt sich in der 64-Bit-Fassung schlicht `debian`; die Datei `/etc/rpi-issue` verrät es.
+    // In its 64-bit version Raspberry Pi OS simply calls itself `debian`; the file `/etc/rpi-issue` gives it away.
     if own.as_deref() == Some("debian") && marked("rpi") {
         return Some("Rp".into());
     }
-    // Die eigene Kennung zählt vor der Verwandtschaft; ein unbekannter Abkömmling bekommt das Zeichen seiner Familie.
+    // The own ID counts before the family; an unknown derivative gets its family's icon.
     let relatives = field("ID_LIKE=").unwrap_or_default();
     if let Some(key) = own.iter().map(String::as_str).chain(relatives.split_whitespace()).find_map(by_id) {
         return Some(key.into());
@@ -90,7 +90,7 @@ pub fn classify(output: &str) -> Option<String> {
         "NetBSD" => Some("NetBSD".into()),
         "Darwin" => Some("macOS".into()),
         "Linux" => Some("Li".into()),
-        // `ver` unter Windows: „Microsoft Windows [Version 10.0.…]“, davor eine Leerzeile.
+        // `ver` on Windows: “Microsoft Windows [Version 10.0.…]”, preceded by an empty line.
         _ if output.lines().any(|line| line.trim_start().starts_with("Microsoft Windows")) => Some("Win".into()),
         _ => None,
     }
@@ -114,7 +114,7 @@ mod tests {
         assert_eq!(os("'uname' is not recognized as an internal or external command"), None);
     }
 
-    /// Jedes System bekommt sein eigenes Zeichen; früher teilten sich Verwandte eines.
+    /// Every system gets its own icon; relatives used to share one.
     #[test]
     fn relatives_are_told_apart() {
         let os = |text: &str| classify(text);
@@ -145,7 +145,7 @@ mod tests {
         assert_eq!(os("NetBSD\n").as_deref(), Some("NetBSD"));
         assert_eq!(os("Darwin\n").as_deref(), Some("macOS"));
         assert_eq!(os("\r\nMicrosoft Windows [Version 10.0.26100.1742]\r\n").as_deref(), Some("Win"), "Antwort von ver");
-        // Die Abfrage selbst muss in csh wie in sh gültig sein: ein einziges Argument in einfachen Anführungszeichen.
+        // The query itself must be valid in csh as in sh: a single argument in single quotes.
         assert!(super::PROBE.starts_with("sh -c '") && super::PROBE.ends_with("' || ver") && super::PROBE.matches('\'').count() == 2);
     }
 }

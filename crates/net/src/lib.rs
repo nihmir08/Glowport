@@ -1,8 +1,8 @@
-//! SSH-Verbindung für ein Terminal: verbinden, Host-Schlüssel vorlegen, anmelden, Shell.
+//! SSH connection for a terminal: connect, present the host key, sign in, shell.
 //!
-//! Dieses Crate kennt weder Tresor noch Oberfläche. Wer eine Sitzung öffnet, bekommt einen Strom von
-//! [`Event`]s und schickt [`Command`]s zurück. Rückfragen (Host-Schlüssel, Passwort) kommen als Ereignis
-//! mit einem Antwortkanal; ob ein Host-Schlüssel schon bekannt ist, entscheidet der Aufrufer.
+//! This crate knows neither vault nor interface. Whoever opens a session gets a stream of
+//! [`Event`]s and sends [`Command`]s back. Prompts (host key, password) arrive as an event
+//! with a reply channel; whether a host key is already known is decided by the caller.
 
 pub mod agent;
 pub mod files;
@@ -44,11 +44,11 @@ pub use proxy::{Login, Proxy};
 
 pub type Secret = Zeroizing<String>;
 
-/// Wie oft nach Passwort oder Passphrase gefragt wird. Server brechen nach wenigen Fehlversuchen ab (`MaxAuthTries`).
+/// How often to ask for password or passphrase. Servers give up after a few failed attempts (`MaxAuthTries`).
 const MAX_SECRET_PROMPTS: u32 = 3;
 const MAX_INTERACTIVE_ROUNDS: u32 = 10;
-/// Server zählen jeden angebotenen Schlüssel als Versuch (`MaxAuthTries`, meist 6). Mehr aus einem Agenten
-/// anzubieten, würde die übrigen Wege verbauen.
+/// Servers count every offered key as an attempt (`MaxAuthTries`, usually 6). Offering more from an agent
+/// would block the remaining ways.
 const MAX_AGENT_KEYS: usize = 4;
 const MAX_BANNER: usize = 4000;
 const EXECUTE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -59,53 +59,53 @@ pub struct Connect {
     pub host: String,
     pub port: u16,
     pub user: String,
-    /// Gespeichertes Passwort; wird vor jeder Rückfrage versucht.
+    /// Saved password; tried before every prompt.
     pub password: Option<Secret>,
-    /// Privater Schlüssel aus dem Tresor im OpenSSH-Format, ohne Passphrase. Wird als Erstes versucht.
+    /// Private key from the vault in OpenSSH format, without passphrase. Tried first.
     pub key: Option<Secret>,
-    /// Benutzer-Zertifikat zu `key`. Damit wird zuerst angemeldet, danach mit dem Schlüssel allein.
+    /// User certificate for `key`. Sign-in is tried with it first, then with the key alone.
     pub certificate: Option<String>,
     pub key_file: Option<PathBuf>,
-    /// Agenten, deren Schlüssel für die Anmeldung angeboten werden. `None`: kein Agent.
+    /// Agents whose keys are offered for signing in. `None`: no agent.
     pub agent: Option<Agents>,
-    /// Den Agenten an den Server weiterreichen, damit von dort aus weiterverbunden werden kann. Wirkt nur mit `agent`.
+    /// Forward the agent to the server so connections can continue from there. Only has an effect with `agent`.
     pub agent_forward: bool,
-    /// Station, über die verbunden wird (Sprung-Server). Sie hat ihre eigene Anmeldung und kann selbst wieder
-    /// über eine Station gehen.
+    /// Hop to connect through (jump host). It has its own sign-in and can itself go
+    /// through another hop.
     pub jump: Option<Box<Connect>>,
-    /// Befehl, der nach dem Anmelden in die Shell getippt wird.
+    /// Command typed into the shell after signing in.
     pub startcmd: Option<String>,
-    /// Umgebungsvariablen für die Shell. Ein Server nimmt nur an, was sein `AcceptEnv` erlaubt.
+    /// Environment variables for the shell. A server only accepts what its `AcceptEnv` allows.
     pub env: Vec<(String, String)>,
-    /// Marke des Aufrufers für diese Station, etwa die Kennung des Hosts im Tresor. Sie kommt in den Ereignissen zurück.
+    /// The caller's tag for this hop, e.g. the host's ID in the vault. It comes back in the events.
     pub tag: Option<String>,
-    /// Öffentliche Schlüssel der Zertifizierungsstellen, denen für diese Adresse vertraut wird. Zeigt der Server
-    /// ein gültiges Zertifikat einer dieser Stellen, gilt sein Schlüssel ohne Rückfrage.
+    /// Public keys of the certificate authorities trusted for this address. If the server shows
+    /// a valid certificate from one of them, its key applies without a prompt.
     pub authorities: Vec<String>,
-    /// Proxy für die erste Verbindung nach draußen. Hinter einem Sprung-Server gibt es keinen: Dorthin führt sein Tunnel.
+    /// Proxy for the first connection to the outside. Behind a jump host there is none: its tunnel leads there.
     pub proxy: Option<Proxy>,
-    /// Abstand der Lebenszeichen, die NAT und Firewalls offen halten und einen stillen Abriss bemerken. Null schaltet sie ab.
+    /// Interval of the keepalives that keep NAT and firewalls open and notice a silent drop. Zero switches them off.
     pub keepalive: Duration,
-    /// Wie lange auf das Zustandekommen der Verbindung gewartet wird.
+    /// How long to wait for the connection to be established.
     pub timeout: Duration,
-    /// Terminal-Typ, den die Shell als `TERM` sieht.
+    /// Terminal type the shell sees as `TERM`.
     pub term: String,
-    /// Auch Verfahren anbieten, die heute als schwach gelten (SHA-1, CBC, kleine DH-Gruppen), für alte Geräte.
+    /// Also offer algorithms considered weak today (SHA-1, CBC, small DH groups), for old devices.
     pub legacy: bool,
-    /// Spalten und Zeilen des Terminals beim Verbinden, damit die Breite ab dem ersten Byte stimmt.
+    /// Columns and rows of the terminal when connecting, so the width is right from the first byte.
     pub size: (u32, u32),
-    /// Nach dem Anmelden das Betriebssystem bestimmen (für das Symbol des Hosts).
+    /// Determine the operating system after signing in (for the host's icon).
     pub detect_os: bool,
-    /// Das Terminal über Mosh statt über eine SSH-Shell führen. Gilt nur für das Ziel, nicht für Sprung-Server.
+    /// Run the terminal over Mosh instead of an SSH shell. Only applies to the destination, not to jump hosts.
     pub mosh: Option<Mosh>,
 }
 
-/// Die Station einer Verbindung, um die es in einem Ereignis geht: das Ziel selbst oder ein Sprung-Server davor.
+/// The hop of a connection an event is about: the destination itself or a jump host before it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Station {
-    /// `benutzer@adresse`, mit Port, wenn es nicht 22 ist.
+    /// `user@address`, with port if it is not 22.
     pub label: String,
-    /// Die Marke aus [`Connect::tag`].
+    /// The tag from [`Connect::tag`].
     pub tag: Option<String>,
 }
 
@@ -138,7 +138,7 @@ impl Default for Connect {
     }
 }
 
-/// Arten von Server-Schlüsseln, für die nach einem Zertifikat gefragt wird, wenn eine Zertifizierungsstelle gilt.
+/// Kinds of server keys for which a certificate is asked for when a certificate authority applies.
 const CERTIFIED_HOST_KEYS: &[Algorithm] = &[
     Algorithm::Ed25519,
     Algorithm::Ecdsa { curve: EcdsaCurve::NistP256 },
@@ -148,10 +148,10 @@ const CERTIFIED_HOST_KEYS: &[Algorithm] = &[
     Algorithm::Rsa { hash: Some(HashAlg::Sha256) },
 ];
 
-/// Die sicheren Verfahren zuerst, dahinter die alten. Ein Server, der Besseres kann, bekommt weiterhin das Bessere.
+/// The secure algorithms first, the old ones behind them. A server that can do better still gets the better one.
 fn legacy_preferred() -> Preferred {
     let safe = Preferred::default();
-    // Die letzten Einträge der Liste sind keine Verfahren, sondern Merker für Erweiterungen; die alten kommen davor.
+    // The last entries of the list are not algorithms but markers for extensions; the old ones go before them.
     let marker = |name: &kex::Name| name.as_ref().starts_with("ext-info") || name.as_ref().starts_with("kex-strict");
     let mut exchanges: Vec<kex::Name> = safe.kex.iter().copied().filter(|name| !marker(name)).collect();
     exchanges.extend([kex::ECDH_SHA2_NISTP256, kex::ECDH_SHA2_NISTP384, kex::ECDH_SHA2_NISTP521, kex::DH_GEX_SHA1, kex::DH_G14_SHA1, kex::DH_G1_SHA1].into_iter().filter(|name| !safe.kex.contains(name)));
@@ -175,27 +175,27 @@ pub enum Phase {
     Connected,
 }
 
-/// Warum eine Sitzung endete.
+/// Why a session ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum End {
-    /// Vom Nutzer beendet oder eine Rückfrage abgebrochen.
+    /// Ended by the user or a prompt was cancelled.
     User,
-    /// Die Shell hat sich beendet, etwa nach `exit`.
+    /// The shell has exited, e.g. after `exit`.
     Remote { exit_status: Option<u32> },
     ConnectFailed(String),
     HostKeyRejected,
     AuthFailed,
     ConnectionLost(String),
-    /// Der Server hat etwas abgelehnt, ohne das es nicht geht, etwa das Lauschen an einem Port. Der Text nennt, was.
+    /// The server refused something that is required, e.g. listening on a port. The text says what.
     Refused(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HostKey {
     pub algorithm: String,
-    /// Fingerabdruck wie bei OpenSSH: `SHA256:…`.
+    /// Fingerprint as in OpenSSH: `SHA256:…`.
     pub fingerprint: String,
-    /// Öffentlicher Schlüssel im OpenSSH-Format, zum Wiedererkennen beim nächsten Verbinden.
+    /// Public key in OpenSSH format, for recognising it on the next connection.
     pub openssh: String,
 }
 
@@ -208,31 +208,31 @@ pub enum SecretKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Prompt {
     pub text: String,
-    /// Darf die Eingabe sichtbar sein?
+    /// May the input be visible?
     pub echo: bool,
 }
 
 pub enum Event {
     Phase(Phase),
     Banner(String),
-    /// Der Server unter `host:port` zeigt seinen Schlüssel. Antwort `true` = vertrauen und weitermachen.
+    /// The server at `host:port` shows its key. Answer `true` = trust and continue.
     HostKey { host: String, port: u16, key: HostKey, reply: oneshot::Sender<bool> },
-    /// Passwort oder Passphrase wird gebraucht. `None` bricht das Verbinden ab.
+    /// Password or passphrase is needed. `None` aborts connecting.
     Secret { station: Station, kind: SecretKind, attempt: u32, reply: oneshot::Sender<Option<Secret>> },
-    /// Fragen des Servers (`keyboard-interactive`), etwa ein Einmalcode.
+    /// Questions from the server (`keyboard-interactive`), e.g. a one-time code.
     Interactive { station: Station, name: String, instructions: String, prompts: Vec<Prompt>, reply: oneshot::Sender<Option<Vec<Secret>>> },
-    /// Ein frisch eingegebenes Passwort hat funktioniert; der Aufrufer kann anbieten, es zu speichern.
+    /// A freshly typed password worked; the caller can offer to save it.
     PasswordAccepted { station: Station, password: Secret },
-    /// Etwas ging schief, ohne dass die Verbindung daran scheitert.
+    /// Something went wrong without the connection failing because of it.
     Notice { code: &'static str, message: String },
-    /// Kürzel des erkannten Betriebssystems (siehe `os::classify`).
+    /// Short name of the detected operating system (see `os::classify`).
     Os(String),
     Output(Vec<u8>),
-    /// Stand einer Mosh-Sitzung (siehe [`mosh`]).
+    /// State of a Mosh session (see [`mosh`]).
     Mosh(MoshEvent),
-    /// SFTP steht. Kommt nur bei [`files::open`] und ist dort das letzte Ereignis.
+    /// SFTP is up. Only comes with [`files::open`] and is the last event there.
     Files(files::Remote),
-    /// Die Weiterleitung steht. Kommt nur bei [`forward::open`] und ist dort das letzte Ereignis.
+    /// The forward is up. Only comes with [`forward::open`] and is the last event there.
     Forward(forward::Tunnel),
     End(End),
 }
@@ -240,12 +240,12 @@ pub enum Event {
 pub enum Command {
     Input(Vec<u8>),
     Resize(u32, u32),
-    /// Lesen anhalten oder fortsetzen. Angehalten staut sich die Ausgabe beim Server, nicht im Speicher.
+    /// Pause or resume reading. While paused, output backs up at the server, not in memory.
     Pause(bool),
-    /// Öffnet einen zusätzlichen Kanal auf derselben Verbindung, für SFTP oder einen einzelnen Befehl.
-    /// `None`, wenn der Server keinen weiteren hergibt oder die Shell noch nicht steht.
+    /// Opens an additional channel on the same connection, for SFTP or a single command.
+    /// `None` if the server grants no further one or the shell is not up yet.
     Open(oneshot::Sender<Option<files::Opened>>),
-    /// Nur bei Mosh: die SSH-Verbindung daneben neu aufbauen, mit Rückfragen, falls nötig.
+    /// Mosh only: re-establish the SSH connection next to it, with prompts if necessary.
     Relink,
     Close,
 }
@@ -255,7 +255,7 @@ pub struct Session {
     pub events: mpsc::Receiver<Event>,
 }
 
-/// Öffnet eine Sitzung. Muss in einem tokio-Runtime aufgerufen werden; die Arbeit läuft in einer eigenen Aufgabe.
+/// Opens a session. Must be called inside a tokio runtime; the work runs in a task of its own.
 pub fn open(connect: Connect) -> Session {
     let (event_tx, events) = mpsc::channel(256);
     let (commands, command_rx) = mpsc::unbounded_channel();
@@ -266,20 +266,20 @@ pub fn open(connect: Connect) -> Session {
     Session { commands, events }
 }
 
-/// Was ein einzelner Befehl auf einem Host ergeben hat.
+/// What a single command on a host resulted in.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Output {
     pub stdout: Vec<u8>,
     pub exit_status: Option<u32>,
-    /// Die Ausgabe war länger als erlaubt; der Rest fehlt.
+    /// The output was longer than allowed; the rest is missing.
     pub truncated: bool,
 }
 
-/// Meldung in [`End::ConnectionLost`], wenn ein Befehl länger lief als erlaubt (siehe [`run_command`]).
+/// Message in [`End::ConnectionLost`] when a command ran longer than allowed (see [`run_command`]).
 pub const COMMAND_TIMED_OUT: &str = "command timed out";
 
-/// Sammelt, was ein Befehl ausgibt, bis zu `max` Bytes; mit `stderr` auch seine Fehlerausgabe, in der Reihenfolge
-/// des Eintreffens.
+/// Collects what a command outputs, up to `max` bytes; with `stderr` also its error output, in the order
+/// of arrival.
 pub(crate) async fn capture(channel: &mut russh::Channel<client::Msg>, max: usize, stderr: bool) -> Output {
     let mut output = Output { stdout: Vec::new(), exit_status: None, truncated: false };
     while let Some(message) = channel.wait().await {
@@ -299,11 +299,11 @@ pub(crate) async fn capture(channel: &mut russh::Channel<client::Msg>, max: usiz
     output
 }
 
-/// Meldet sich ohne jede Rückfrage an, führt einen Befehl aus und trennt wieder.
+/// Signs in without any prompt, runs a command and disconnects again.
 ///
-/// `trusted` entscheidet über den Schlüssel jedes Servers auf dem Weg (Adresse, Port, Schlüssel). Bräuchte die
-/// Anmeldung eine Rückfrage (Passwort, Passphrase, Fragen des Servers), gilt sie als gescheitert: Hier sitzt
-/// niemand, der antworten könnte.
+/// `trusted` decides about the key of every server along the way (address, port, key). If signing in
+/// needed a prompt (password, passphrase, server questions), it counts as failed: nobody sits here
+/// who could answer.
 pub async fn execute(connect: &Connect, command: &str, trusted: impl Fn(&str, u16, &HostKey) -> bool) -> Result<Output, End> {
     match timeout(EXECUTE_TIMEOUT, silently(connect, command, trusted, EXECUTE_TIMEOUT, MAX_EXECUTE_OUTPUT, false)).await {
         Ok(result) => result,
@@ -311,9 +311,9 @@ pub async fn execute(connect: &Connect, command: &str, trusted: impl Fn(&str, u1
     }
 }
 
-/// Wie [`execute`], für Befehle des Nutzers: Er darf `limit` lang laufen und bis zu `max` Bytes ausgeben, und seine
-/// Fehlerausgabe gehört zum Ergebnis. Läuft er länger, endet es mit [`End::ConnectionLost`] und
-/// [`COMMAND_TIMED_OUT`]. Der Befehl bekommt kein Terminal und keine Eingabe.
+/// Like [`execute`], for the user's commands: it may run for `limit` and output up to `max` bytes, and its
+/// error output is part of the result. If it runs longer, it ends with [`End::ConnectionLost`] and
+/// [`COMMAND_TIMED_OUT`]. The command gets no terminal and no input.
 pub async fn run_command(connect: &Connect, command: &str, limit: Duration, max: usize, trusted: impl Fn(&str, u16, &HostKey) -> bool) -> Result<Output, End> {
     silently(connect, command, trusted, limit, max, true).await
 }
@@ -331,12 +331,12 @@ async fn silently(connect: &Connect, command: &str, trusted: impl Fn(&str, u16, 
         }
     };
     let work = async {
-        // Eine abgebrochene Rückfrage endet als „vom Nutzer beendet“; hier heißt das: Die hinterlegten Daten reichen nicht.
+        // A cancelled prompt ends as “ended by the user”; here that means: the stored credentials are not enough.
         let link = establish(connect, &event_tx).await.map_err(|end| if end == End::User { End::AuthFailed } else { end })?;
         let handle = &link.handle;
         let mut channel = handle.channel_open_session().await.map_err(lost)?;
         channel.exec(true, command).await.map_err(lost)?;
-        // Niemand tippt etwas ein: Ein Befehl, der auf Eingabe wartet, soll das gleich merken.
+        // Nobody types anything: a command waiting for input should notice right away.
         let _ = channel.eof().await;
         let output = timeout(limit, capture(&mut channel, max, stderr)).await.map_err(|_| End::ConnectionLost(COMMAND_TIMED_OUT.into()));
         let _ = handle.disconnect(Disconnect::ByApplication, "", "en").await;
@@ -348,7 +348,7 @@ async fn silently(connect: &Connect, command: &str, trusted: impl Fn(&str, u16, 
     }
 }
 
-/// Schickt ein Ereignis. Hört niemand mehr zu, endet die Sitzung wie vom Nutzer beendet.
+/// Sends an event. If nobody listens any more, the session ends as if ended by the user.
 async fn emit(events: &mpsc::Sender<Event>, event: Event) -> Result<(), End> {
     events.send(event).await.map_err(|_| End::User)
 }
@@ -366,13 +366,13 @@ fn lost(error: russh::Error) -> End {
 async fn run(connect: Connect, events: &mpsc::Sender<Event>, mut commands: mpsc::UnboundedReceiver<Command>) -> Result<End, End> {
     emit(events, Event::Phase(Phase::Connecting)).await?;
 
-    // Bis die Shell steht, zählt von den Befehlen nur „Schließen“; die letzte gemeldete Größe wird gemerkt.
+    // Until the shell is up, only “close” counts among the commands; the last reported size is remembered.
     let size = Mutex::new(connect.size);
-    // Bei Mosh merkt sich die Sitzung, was beim Anmelden bestätigt wurde: Damit kommt die SSH-Verbindung daneben
-    // nach einem Abriss ohne Rückfrage wieder.
+    // With Mosh the session remembers what was confirmed while signing in: so the SSH connection next to it
+    // comes back without a prompt after a drop.
     let remembered = Arc::new(Mutex::new(mosh::Memory::default()));
     let memory = connect.mosh.is_some().then_some(&remembered);
-    // Die Stationen davor bleiben in `link` offen, solange die Sitzung läuft.
+    // The hops before it stay open in `link` while the session runs.
     let link = tokio::select! {
         link = establish_with(&connect, events, memory) => link?,
         () = closed_early(&mut commands, &size) => return Err(End::User),
@@ -392,7 +392,7 @@ async fn run(connect: Connect, events: &mpsc::Sender<Event>, mut commands: mpsc:
                 }
                 return mosh::drive(Arc::new(connect.clone()), link, remembered, session, running, events, &mut commands).await;
             }
-            // Mosh geht hier nicht: Die SSH-Verbindung steht, also wird es eine gewöhnliche Shell.
+            // Mosh does not work here: the SSH connection stands, so it becomes an ordinary shell.
             Err(Ok(fallback)) => emit(events, Event::Mosh(MoshEvent::Fallback(fallback))).await?,
             Err(Err(end)) => return Err(end),
         }
@@ -404,11 +404,11 @@ async fn run(connect: Connect, events: &mpsc::Sender<Event>, mut commands: mpsc:
     let channel = handle.channel_open_session().await.map_err(lost)?;
     channel.request_pty(false, connect.term.as_str(), columns, rows, 0, 0, &[]).await.map_err(lost)?;
     if connect.agent_forward && connect.agent.is_some() {
-        // Ohne Antwort: Verbietet der Server das Weiterreichen, läuft die Sitzung ohne.
+        // Without an answer: if the server forbids forwarding, the session runs without.
         channel.agent_forward(false).await.map_err(lost)?;
     }
     for (name, value) in &connect.env {
-        // Ohne Antwort: Lehnt der Server eine Variable ab, soll die Sitzung daran nicht scheitern.
+        // Without an answer: if the server refuses a variable, the session should not fail because of it.
         channel.set_env(false, name.as_str(), value.as_str()).await.map_err(lost)?;
     }
     channel.request_shell(true).await.map_err(lost)?;
@@ -443,9 +443,9 @@ async fn closed_early(commands: &mut mpsc::UnboundedReceiver<Command>, size: &Mu
     }
 }
 
-/// Reicht Ausgabe und Eingabe durch, bis die Shell endet, die Verbindung abreißt oder der Nutzer schließt.
+/// Passes output and input through until the shell ends, the connection breaks or the user closes.
 async fn shell(handle: &Handle<Client>, channel: russh::Channel<client::Msg>, events: &mpsc::Sender<Event>, commands: &mut mpsc::UnboundedReceiver<Command>) -> Result<End, End> {
-    // Getrennte Hälften: Stockt das Senden, wird trotzdem weiter gelesen.
+    // Separate halves: if sending stalls, reading continues anyway.
     let (mut reader, writer) = channel.split();
     let mut paused = false;
     let mut exit_status = None;
@@ -475,25 +475,25 @@ async fn shell(handle: &Handle<Client>, channel: russh::Channel<client::Msg>, ev
 struct Client {
     events: mpsc::Sender<Event>,
     rejected: Arc<AtomicBool>,
-    /// Adresse, unter der dieser Server angesprochen wurde; an ihr hängt das Vertrauen in seinen Schlüssel.
+    /// Address under which this server was reached; trust in its key hangs on it.
     host: String,
     port: u16,
-    /// Gesetzt, wenn der Agent an diesen Server weitergereicht werden darf.
+    /// Set if the agent may be forwarded to this server.
     forward: Option<Agents>,
-    /// Zertifizierungsstellen, denen für diese Adresse vertraut wird.
+    /// Certificate authorities trusted for this address.
     authorities: Vec<PublicKey>,
-    /// Wohin Verbindungen gehen, die der Server von einem seiner Ports hereinreicht. Leer, solange keine Regel
-    /// darum gebeten hat; dann wird jede abgelehnt.
+    /// Where connections go that the server hands in from one of its ports. Empty as long as no rule
+    /// asked for it; then every one is refused.
     forwarded: Forwarded,
-    /// Bei Mosh: Hier landet, welcher Server-Schlüssel bestätigt wurde.
+    /// With Mosh: records which server key was confirmed.
     memory: Option<mosh::Shared>,
 }
 
-/// Annahmestelle für Verbindungen, die ein Server hereinreicht (`forwarded-tcpip`).
+/// Acceptor for connections a server hands in (`forwarded-tcpip`).
 type Forwarded = Arc<Mutex<Option<mpsc::UnboundedSender<russh::Channel<client::Msg>>>>>;
 
 impl Client {
-    /// Hat eine vertraute Stelle diesem Server bescheinigt, dass ihm der Schlüssel unter dieser Adresse gehört?
+    /// Has a trusted authority certified that the key under this address belongs to this server?
     fn certified(&self, certificate: &Certificate) -> bool {
         let fingerprints: Vec<_> = self.authorities.iter().map(|ca| ca.fingerprint(HashAlg::Sha256)).collect();
         let named = certificate.valid_principals().is_empty() || certificate.valid_principals().iter().any(|name| name.eq_ignore_ascii_case(&self.host));
@@ -508,11 +508,11 @@ impl client::Handler for Client {
         if server_key.certificate().is_some_and(|certificate| self.certified(certificate)) {
             return Ok(true);
         }
-        // Ohne gültiges Zertifikat zählt nur der Schlüssel selbst: nachsehen, ob er bekannt ist, sonst fragen.
+        // Without a valid certificate only the key itself counts: check whether it is known, otherwise ask.
         let key = server_key.public_key();
         let info = HostKey { algorithm: key.algorithm().to_string(), fingerprint: key.fingerprint(HashAlg::Sha256).to_string(), openssh: key.to_openssh().unwrap_or_default() };
         let (reply, answer) = oneshot::channel();
-        // Ohne Antwort gilt der Schlüssel als abgelehnt: Im Zweifel wird nicht verbunden.
+        // Without an answer the key counts as refused: when in doubt, do not connect.
         let accepted = self.events.send(Event::HostKey { host: self.host.clone(), port: self.port, key: info, reply }).await.is_ok() && answer.await.unwrap_or(false);
         if !accepted {
             self.rejected.store(true, Ordering::Relaxed);
@@ -522,7 +522,7 @@ impl client::Handler for Client {
         Ok(accepted)
     }
 
-    // Der Text kommt von einem Server, bei dem noch niemand angemeldet ist: nur druckbare Zeichen, begrenzt lang.
+    // The text comes from a server nobody is signed in to yet: printable characters only, limited length.
     async fn auth_banner(&mut self, banner: &str, _session: &mut client::Session) -> Result<(), Self::Error> {
         let text: String = banner.chars().filter(|c| *c == '\n' || !c.is_control()).take(MAX_BANNER).collect();
         if !text.trim().is_empty() {
@@ -531,7 +531,7 @@ impl client::Handler for Client {
         Ok(())
     }
 
-    /// Der Server möchte den Agenten benutzen. Das geht nur, wenn es für diese Verbindung erlaubt wurde.
+    /// The server wants to use the agent. That only works if it was allowed for this connection.
     async fn server_channel_open_agent_forward(&mut self, channel: russh::Channel<client::Msg>, reply: client::ChannelOpenHandle, _session: &mut client::Session) -> Result<(), Self::Error> {
         let Some(agents) = &self.forward else {
             return Ok(());
@@ -547,8 +547,8 @@ impl client::Handler for Client {
         Ok(())
     }
 
-    /// Der Server reicht eine Verbindung herein, die an einem seiner Ports angekommen ist. Angenommen wird sie nur,
-    /// wenn eine Port-Regel dieser Verbindung darum gebeten hat.
+    /// The server hands in a connection that arrived on one of its ports. It is only accepted
+    /// if a port rule of this connection asked for it.
     #[allow(clippy::too_many_arguments)]
     async fn server_channel_open_forwarded_tcpip(
         &mut self,
@@ -569,24 +569,24 @@ impl client::Handler for Client {
     }
 }
 
-/// Eine aufgebaute, angemeldete Verbindung samt den Stationen davor. Die müssen offen bleiben, solange sie lebt.
+/// An established, signed-in connection together with the hops before it. Those must stay open while it lives.
 struct Link {
     handle: Handle<Client>,
-    /// Adresse der Gegenstelle, wenn direkt verbunden (ohne Proxy und Sprung-Server). Mosh schickt UDP dorthin.
+    /// Address of the peer when connected directly (without proxy and jump host). Mosh sends UDP there.
     peer: Option<SocketAddr>,
     _hops: Vec<Handle<Client>>,
-    /// Annahmestelle des Ziels für hereingereichte Verbindungen; siehe [`forward`].
+    /// The destination's acceptor for handed-in connections; see [`forward`].
     forwarded: Forwarded,
 }
 
-/// Weg zum Server (direkt oder durch die Stationen davor), Schlüsselaustausch, Host-Schlüssel vorlegen, anmelden.
-/// Liefert einen `Box`, weil sich die Funktion für jede Station selbst aufruft.
+/// Path to the server (direct or through the hops before it), key exchange, present host key, sign in.
+/// Returns a `Box` because the function calls itself for every hop.
 fn establish<'a>(connect: &'a Connect, events: &'a mpsc::Sender<Event>) -> Pin<Box<dyn Future<Output = Result<Link, End>> + Send + 'a>> {
     establish_with(connect, events, None)
 }
 
-/// Wie [`establish`]; mit `memory` merkt sich die Verbindung bestätigte Server-Schlüssel und angenommene Passwörter
-/// (für Mosh, siehe [`mosh::Memory`]).
+/// Like [`establish`]; with `memory` the connection remembers confirmed server keys and accepted passwords
+/// (for Mosh, see [`mosh::Memory`]).
 fn establish_with<'a>(connect: &'a Connect, events: &'a mpsc::Sender<Event>, memory: Option<&'a mosh::Shared>) -> Pin<Box<dyn Future<Output = Result<Link, End>> + Send + 'a>> {
     Box::pin(async move {
         let config = Arc::new(client::Config {
@@ -594,7 +594,7 @@ fn establish_with<'a>(connect: &'a Connect, events: &'a mpsc::Sender<Event>, mem
             keepalive_interval: (!connect.keepalive.is_zero()).then_some(connect.keepalive),
             keepalive_max: 3,
             preferred: Preferred {
-                // Nur wenn eine Stelle für diese Adresse gilt: Sonst wüsste niemand, was ein Zertifikat wert ist.
+                // Only if an authority applies to this address: otherwise nobody would know what a certificate is worth.
                 host_key_certificates: if connect.authorities.is_empty() { (&[][..]).into() } else { CERTIFIED_HOST_KEYS.into() },
                 ..if connect.legacy { legacy_preferred() } else { Preferred::default() }
             },
@@ -622,7 +622,7 @@ fn establish_with<'a>(connect: &'a Connect, events: &'a mpsc::Sender<Event>, mem
             }
             Some(jump) => {
                 let Link { handle: via, _hops: mut hops, .. } = establish_with(jump, events, memory).await?;
-                // Die Station öffnet die Verbindung zum nächsten Server; darüber läuft eine eigene SSH-Verbindung.
+                // The hop opens the connection to the next server; an SSH connection of its own runs over it.
                 let tunnel = timeout(connect.timeout, via.channel_open_direct_tcpip(connect.host.clone(), u32::from(connect.port), "127.0.0.1", 0))
                     .await
                     .map_err(|_| End::ConnectFailed(format!("timed out behind {}", jump.host)))?
@@ -642,7 +642,7 @@ fn allows(methods: &MethodSet, kind: MethodKind) -> bool {
     methods.contains(&kind)
 }
 
-/// Meldet sich mit einem Schlüssel an. `None`: angenommen. Sonst die Methoden, die der Server danach noch zulässt.
+/// Signs in with a key. `None`: accepted. Otherwise the methods the server still allows afterwards.
 async fn offer_key(handle: &mut Handle<Client>, user: &str, key: PrivateKey) -> Result<Option<MethodSet>, End> {
     let rsa_hash = handle.best_supported_rsa_hash().await.ok().flatten().flatten();
     match handle.authenticate_publickey(user, PrivateKeyWithHashAlg::new(Arc::new(key), rsa_hash)).await.map_err(lost)? {
@@ -651,26 +651,26 @@ async fn offer_key(handle: &mut Handle<Client>, user: &str, key: PrivateKey) -> 
     }
 }
 
-/// Reihenfolge: Schlüssel aus dem Tresor, Schlüssel aus dem Agenten, Schlüsseldatei, gespeichertes Passwort,
-/// Passwort-Rückfrage, Fragen des Servers.
+/// Order: key from the vault, keys from the agent, key file, saved password,
+/// password prompt, server questions.
 async fn authenticate(connect: &Connect, events: &mpsc::Sender<Event>, handle: &mut Handle<Client>, memory: Option<&mosh::Shared>) -> Result<(), End> {
     let user = connect.user.as_str();
     let station = connect.station();
 
-    // „none“ gelingt fast nie, liefert aber die Liste der Methoden, die der Server zulässt.
+    // “none” almost never succeeds, but returns the list of methods the server allows.
     let mut methods = match handle.authenticate_none(user).await.map_err(lost)? {
         AuthResult::Success => return Ok(()),
         AuthResult::Failure { remaining_methods, .. } => remaining_methods,
     };
-    // Nimmt der Server nur Schlüssel an und ist für diese Verbindung keiner vorgesehen, gibt es nichts zu fragen:
-    // Die Anmeldung scheitert gleich. Dann soll dastehen, woran es liegt.
+    // If the server only accepts keys and none is intended for this connection, there is nothing to ask:
+    // the sign-in fails right away. Then it should say why.
     let keys_only = !allows(&methods, MethodKind::Password) && !allows(&methods, MethodKind::KeyboardInteractive);
     let without_key = connect.key.is_none() && connect.agent.is_none() && connect.key_file.is_none();
 
     if let Some(text) = connect.key.as_ref().filter(|_| allows(&methods, MethodKind::PublicKey)) {
         match PrivateKey::from_openssh(text.as_str()) {
             Ok(key) => {
-                // Mit Zertifikat zuerst: Ein Server, der einer Zertifizierungsstelle vertraut, kennt den bloßen Schlüssel nicht.
+                // With certificate first: a server that trusts a certificate authority does not know the bare key.
                 if let Some(certificate) = connect.certificate.as_deref().and_then(|text| Certificate::from_openssh(text).ok()) {
                     match handle.authenticate_openssh_cert(user, Arc::new(key.clone()), certificate).await.map_err(lost)? {
                         AuthResult::Success => return Ok(()),
@@ -706,7 +706,7 @@ async fn authenticate(connect: &Connect, events: &mpsc::Sender<Event>, handle: &
                 match handle.authenticate_publickey_with(user, key, rsa_hash, &mut client).await {
                     Ok(AuthResult::Success) => return Ok(()),
                     Ok(AuthResult::Failure { remaining_methods, .. }) => methods = remaining_methods,
-                    // Der Agent unterschreibt nicht (gesperrt, abgelehnt, weg): weiter mit dem nächsten Agenten.
+                    // The agent does not sign (locked, refused, gone): continue with the next agent.
                     Err(_) => break,
                 }
             }
@@ -783,8 +783,8 @@ async fn authenticate(connect: &Connect, events: &mpsc::Sender<Event>, handle: &
     Err(End::AuthFailed)
 }
 
-/// Liest die Schlüsseldatei und fragt bei Bedarf nach der Passphrase. `None`: Die Datei ist unbrauchbar,
-/// das Anmelden geht mit den anderen Wegen weiter.
+/// Reads the key file and asks for the passphrase if needed. `None`: the file is unusable,
+/// signing in continues with the other ways.
 async fn load_key(path: &Path, station: &Station, events: &mpsc::Sender<Event>) -> Result<Option<PrivateKey>, End> {
     match decode_key(path, None).await {
         Ok(key) => return Ok(Some(key)),
@@ -807,7 +807,7 @@ async fn load_key(path: &Path, station: &Station, events: &mpsc::Sender<Event>) 
     Ok(None)
 }
 
-// Das Entschlüsseln (bcrypt-pbkdf) rechnet spürbar; nicht auf einem Thread des Runtimes.
+// Decrypting (bcrypt-pbkdf) takes noticeable time; not on a runtime thread.
 async fn decode_key(path: &Path, passphrase: Option<Secret>) -> Result<PrivateKey, russh::keys::Error> {
     let path = path.to_owned();
     tokio::task::spawn_blocking(move || russh::keys::load_secret_key(path, passphrase.as_ref().map(|p| p.as_str())))

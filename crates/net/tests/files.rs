@@ -1,4 +1,4 @@
-//! Dateien über SFTP gegen den eigenen Testserver.
+//! Files over SFTP against the own test server.
 
 use std::{
     path::PathBuf,
@@ -17,7 +17,7 @@ use tokio::{
 
 static SEQ: AtomicU32 = AtomicU32::new(0);
 
-/// Ein leerer Ordner, der als Dateisystem des Servers dient. Er verschwindet mit dem Test.
+/// An empty folder serving as the server's file system. It disappears with the test.
 struct Root(PathBuf);
 
 impl Root {
@@ -28,7 +28,7 @@ impl Root {
         Root(path)
     }
 
-    /// Pfad auf diesem Rechner zu einem Pfad im Dateisystem des Servers.
+    /// Path on this machine for a path in the server's file system.
     fn local(&self, path: &str) -> PathBuf {
         path.split('/').filter(|part| !part.is_empty()).fold(self.0.clone(), |at, part| at.join(part))
     }
@@ -98,7 +98,7 @@ async fn creates_renames_and_removes_even_full_folders() {
     remote.rename("/srv/alt", "/srv/neu").await.unwrap();
     assert!(!root.local("/srv/alt").exists());
     assert_eq!(std::fs::read(root.local("/srv/neu/tief/b.txt")).unwrap(), b"zwei");
-    // Umbenennen überschreibt nichts.
+    // Renaming overwrites nothing.
     remote.write("/srv/x.txt", b"x").await.unwrap();
     assert!(matches!(remote.rename("/srv/x.txt", "/srv/neu").await, Err(FileError::Failure(_))));
 
@@ -154,12 +154,12 @@ async fn continues_a_file_from_an_offset_in_both_directions() {
     let running = serve(&root, Options::default()).await;
     let remote = remote(&running).await;
 
-    // Herunterladen ab der Mitte.
+    // Downloading from the middle.
     let mut rest = Vec::new();
     remote.reader("/srv/gross.bin", 120_000).await.unwrap().read_to_end(&mut rest).await.unwrap();
     assert_eq!(rest, &content[120_000..]);
 
-    // Hochladen: erst ein Stück, dann der Rest ab dort.
+    // Uploading: first a piece, then the rest from there.
     let mut first = remote.writer("/srv/kopie.bin", 0).await.unwrap();
     first.write_all(&content[..70_000]).await.unwrap();
     first.shutdown().await.unwrap();
@@ -204,7 +204,7 @@ async fn connects_for_files_alone_and_asks_like_a_terminal_would() {
     let root = Root::new();
     root.put("/srv/da.txt", b"hier");
     let running = serve(&root, Options::default()).await;
-    // Kein Passwort hinterlegt: Erst kommt der Schlüssel des Servers, dann die Frage nach dem Passwort.
+    // No password stored: first comes the server's key, then the question for the password.
     let mut session = files::open(Connect { password: None, ..target(&running) });
     let mut asked = Vec::new();
     let remote = loop {
@@ -226,7 +226,7 @@ async fn connects_for_files_alone_and_asks_like_a_terminal_would() {
     assert_eq!(asked, ["schlüssel", "passwort", "noch einmal"]);
     assert_eq!(remote.read("/srv/da.txt", 100).await.unwrap().0, b"hier");
 
-    // Bricht der Nutzer die Rückfrage ab, endet es wie vom Nutzer beendet; ebenso, wenn er zwischendurch schließt.
+    // If the user cancels the prompt, it ends as ended by the user; likewise if they close in between.
     let mut session = files::open(Connect { password: None, ..target(&running) });
     let end = loop {
         match timeout(Duration::from_secs(10), session.events.recv()).await.expect("nichts geschah").expect("Strom endete ohne Ende") {
@@ -240,7 +240,7 @@ async fn connects_for_files_alone_and_asks_like_a_terminal_would() {
     let mut session = files::open(Connect { password: None, ..target(&running) });
     let end = loop {
         match timeout(Duration::from_secs(10), session.events.recv()).await.expect("nichts geschah").expect("Strom endete ohne Ende") {
-            // Die Frage bleibt unbeantwortet; stattdessen wird geschlossen.
+            // The question stays unanswered; instead it is closed.
             Event::HostKey { reply, .. } => {
                 session.commands.send(Command::Close).unwrap();
                 std::mem::forget(reply);
@@ -265,7 +265,7 @@ async fn opens_sftp_and_runs_commands_on_the_connection_of_a_terminal() {
     let running = serve(&root, Options { exec_output: Some("antwort\n".into()), ..Options::default() }).await;
     let mut session = open(target(&running));
 
-    // Vor der Shell gibt es keinen zusätzlichen Kanal.
+    // Before the shell there is no additional channel.
     let (reply, early) = oneshot::channel();
     session.commands.send(Command::Open(reply)).unwrap();
 
@@ -289,7 +289,7 @@ async fn opens_sftp_and_runs_commands_on_the_connection_of_a_terminal() {
     let output = files::run(opened.await.unwrap().unwrap(), "irgendwas").await.unwrap();
     assert_eq!(output.stdout, b"antwort\n");
 
-    // Das Terminal läuft daneben weiter.
+    // The terminal keeps running next to it.
     session.commands.send(Command::Input(b"exit\r".to_vec())).unwrap();
     loop {
         if let Event::End(end) = timeout(Duration::from_secs(10), session.events.recv()).await.expect("nichts geschah").expect("Sitzung verschwand") {

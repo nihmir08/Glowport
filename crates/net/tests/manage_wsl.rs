@@ -1,14 +1,14 @@
-//! Die Befehle der Verwaltung an einem echten Linux: dem Ubuntu im WSL dieses Rechners. Läuft nur von Hand:
+//! The management commands on a real Linux: the Ubuntu in this machine's WSL. Only runs by hand:
 //! `cargo test -p glowport-net --test manage_wsl -- --ignored --nocapture`
 //!
-//! Die Befehle gehen an `sh -c`, so wie ein SSH-Server sie an die Shell des Benutzers gibt. Geändert wird am
-//! WSL nichts: Die eine Aktion (einen laufenden Dienst starten) scheitert an den Rechten, und genau das wird geprüft.
+//! The commands go to `sh -c`, the way an SSH server hands them to the user's shell. Nothing is changed in
+//! WSL: the one action (starting a running service) fails for lack of permissions, and exactly that is checked.
 
 use std::process::Command;
 
 use glowport_net::manage::{self, processes, services, As, Verdict};
 
-/// Führt einen Befehl im WSL aus: ob er gelang und was er ausgab.
+/// Runs a command in WSL: whether it succeeded and what it printed.
 fn run(command: &str) -> (bool, String) {
     let output = Command::new("wsl.exe").args(["-e", "sh", "-c", command]).output().expect("wsl.exe");
     (output.status.success(), String::from_utf8_lossy(&output.stdout).into_owned())
@@ -21,7 +21,7 @@ fn the_commands_work_on_a_real_linux() {
     println!("{abilities:?}");
     assert!(abilities.services && abilities.processes && !abilities.root, "Ubuntu mit systemd und procps, als gewöhnlicher Benutzer");
 
-    // Dienste: die Liste, der Zustand eines Dienstes, und eine Aktion, für die die Rechte fehlen.
+    // Services: the list, a service's state, and an action for which permissions are missing.
     let list = services::parse(&run(services::LIST).1).expect("Liste der Dienste");
     let running = list.iter().filter(|s| s.active == services::Active::Active).count();
     println!("{} Dienste, {running} aktiv, die ersten: {:?}", list.len(), list.iter().take(4).map(|s| (&s.unit, s.active, &s.sub, s.enabled)).collect::<Vec<_>>());
@@ -39,12 +39,12 @@ fn the_commands_work_on_a_real_linux() {
     let (as_user, text) = start(As::User);
     println!("als Benutzer: {as_user:?}  ({})", text.trim().lines().next().unwrap_or_default());
     assert_eq!(as_user, Verdict::NeedsRoot, "{text}");
-    // Ist sudo hier ohne Passwort eingerichtet, gelingt es; sonst will es eines.
+    // If sudo is set up without a password here, it succeeds; otherwise it wants one.
     let (with_sudo, text) = start(As::Sudo);
     println!("mit sudo: {with_sudo:?}  ({})", text.trim().lines().next().unwrap_or_default());
     assert_eq!(with_sudo, if abilities.sudo { Verdict::Done } else { Verdict::NeedsPassword }, "{text}");
 
-    // Prozesse: zwei Messungen im Abstand, daraus die Auslastung.
+    // Processes: two measurements apart, the load from them.
     let first = processes::parse(&run(processes::LIST).1).expect("Liste der Prozesse");
     std::thread::sleep(std::time::Duration::from_millis(1200));
     let second = processes::parse(&run(processes::LIST).1).expect("Liste der Prozesse");

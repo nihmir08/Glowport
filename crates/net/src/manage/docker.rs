@@ -1,19 +1,19 @@
-//! Docker: Container auflisten, starten, stoppen, neu starten; dazu die Befehle für Logs und Shell in einem Tab.
+//! Docker: list, start, stop and restart containers; plus the commands for logs and shell in a tab.
 
 use std::collections::HashMap;
 
 use super::{sections, with_argument, As};
 
-/// Spalten von `docker ps`, getrennt durch `|`: Das Zeichen kommt in Kennung, Name und Image nicht vor.
+/// Columns of `docker ps`, separated by `|`: the character does not occur in ID, name and image.
 const PS_FORMAT: &str = "{{.ID}}|{{.Names}}|{{.Image}}|{{.Ports}}";
-/// Zustand je Container aus `docker inspect`. Die Zeiten sind UTC im Format RFC 3339.
+/// State per container from `docker inspect`. The times are UTC in RFC 3339 format.
 const INSPECT_FORMAT: &str = "{{.Id}}|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{end}}|{{.State.StartedAt}}|{{.State.FinishedAt}}|{{.State.ExitCode}}";
 const STATS_FORMAT: &str = "{{.ID}}|{{.CPUPerc}}|{{.MemUsage}}";
 
-/// Mehr Container zeigt die Liste nicht.
+/// The list shows no more containers than this.
 const MAX_CONTAINERS: usize = 500;
 
-/// Der Befehl für die Liste. Scheitert schon `docker ps`, steht die Meldung im Abschnitt `@error`.
+/// The command for the list. If `docker ps` already fails, the message is in the `@error` section.
 pub fn list_command(how: As) -> String {
     let docker = format!("{}docker", how.prefix());
     format!(
@@ -24,7 +24,7 @@ pub fn list_command(how: As) -> String {
             "exec 2>/dev/null; ",
             "echo @now; date +%s; ",
             "echo @ps; echo \"$out\"; ",
-            // Ohne Container gäbe `inspect` ohne Argumente nur eine Fehlermeldung.
+            // Without containers, `inspect` without arguments would only give an error message.
             "echo @inspect; ids=$({docker} ps -aq --no-trunc); test -n \"$ids\" && {docker} inspect --format \"{inspect}\" $ids; ",
             "echo @stats; {docker} stats --no-stream --no-trunc --format \"{stats}\"",
             "'"
@@ -44,7 +44,7 @@ pub enum State {
     Exited,
     Created,
     Dead,
-    /// Ein Zustand, den diese Version nicht kennt, oder keiner.
+    /// A state this version does not know, or none.
     Other,
 }
 
@@ -61,7 +61,7 @@ impl State {
         }
     }
 
-    /// Kürzel für die Oberfläche.
+    /// Short name for the interface.
     pub fn name(self) -> &'static str {
         match self {
             State::Running => "running",
@@ -74,7 +74,7 @@ impl State {
         }
     }
 
-    /// Reihenfolge in der Liste: Was läuft, steht oben.
+    /// Order in the list: what runs is at the top.
     fn rank(self) -> u8 {
         match self {
             State::Running => 0,
@@ -85,7 +85,7 @@ impl State {
     }
 }
 
-/// Ergebnis der Selbstprüfung eines Containers, wenn er eine hat.
+/// Result of a container's health check, if it has one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Health {
     Healthy,
@@ -105,33 +105,33 @@ impl Health {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Container {
-    /// Die volle Kennung (64 Zeichen); nur sie geht in Befehle.
+    /// The full ID (64 characters); only it goes into commands.
     pub id: String,
     pub name: String,
     pub image: String,
     pub state: State,
     pub health: Option<Health>,
-    /// Veröffentlichte Ports, etwa `8080->80/tcp`, je Paar einmal.
+    /// Published ports, e.g. `8080->80/tcp`, once per pair.
     pub ports: Vec<String>,
-    /// Sekunden, die er läuft; bei einem beendeten die Sekunden, seit er endete.
+    /// Seconds it has been running; for an exited one the seconds since it ended.
     pub since: Option<u64>,
-    /// Mit welchem Wert er endete; nur bei einem beendeten.
+    /// Exit code; only for an exited one.
     pub exit_code: Option<i32>,
-    /// Auslastung in Prozent eines Kerns; nur bei laufenden.
+    /// Load in percent of one core; only for running ones.
     pub cpu: Option<f32>,
-    /// Arbeitsspeicher in Bytes: belegt und Grenze.
+    /// Memory in bytes: used and limit.
     pub memory: Option<(u64, u64)>,
 }
 
-/// Was die Liste ergab.
+/// What the list resulted in.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Listing {
     Containers(Vec<Container>),
-    /// Docker hat abgelehnt; der Text ist seine Meldung (siehe [`super::verdict`]).
+    /// Docker refused; the text is its message (see [`super::verdict`]).
     Refused(String),
 }
 
-/// Liest die Ausgabe von [`list_command`].
+/// Reads the output of [`list_command`].
 pub fn parse(text: &str) -> Listing {
     let parts = sections(text);
     if let Some(error) = parts.get("error") {
@@ -157,13 +157,13 @@ pub fn parse(text: &str) -> Listing {
             _ => None,
         });
         let running = matches!(state, State::Running | State::Paused | State::Restarting);
-        // Ein laufender zählt ab seinem Start, ein beendeter ab seinem Ende. Die Uhr ist die des Servers.
+        // A running one counts from its start, an exited one from its end. The clock is the server's.
         let moment = state_row.and_then(|row| timestamp(row[if running { 3 } else { 4 }]));
         let since = now.zip(moment).map(|(now, moment)| (now - moment).max(0) as u64);
         let usage = stats.get(id).filter(|_| running);
         containers.push(Container {
             id: id.to_string(),
-            // Mehrere Namen (Verknüpfungen alter Art) stehen mit Komma hintereinander; der erste ist der eigene.
+            // Several names (old-style links) appear one after another with commas; the first is its own.
             name: names.split(',').next().unwrap_or_default().trim().trim_start_matches('/').to_string(),
             image: image.to_string(),
             state,
@@ -179,13 +179,13 @@ pub fn parse(text: &str) -> Listing {
     Listing::Containers(containers)
 }
 
-/// Die Zeilen eines Abschnitts mit genau `columns` Spalten, nach ihrer ersten Spalte (der Kennung).
+/// The lines of a section with exactly `columns` columns, keyed by their first column (the ID).
 fn rows<'a>(parts: &HashMap<&'a str, Vec<&'a str>>, name: &str, columns: usize) -> HashMap<&'a str, Vec<&'a str>> {
     parts.get(name).into_iter().flatten().map(|line| line.split('|').collect::<Vec<_>>()).filter(|row| row.len() == columns).map(|row| (row[0], row)).collect()
 }
 
-/// Aus `0.0.0.0:8080->80/tcp, :::8080->80/tcp, 443/tcp` wird `8080->80/tcp`: nur was veröffentlicht ist, ohne die
-/// Adresse davor, je Paar einmal.
+/// `0.0.0.0:8080->80/tcp, :::8080->80/tcp, 443/tcp` becomes `8080->80/tcp`: only what is published, without the
+/// address in front, once per pair.
 fn published(ports: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for entry in ports.split(',').map(str::trim) {
@@ -199,7 +199,7 @@ fn published(ports: &str) -> Vec<String> {
     out
 }
 
-/// Eine Größe wie `12.5MiB` oder `1.2GB` in Bytes.
+/// A size like `12.5MiB` or `1.2GB` in bytes.
 fn size(text: &str) -> Option<u64> {
     let text = text.trim();
     let split = text.find(|c: char| !(c.is_ascii_digit() || c == '.'))?;
@@ -219,8 +219,8 @@ fn size(text: &str) -> Option<u64> {
     Some((number * factor).round() as u64)
 }
 
-/// Sekunden seit 1970 aus einer Zeit wie `2026-10-11T20:52:44.123456789Z` oder mit `+02:00` am Ende. Das Jahr 1
-/// steht bei Docker für „nie“.
+/// Seconds since 1970 from a time like `2026-10-11T20:52:44.123456789Z` or with `+02:00` at the end. The year 1
+/// means “never” in Docker.
 fn timestamp(text: &str) -> Option<i64> {
     let text = text.trim();
     let (date, rest) = text.split_once('T')?;
@@ -229,7 +229,7 @@ fn timestamp(text: &str) -> Option<i64> {
     if year < 1970 || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
         return None;
     }
-    // Die Zone beginnt beim ersten Zeichen, das nicht zur Uhrzeit gehört.
+    // The zone starts at the first character that does not belong to the time of day.
     let zone_at = rest.find(['Z', '+', '-'])?;
     let (clock, zone) = rest.split_at(zone_at);
     let mut clock = clock.split(':');
@@ -247,7 +247,7 @@ fn timestamp(text: &str) -> Option<i64> {
             }
         }
     };
-    // Tage seit 1970 nach dem bürgerlichen Kalender.
+    // Days since 1970 by the civil calendar.
     let (y, m) = if month <= 2 { (year - 1, month + 9) } else { (year, month - 3) };
     let era = y.div_euclid(400);
     let yoe = y.rem_euclid(400);
@@ -256,7 +256,7 @@ fn timestamp(text: &str) -> Option<i64> {
     Some(days * 86_400 + hour * 3600 + minute * 60 + second - offset)
 }
 
-/// Eine Kennung, wie Docker sie vergibt: 12 bis 64 Zeichen aus `0-9a-f`.
+/// An ID as Docker assigns it: 12 to 64 characters from `0-9a-f`.
 pub fn valid_id(id: &str) -> bool {
     (12..=64).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
@@ -277,28 +277,28 @@ impl Action {
         }
     }
 
-    /// Der Befehl für einen Container. `None`: Das ist keine Kennung.
+    /// The command for a container. `None`: that is not an ID.
     pub fn command(self, id: &str, how: As) -> Option<String> {
         valid_id(id).then(|| with_argument(&format!("{}docker {} \"$1\"", how.prefix(), self.verb()), id))
     }
 
-    /// Derselbe Befehl, wie ihn ein Mensch tippt (für [`super::typed`]).
+    /// The same command as a human would type it (for [`super::typed`]).
     pub fn typed(self, id: &str) -> Option<String> {
         valid_id(id).then(|| format!("docker {} {}", self.verb(), short(id)))
     }
 }
 
-/// Die kurze Form einer Kennung, wie Docker sie zeigt.
+/// The short form of an ID, as Docker shows it.
 fn short(id: &str) -> &str {
     &id[..id.len().min(12)]
 }
 
-/// Was in einen neuen Tab getippt wird, damit dort die Logs mitlaufen. `sudo`: Die Liste ging nur mit sudo.
+/// What is typed into a new tab so the logs follow along there. `sudo`: the list only worked with sudo.
 pub fn logs_line(id: &str, sudo: bool) -> Option<String> {
     valid_id(id).then(|| format!("{}docker logs --tail 200 -f {}", if sudo { "sudo " } else { "" }, short(id)))
 }
 
-/// Was in einen neuen Tab getippt wird, damit dort eine Shell im Container aufgeht: `bash`, wo es sie gibt.
+/// What is typed into a new tab so a shell inside the container opens there: `bash` where it exists.
 pub fn shell_line(id: &str, sudo: bool) -> Option<String> {
     valid_id(id).then(|| format!("{}docker exec -it {} sh -c 'command -v bash >/dev/null 2>&1 && exec bash || exec sh'", if sudo { "sudo " } else { "" }, short(id)))
 }
@@ -312,8 +312,8 @@ mod tests {
     const OLD: &str = "0123456789ab0123456789ab0123456789ab0123456789ab0123456789ab0123";
     const NEW: &str = "ffeeddccbbaaffeeddccbbaaffeeddccbbaaffeeddccbbaaffeeddccbbaaffee";
 
-    /// So sieht die Ausgabe von [`list_command`] aus (nach der Dokumentation von Docker zusammengestellt, nicht
-    /// an einem Server aufgezeichnet).
+    /// This is what the output of [`list_command`] looks like (assembled from Docker's documentation, not
+    /// recorded on a server).
     fn sample() -> String {
         format!(
             "@now\n1791752000\n@ps\n\
@@ -343,7 +343,7 @@ mod tests {
         let web = &list[1];
         assert_eq!((web.id.as_str(), web.image.as_str(), web.state, web.health), (WEB, "nginx:1.27", State::Running, Some(Health::Healthy)));
         assert_eq!(web.ports, ["8080->80/tcp", "8443->443/tcp"], "ohne Adresse, je Paar einmal, nur Veröffentlichtes");
-        // 1791752000 ist der 11.10.2026 20:53:20 UTC: 36 Sekunden nach dem Start.
+        // 1791752000 is 2026-10-11 20:53:20 UTC: 36 seconds after the start.
         assert_eq!((web.since, web.exit_code, web.cpu, web.memory), (Some(36), None, Some(0.07), Some((13_107_200, 8_160_437_862))));
 
         let db = &list[0];
@@ -363,10 +363,10 @@ mod tests {
         let Listing::Refused(text) = parse(refused) else { panic!("nicht abgelehnt") };
         assert_eq!(super::super::verdict(false, &text, As::User), super::super::Verdict::NeedsRoot);
         assert_eq!(parse("@error\nsudo: a password is required\n"), Listing::Refused("sudo: a password is required".into()));
-        // Docker läuft, hat aber keinen Container.
+        // Docker runs but has no container.
         assert_eq!(parse("@now\n1791752000\n@ps\n\n@inspect\n@stats\n"), Listing::Containers(vec![]));
         assert_eq!(parse(""), Listing::Containers(vec![]));
-        // Ohne die Abschnitte dahinter bleibt, was `ps` weiß.
+        // Without the sections after it, what `ps` knows remains.
         let Listing::Containers(list) = parse(&format!("@ps\n{WEB}|web|nginx|\n")) else { panic!() };
         assert_eq!((list[0].state, list[0].since, list[0].cpu), (State::Other, None, None));
     }
@@ -404,7 +404,7 @@ mod tests {
         let plain = list_command(As::User);
         assert!(plain.starts_with("sh -c 'export LC_ALL=C; out=$(docker ps -a --no-trunc --format \"{{.ID}}|{{.Names}}|{{.Image}}|{{.Ports}}\" 2>&1) || { echo @error; echo \"$out\"; exit 1; }; "), "{plain}");
         assert!(plain.ends_with("echo @stats; docker stats --no-stream --no-trunc --format \"{{.ID}}|{{.CPUPerc}}|{{.MemUsage}}\"'"), "{plain}");
-        // Das Skript steht in einfachen Anführungszeichen und enthält selbst keine.
+        // The script is in single quotes and contains none itself.
         assert_eq!(plain.matches('\'').count(), 2);
         let sudo = list_command(As::Sudo);
         assert_eq!(sudo.matches("sudo -n -- docker").count(), 4, "jeder Aufruf von Docker mit sudo");

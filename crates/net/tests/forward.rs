@@ -1,4 +1,4 @@
-//! Port-Weiterleitungen und Befehle ohne Terminal gegen den eigenen Testserver.
+//! Port forwarding and commands without a terminal against the own test server.
 
 use std::{
     net::SocketAddr,
@@ -26,7 +26,7 @@ fn connect(address: SocketAddr, password: Option<&str>) -> Connect {
     Connect { host: address.ip().to_string(), port: address.port(), user: "tester".into(), password: password.map(|p| Secret::new(p.into())), ..Connect::default() }
 }
 
-/// Ein Ziel hinter dem Server: antwortet auf alles mit „echo:“ davor.
+/// A destination behind the server: answers everything with “echo:” in front.
 async fn echo() -> SocketAddr {
     let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let address = listener.local_addr().unwrap();
@@ -45,13 +45,13 @@ async fn echo() -> SocketAddr {
     address
 }
 
-/// Ein Port, der gerade frei ist.
+/// A port that is free right now.
 async fn free_port() -> u16 {
     TcpListener::bind(("127.0.0.1", 0)).await.unwrap().local_addr().unwrap().port()
 }
 
-/// Wartet auf das Ergebnis des Aufbaus und vertraut dabei jedem Server-Schlüssel. Rückfragen nach einem Passwort
-/// beantwortet `password`; ohne Vorgabe gelten sie als Fehler des Tests.
+/// Waits for the result of setting up and trusts every server key on the way. `password` answers prompts
+/// for a password; without a value they count as a test failure.
 async fn settle(session: &mut Session, password: Option<&str>) -> Result<Tunnel, End> {
     loop {
         match timeout(Duration::from_secs(10), session.events.recv()).await.expect("nichts geschah").expect("Aufbau verschwand ohne Ergebnis") {
@@ -78,7 +78,7 @@ async fn exchange(stream: &mut TcpStream, text: &[u8]) -> Vec<u8> {
     reply
 }
 
-/// Wartet, bis eine Bedingung zutrifft; Zähler und Aufräumen laufen in eigenen Aufgaben.
+/// Waits until a condition holds; counters and cleanup run in tasks of their own.
 async fn eventually(what: &str, check: impl Fn() -> bool) {
     for _ in 0..100 {
         if check() {
@@ -107,7 +107,7 @@ async fn a_local_port_leads_through_the_server_to_its_target() {
     drop(second);
     eventually("beide Verbindungen sind zu", || counters.open.load(Ordering::Relaxed) == 0).await;
 
-    // Ausschalten gibt den Port wieder frei.
+    // Switching off frees the port again.
     drop(tunnel);
     eventually("der Port ist wieder frei", || std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()).await;
 }
@@ -119,7 +119,7 @@ async fn a_dynamic_port_speaks_socks() {
     let counters = Arc::new(Counters::default());
     let (_tunnel, port) = local(running.address, Rule::Dynamic, &counters).await;
 
-    // SOCKS 5 mit einer Adresse als Name.
+    // SOCKS 5 with an address as a name.
     let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
     stream.write_all(&[5, 1, 0]).await.unwrap();
     let mut chosen = [0u8; 2];
@@ -134,7 +134,7 @@ async fn a_dynamic_port_speaks_socks() {
     assert_eq!(answer[..2], [5, 0], "verbunden");
     assert_eq!(exchange(&mut stream, b"socks").await, b"echo:socks");
 
-    // SOCKS 4 mit einer Adresse als Zahl.
+    // SOCKS 4 with an address as a number.
     let mut old = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
     old.write_all(&[&[4u8, 1][..], &target.port().to_be_bytes(), &[127, 0, 0, 1, 0]].concat()).await.unwrap();
     let mut answer = [0u8; 8];
@@ -142,7 +142,7 @@ async fn a_dynamic_port_speaks_socks() {
     assert_eq!(answer[..2], [0, 0x5A]);
     assert_eq!(exchange(&mut old, b"vier").await, b"echo:vier");
 
-    // Ein Ziel, das es nicht gibt: Die Absage kommt in der Sprache von SOCKS, die Verbindung zum Server bleibt.
+    // A destination that does not exist: the refusal comes in the language of SOCKS, the connection to the server stays.
     let dead = free_port().await;
     let mut refused = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
     refused.write_all(&[5, 1, 0]).await.unwrap();
@@ -169,17 +169,17 @@ async fn a_remote_port_leads_back_to_this_machine() {
     let mut session = forward::open(connect(running.address, Some("richtig")), rule.clone(), None, Arc::clone(&counters));
     let tunnel = settle(&mut session, None).await.expect("Weiterleitung kam nicht zustande");
 
-    // Der Testserver lauscht jetzt selbst; was dort ankommt, landet beim Ziel auf dieser Seite.
+    // The test server now listens itself; whatever arrives there ends up at the destination on this side.
     let mut stream = TcpStream::connect(("127.0.0.1", at_server)).await.unwrap();
     assert_eq!(exchange(&mut stream, b"von draussen").await, b"echo:von draussen");
     assert_eq!((counters.total.load(Ordering::Relaxed), counters.sent.load(Ordering::Relaxed), counters.received.load(Ordering::Relaxed)), (1, 12, 17));
 
-    // Ausschalten nimmt dem Server den Port wieder.
+    // Switching off takes the port away from the server again.
     drop(stream);
     drop(tunnel);
     eventually("der Server lauscht nicht mehr", || std::net::TcpListener::bind(("127.0.0.1", at_server)).is_ok()).await;
 
-    // Ein Server, der das nicht erlaubt, lehnt ab; die Regel kommt nicht zustande.
+    // A server that does not allow this refuses; the rule does not come about.
     let strict = server::start(Options { forwarding: false, ..options() }, server::key(2)).await.unwrap();
     let mut session = forward::open(connect(strict.address, Some("richtig")), rule, None, Arc::new(Counters::default()));
     assert_eq!(settle(&mut session, None).await.err(), Some(End::Refused(format!("127.0.0.1:{at_server}"))));
@@ -189,7 +189,7 @@ async fn a_remote_port_leads_back_to_this_machine() {
 async fn a_lost_connection_ends_the_tunnel() {
     let running = server::start(options(), server::key(1)).await.unwrap();
     let counters = Arc::new(Counters::default());
-    // Dieses Ziel bringt den Testserver dazu, die Verbindung zu kappen.
+    // This destination makes the test server cut the connection.
     let (mut tunnel, port) = local(running.address, Rule::Local { host: "disconnect.test".into(), port: 1 }, &counters).await;
     let _ = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
     let end = timeout(Duration::from_secs(10), tunnel.closed()).await.expect("der Abriss blieb unbemerkt");
@@ -202,7 +202,7 @@ async fn setting_up_asks_like_a_session_and_can_be_cancelled() {
     let target = echo().await;
     let rule = Rule::Local { host: "127.0.0.1".into(), port: target.port() };
 
-    // Ohne hinterlegtes Passwort kommt die Rückfrage; mit der Antwort steht die Weiterleitung.
+    // Without a stored password the prompt comes; with the answer the forward stands.
     let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let mut session = forward::open(connect(running.address, None), rule.clone(), Some(listener), Arc::new(Counters::default()));
@@ -210,7 +210,7 @@ async fn setting_up_asks_like_a_session_and_can_be_cancelled() {
     let mut stream = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
     assert_eq!(exchange(&mut stream, b"ok").await, b"echo:ok");
 
-    // Abbrechen, während die Rückfrage offen ist: Es endet wie vom Nutzer beendet, und der Port ist wieder frei.
+    // Cancel while the prompt is open: it ends as ended by the user, and the port is free again.
     let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let mut session = forward::open(connect(running.address, None), rule.clone(), Some(listener), Arc::new(Counters::default()));
@@ -234,7 +234,7 @@ async fn setting_up_asks_like_a_session_and_can_be_cancelled() {
     drop(reply);
     eventually("der Port ist wieder frei", || std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()).await;
 
-    // Ein falsches Passwort lässt sich wiederholen; Ablehnen des Schlüssels endet ohne Weiterleitung.
+    // A wrong password can be retried; refusing the key ends without a forward.
     let mut session = forward::open(connect(running.address, None), rule, Some(TcpListener::bind(("127.0.0.1", 0)).await.unwrap()), Arc::new(Counters::default()));
     let end = loop {
         match timeout(Duration::from_secs(10), session.events.recv()).await.unwrap().unwrap() {
@@ -246,7 +246,7 @@ async fn setting_up_asks_like_a_session_and_can_be_cancelled() {
     assert_eq!(end, End::HostKeyRejected);
 }
 
-/// Legt ein Heimatverzeichnis für den Testserver an; mit ihm führt er Befehle wirklich aus.
+/// Creates a home directory for the test server; with it, it really runs commands.
 struct Home(PathBuf);
 impl Home {
     fn new(name: &str) -> Self {
@@ -277,20 +277,20 @@ async fn commands_report_output_errors_and_status() {
     let fine = run_command(&ready, "echo eins; echo zwei", minute, 1024, |_, _, _| true).await.unwrap();
     assert_eq!((text(&fine.stdout).as_str(), fine.exit_status, fine.truncated), ("eins\nzwei\n", Some(0), false));
 
-    // Die Fehlerausgabe gehört zum Ergebnis, der Fehlercode auch.
+    // The error output is part of the result, and so is the exit code.
     let failed = run_command(&ready, "echo vorher; echo kaputt >&2; exit 3", minute, 1024, |_, _, _| true).await.unwrap();
     assert_eq!(failed.exit_status, Some(3));
     assert!(text(&failed.stdout).contains("vorher") && text(&failed.stdout).contains("kaputt"), "{}", text(&failed.stdout));
 
-    // Mehr als erlaubt wird abgeschnitten und so gemeldet.
+    // More than allowed is cut off and reported as such.
     let long = run_command(&ready, "printf '%0100d' 7", minute, 40, |_, _, _| true).await.unwrap();
     assert_eq!((long.stdout.len(), long.truncated, long.exit_status), (40, true, Some(0)));
 
-    // Ein Befehl, der zu lange läuft, endet mit einer eigenen Meldung.
+    // A command that runs too long ends with a message of its own.
     let slow = run_command(&ready, "sleep 3", Duration::from_millis(400), 1024, |_, _, _| true).await;
     assert_eq!(slow.unwrap_err(), End::ConnectionLost(COMMAND_TIMED_OUT.into()));
 
-    // Ohne Rückfragen: fehlendes Passwort und unbekannter Server scheitern sofort.
+    // Without prompts: a missing password and an unknown server fail at once.
     assert_eq!(run_command(&connect(running.address, None), "true", minute, 1024, |_, _, _| true).await.unwrap_err(), End::AuthFailed);
     assert_eq!(run_command(&ready, "true", minute, 1024, |_, _, _| false).await.unwrap_err(), End::HostKeyRejected);
 }
@@ -301,7 +301,7 @@ async fn the_measuring_command_runs_in_a_plain_shell() {
         eprintln!("ohne sh im Pfad übersprungen");
         return;
     }
-    // Auf diesem Rechner gibt es kein /proc; geprüft wird, dass der Befehl als Ganzes läuft und seine Abschnitte nennt.
+    // This machine has no /proc; the test checks that the command runs as a whole and names its sections.
     let home = Home::new("messung");
     let running = server::start(Options { home: Some(home.0.clone()), ..options() }, server::key(1)).await.unwrap();
     let output = run_command(&connect(running.address, Some("richtig")), stats::COMMAND, Duration::from_secs(30), 256 * 1024, |_, _, _| true).await.unwrap();
@@ -315,8 +315,8 @@ async fn the_measuring_command_runs_in_a_plain_shell() {
     }
 }
 
-/// Kein Test, sondern Messwerte: wie schnell Daten durch eine lokale Weiterleitung gehen und was eine neue Verbindung
-/// kostet, alles auf diesem Rechner gegen den eigenen Testserver; daneben dieselbe Menge ohne Tunnel. Aufruf:
+/// Not a test but measurements: how fast data goes through a local forward and what a new connection
+/// costs, all on this machine against the own test server; next to it the same amount without a tunnel. Run:
 /// `cargo test --release -p glowport-net --test forward measures_tunnel -- --ignored --nocapture`
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
@@ -325,7 +325,7 @@ async fn measures_tunnel_throughput() {
     const SIZE: usize = 512 * 1024 * 1024;
     const CONNECTIONS: u32 = 300;
 
-    // Ein Ziel, das alles schluckt und am Ende sagt, wie viel es war.
+    // A destination that swallows everything and says at the end how much it was.
     let sink = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let sink_port = sink.local_addr().unwrap().port();
     tokio::spawn(async move {

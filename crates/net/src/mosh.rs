@@ -1,7 +1,7 @@
-//! Mosh: Angemeldet wird per SSH, danach läuft das Terminal über UDP (`mosh-client`) und übersteht Netzwechsel
-//! und Aussetzer. Die SSH-Verbindung bleibt daneben offen für die Kanäle der Seitenleiste (Dateien, Server-Info);
-//! reißt sie ab, baut sie sich beim nächsten Bedarf neu auf, ohne zu fragen, mit dem, was beim ersten Mal
-//! bestätigt und eingegeben wurde. Geht Mosh nicht (fehlt, nur IPv6, UDP gesperrt), läuft die Sitzung per SSH weiter.
+//! Mosh: signing in happens over SSH, then the terminal runs over UDP (`mosh-client`) and survives network changes
+//! and dropouts. The SSH connection stays open next to it for the sidebar's channels (files, server info);
+//! if it drops, it is re-established the next time it is needed, without asking, with what was
+//! confirmed and entered the first time. If Mosh does not work (missing, IPv6 only, UDP blocked), the session continues over SSH.
 //!
 //! Beschreibung: `docs/mosh.md`.
 
@@ -22,53 +22,53 @@ use tokio::{
 
 use crate::{emit, establish, establish_with, files, lost, os, Command, Connect, End, Event, Link, Phase, SecretKind, Secret};
 
-/// Wie lange `mosh-server new` brauchen darf, bis es Port und Schlüssel nennt.
+/// How long `mosh-server new` may take until it names port and key.
 const START_LIMIT: Duration = Duration::from_secs(15);
-/// Wie lange auf das erste Bild über UDP gewartet wird. Kommt keins, sperrt meist eine Firewall die Ports.
+/// How long to wait for the first screen over UDP. If none comes, a firewall usually blocks the ports.
 const ATTACH_LIMIT: Duration = Duration::from_secs(10);
-/// So viel liest Glowport höchstens aus der Antwort von `mosh-server`.
+/// Glowport reads at most this much of `mosh-server`'s answer.
 const MAX_START_OUTPUT: usize = 16 * 1024;
-/// Ab so viel Stille meldet die Bibliothek eine Unterbrechung (`NO_RECENT_CONTACT_MS` in `mosh-client`).
+/// From this much silence on, the library reports an interruption (`NO_RECENT_CONTACT_MS` in `mosh-client`).
 const SILENT_AFTER: Duration = Duration::from_millis(6_500);
-/// Die SSH-Verbindung daneben wird höchstens so oft von selbst neu aufgebaut.
+/// The SSH connection next to it is re-established by itself at most this often.
 const RELINK_PAUSE: Duration = Duration::from_secs(15);
-/// So lange darf das Öffnen eines Kanals auf der SSH-Verbindung daneben dauern, bevor sie als abgerissen gilt.
+/// Opening a channel on the SSH connection next to it may take this long before it counts as dropped.
 const OPEN_LIMIT: Duration = Duration::from_secs(5);
-/// Größte Eingabe je Befehl an die Bibliothek (`MAX_INPUT_COMMAND_BYTES`).
+/// Largest input per command to the library (`MAX_INPUT_COMMAND_BYTES`).
 const MAX_INPUT: usize = 64 * 1024;
 const MAX_DETAIL: usize = 160;
 
-/// Lokales Echo: zeigt Getipptes, bevor der Server es bestätigt.
+/// Local echo: shows typed text before the server confirms it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Predict {
-    /// Nur bei langsamer Leitung, wie das Original.
+    /// Only on a slow line, like the original.
     #[default]
     Adaptive,
     Always,
     Never,
 }
 
-/// Mosh statt einer SSH-Shell. Gesetzt in [`Connect::mosh`].
+/// Mosh instead of an SSH shell. Set in [`Connect::mosh`].
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Mosh {
     pub predict: Predict,
-    /// UDP-Port oder Bereich für `mosh-server -p`, etwa `60001` oder `60001:60010`. Vom Aufrufer geprüft.
+    /// UDP port or range for `mosh-server -p`, e.g. `60001` or `60001:60010`. Checked by the caller.
     pub port: Option<String>,
-    /// Pfad zu `mosh-server`, wenn er nicht im Suchpfad liegt. Vom Aufrufer geprüft (keine Leerzeichen, keine
-    /// Zeichen, die die Shell deutet).
+    /// Path to `mosh-server` if it is not on the search path. Checked by the caller (no spaces, no
+    /// characters the shell interprets).
     pub server: Option<String>,
 }
 
-/// Warum die Sitzung statt über Mosh per SSH läuft.
+/// Why the session runs over SSH instead of Mosh.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Fallback {
-    /// `mosh-server` gibt es auf dem Server nicht.
+    /// `mosh-server` does not exist on the server.
     Missing,
-    /// Der Host hat keine IPv4-Adresse; die Bibliothek kann nur IPv4.
+    /// The host has no IPv4 address; the library can only do IPv4.
     Ipv6,
-    /// Über UDP kam keine Antwort.
+    /// No answer came over UDP.
     Udp,
-    /// `mosh-server` hat einen Fehler gemeldet; seine erste Zeile.
+    /// `mosh-server` reported an error; its first line.
     Server(String),
 }
 
@@ -90,26 +90,26 @@ impl Fallback {
     }
 }
 
-/// Was eine Mosh-Sitzung über sich meldet.
+/// What a Mosh session reports about itself.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MoshEvent {
-    /// Das Terminal läuft über Mosh.
+    /// The terminal runs over Mosh.
     Active,
-    /// Mosh kam nicht zustande; die Sitzung läuft per SSH.
+    /// Mosh did not come about; the session runs over SSH.
     Fallback(Fallback),
-    /// Sekunden ohne Nachricht vom Server; `None`, sobald er wieder antwortet.
+    /// Seconds without a message from the server; `None` as soon as it answers again.
     Silent(Option<u32>),
-    /// Steht die SSH-Verbindung daneben (für Seitenleiste und Dateien)?
+    /// Is the SSH connection next to it up (for sidebar and files)?
     Side(bool),
 }
 
-/// Was beim ersten Anmelden bestätigt und eingegeben wurde, damit die SSH-Verbindung daneben ohne Rückfrage
-/// wiederkommt. Lebt nur im Speicher dieser Sitzung.
+/// What was confirmed and entered at the first sign-in, so the SSH connection next to it comes back without
+/// a prompt. Lives only in this session's memory.
 #[derive(Default)]
 pub(crate) struct Memory {
-    /// Bestätigte Server: Adresse und Port → Fingerabdruck.
+    /// Confirmed servers: address and port → fingerprint.
     keys: HashMap<(String, u16), String>,
-    /// Eingegebene Passwörter je Station (`benutzer@adresse`).
+    /// Entered passwords per hop (`user@address`).
     passwords: HashMap<String, Secret>,
 }
 
@@ -119,18 +119,18 @@ fn memory(shared: &Shared) -> std::sync::MutexGuard<'_, Memory> {
     shared.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
-/// Merkt sich einen bestätigten Server-Schlüssel.
+/// Remembers a confirmed server key.
 pub(crate) fn remember_key(shared: &Shared, host: &str, port: u16, fingerprint: &str) {
     memory(shared).keys.insert((host.to_string(), port), fingerprint.to_string());
 }
 
-/// Merkt sich ein angenommenes Passwort für eine Station.
+/// Remembers an accepted password for a hop.
 pub(crate) fn remember_password(shared: &Shared, station: &str, password: &Secret) {
     memory(shared).passwords.insert(station.to_string(), password.clone());
 }
 
-/// Baut die SSH-Verbindung daneben neu auf, ohne jemanden zu fragen: nur zu Servern, die beim ersten Mal bestätigt
-/// wurden, und nur mit dem, was gespeichert ist oder beim ersten Mal eingegeben wurde.
+/// Re-establishes the SSH connection next to it without asking anyone: only to servers confirmed the
+/// first time, and only with what is stored or was entered the first time.
 async fn relink_quietly(connect: &Connect, shared: &Shared) -> Result<Link, End> {
     let (event_tx, mut events) = mpsc::channel(16);
     let answers = async {
@@ -155,7 +155,7 @@ async fn relink_quietly(connect: &Connect, shared: &Shared) -> Result<Link, End>
     }
 }
 
-/// Die IPv4-Adresse, an die UDP geht: die der SSH-Verbindung, sonst wie dieser PC den Namen auflöst.
+/// The IPv4 address UDP goes to: that of the SSH connection, otherwise as this PC resolves the name.
 async fn udp_address(link: &Link, connect: &Connect) -> Result<Ipv4Addr, Fallback> {
     if let Some(SocketAddr::V4(address)) = link.peer {
         return Ok(*address.ip());
@@ -173,7 +173,7 @@ async fn udp_address(link: &Link, connect: &Connect) -> Result<Ipv4Addr, Fallbac
         .ok_or(Fallback::Ipv6)
 }
 
-/// Sprache für `mosh-server`: wie am Host eingestellt, sonst eine UTF-8-Sprache, die fast jedes System kennt.
+/// Language for `mosh-server`: as set on the host, otherwise a UTF-8 locale almost every system knows.
 fn language(connect: &Connect) -> String {
     connect
         .env
@@ -184,7 +184,7 @@ fn language(connect: &Connect) -> String {
         .unwrap_or_else(|| "C.UTF-8".into())
 }
 
-/// Der Befehl, der auf dem Server die Gegenstelle startet.
+/// The command that starts the counterpart on the server.
 pub(crate) fn server_command(mosh: &Mosh, lang: &str) -> String {
     let program = mosh.server.as_deref().filter(|path| !path.is_empty()).unwrap_or("mosh-server");
     let mut command = format!("{program} new -s -c 256 -l LANG={lang}");
@@ -195,14 +195,14 @@ pub(crate) fn server_command(mosh: &Mosh, lang: &str) -> String {
     command
 }
 
-/// Erste lesbare Zeile einer Fehlermeldung, gekürzt und ohne Steuerzeichen.
+/// First readable line of an error message, shortened and without control characters.
 fn first_line(bytes: &[u8]) -> String {
     let text = String::from_utf8_lossy(bytes);
     let line = text.lines().map(str::trim).find(|line| !line.is_empty()).unwrap_or("");
     line.chars().filter(|c| !c.is_control()).take(MAX_DETAIL).collect()
 }
 
-/// Liest, was `mosh-server` antwortet: Ausgabe und Fehlerausgabe getrennt, beides begrenzt.
+/// Reads what `mosh-server` answers: output and error output separately, both limited.
 async fn start_server(handle: &client::Handle<crate::Client>, command: &str) -> Result<(Vec<u8>, Vec<u8>, Option<u32>), End> {
     let mut channel = handle.channel_open_session().await.map_err(lost)?;
     channel.exec(true, command).await.map_err(lost)?;
@@ -223,16 +223,16 @@ async fn start_server(handle: &client::Handle<crate::Client>, command: &str) -> 
             target.extend_from_slice(&data[..data.len().min(room)]);
         }
     };
-    // Bleibt die Antwort aus, entscheidet, was bis dahin kam.
+    // If the answer does not come, what arrived until then decides.
     let _ = timeout(START_LIMIT, read).await;
     Ok((stdout, stderr, status))
 }
 
-/// Die laufende Aufgabe der Bibliothek: Sie treibt UDP, Synchronisation und Vorhersage.
+/// The library's running task: it drives UDP, synchronisation and prediction.
 pub(crate) type Running = tokio::task::JoinHandle<Result<SessionExit, mosh_client::SessionError>>;
 
-/// Startet `mosh-server` und baut die Mosh-Sitzung auf. `Err(Ok(Fallback))`: Mosh geht hier nicht, die SSH-Verbindung
-/// steht aber; `Err(Err(End))`: die Verbindung selbst ist weg.
+/// Starts `mosh-server` and sets up the Mosh session. `Err(Ok(Fallback))`: Mosh does not work here, but the SSH connection
+/// stands; `Err(Err(End))`: the connection itself is gone.
 pub(crate) async fn attach(link: &Link, connect: &Connect, mosh: &Mosh, size: (u32, u32)) -> Result<(Session, Running), Result<Fallback, End>> {
     let address = udp_address(link, connect).await.map_err(Ok)?;
     let (stdout, stderr, status) = start_server(&link.handle, &server_command(mosh, &language(connect))).await.map_err(Err)?;
@@ -266,17 +266,17 @@ pub(crate) async fn attach(link: &Link, connect: &Connect, mosh: &Mosh, size: (u
     Ok((session, running))
 }
 
-/// Was die Hilfsaufgaben der SSH-Verbindung daneben der Schleife melden.
+/// What the helper tasks of the SSH connection next to it report to the loop.
 enum Side {
-    /// Die Verbindung antwortet nicht mehr; sie wird beim nächsten Bedarf neu aufgebaut.
+    /// The connection no longer answers; it is re-established the next time it is needed.
     Gone,
-    /// Eine neue Verbindung steht.
+    /// A new connection is up.
     Back(Link),
 }
 
-/// Reicht Ein- und Ausgabe zwischen Aufrufer und Mosh durch, bis die Shell endet oder der Nutzer schließt. Kanäle
-/// für die Seitenleiste kommen von der SSH-Verbindung daneben; alles, was auf sie warten müsste, läuft in eigenen
-/// Aufgaben, damit das Terminal nie stockt.
+/// Passes input and output between caller and Mosh until the shell ends or the user closes. Channels
+/// for the sidebar come from the SSH connection next to it; everything that would have to wait for it runs in
+/// tasks of its own, so the terminal never stalls.
 pub(crate) async fn drive(connect: Arc<Connect>, link: Link, shared: Shared, mut session: Session, mut running: Running, events: &mpsc::Sender<Event>, commands: &mut mpsc::UnboundedReceiver<Command>) -> Result<End, End> {
     emit(events, Event::Mosh(MoshEvent::Active)).await?;
     emit(events, Event::Phase(Phase::Connected)).await?;
@@ -312,7 +312,7 @@ pub(crate) async fn drive(connect: Arc<Connect>, link: Link, shared: Shared, mut
         tokio::select! {
             output = session.next_output(), if output_open && !paused => match output {
                 Some(bytes) => emit(events, Event::Output(bytes)).await?,
-                // Die Aufgabe ist am Ende; ihr Ergebnis kommt gleich.
+                // The task has ended; its result follows shortly.
                 None => output_open = false,
             },
             change = reach.changed(), if reach_open => match change {
@@ -361,7 +361,7 @@ pub(crate) async fn drive(connect: Arc<Connect>, link: Link, shared: Shared, mut
                     Some(link) => open_side(Arc::clone(link), reply, side_tx.clone()),
                     None => {
                         drop(reply.send(None));
-                        // Ohne Rückfrage neu aufbauen, aber nicht bei jedem Blick der Seitenleiste.
+                        // Re-establish without a prompt, but not on every glance of the sidebar.
                         if !relinking && last_relink.is_none_or(|at| at.elapsed() >= RELINK_PAUSE) {
                             relinking = true;
                             last_relink = Some(Instant::now());
@@ -374,7 +374,7 @@ pub(crate) async fn drive(connect: Arc<Connect>, link: Link, shared: Shared, mut
                     }
                 },
                 Some(Command::Relink) => {
-                    // Auf Wunsch des Nutzers: mit Rückfragen, falls nötig.
+                    // At the user's request: with prompts if necessary.
                     if side.is_none() && !relinking {
                         relinking = true;
                         last_relink = Some(Instant::now());
@@ -399,7 +399,7 @@ pub(crate) async fn drive(connect: Arc<Connect>, link: Link, shared: Shared, mut
             },
         }
     };
-    // Was vor dem Ende noch auf dem Bildschirm ankam, gehört zur Sitzung.
+    // What still arrived on screen before the end belongs to the session.
     while let Ok(Some(bytes)) = timeout(Duration::from_millis(200), session.next_output()).await {
         emit(events, Event::Output(bytes)).await?;
     }
@@ -413,7 +413,7 @@ fn seconds(since: Instant) -> u32 {
     u32::try_from(since.elapsed().as_secs()).unwrap_or(u32::MAX)
 }
 
-/// Öffnet einen Kanal auf der SSH-Verbindung daneben, in eigener Aufgabe. Antwortet sie nicht, gilt sie als weg.
+/// Opens a channel on the SSH connection next to it, in a task of its own. If it does not answer, it counts as gone.
 fn open_side(link: Arc<Link>, reply: oneshot::Sender<Option<files::Opened>>, side_tx: mpsc::Sender<Side>) {
     tokio::spawn(async move {
         if link.handle.is_closed() {
@@ -423,7 +423,7 @@ fn open_side(link: Arc<Link>, reply: oneshot::Sender<Option<files::Opened>>, sid
         }
         match timeout(OPEN_LIMIT, link.handle.channel_open_session()).await {
             Ok(Ok(channel)) => drop(reply.send(Some(files::Opened(channel)))),
-            // Abgelehnt (etwa zu viele Kanäle): Die Verbindung steht trotzdem.
+            // Refused (e.g. too many channels): the connection stands nevertheless.
             Ok(Err(_)) if !link.handle.is_closed() => drop(reply.send(None)),
             _ => {
                 let _ = reply.send(None);
@@ -450,7 +450,7 @@ mod tests {
         assert_eq!(language(&connect), "C.UTF-8");
         connect.env = vec![("LANG".into(), "de_DE.UTF-8".into())];
         assert_eq!(language(&connect), "de_DE.UTF-8");
-        // Was die Shell deuten könnte, kommt nicht in den Befehl.
+        // Whatever the shell could interpret does not go into the command.
         connect.env = vec![("LANG".into(), "x; rm -rf /".into())];
         assert_eq!(language(&connect), "C.UTF-8");
     }

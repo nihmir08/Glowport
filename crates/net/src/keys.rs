@@ -1,7 +1,7 @@
-//! Schlüsselpaare erzeugen, lesen und schreiben.
+//! Generating, reading and writing key pairs.
 //!
-//! Hinein kommen Dateien, wie `ssh-keygen`, OpenSSL oder PuTTY sie schreiben. Heraus kommt immer dieselbe Form:
-//! der private Schlüssel im OpenSSH-Format ohne Passphrase, so wie er im Tresor liegt.
+//! In go files as `ssh-keygen`, OpenSSL or PuTTY write them. Out always comes the same form:
+//! the private key in OpenSSH format without passphrase, as stored in the vault.
 
 use russh::keys::{
     self,
@@ -24,75 +24,75 @@ pub enum Kind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {
     Openssh,
-    /// PKCS#1, PKCS#8 oder SEC1 in PEM-Hülle.
+    /// PKCS#1, PKCS#8 or SEC1 in a PEM wrapper.
     Pem,
-    /// PuTTY, Fassung 2 oder 3.
+    /// PuTTY, version 2 or 3.
     Ppk,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyError {
-    /// Kein privater Schlüssel in einem bekannten Format.
+    /// No private key in a known format.
     Unreadable,
-    /// Lesbar, aber eine Art, die Glowport nicht führt (etwa DSA).
+    /// Readable, but a kind Glowport does not support (e.g. DSA).
     Unsupported,
     PassphraseRequired,
     WrongPassphrase,
-    /// Diese Länge wird für diese Art nicht erzeugt.
+    /// This length is not generated for this kind.
     InvalidSize,
-    /// Kein Zertifikat im OpenSSH-Format.
+    /// Not a certificate in OpenSSH format.
     CertificateUnreadable,
-    /// Das Zertifikat gehört zu einem anderen Schlüssel.
+    /// The certificate belongs to a different key.
     CertificateMismatch,
-    /// Ein Zertifikat für einen Server, wo eines für einen Benutzer gebraucht wird.
+    /// A certificate for a server where one for a user is needed.
     CertificateWrongType,
 }
 
-/// Was ein Benutzer-Zertifikat aussagt. Zeiten in Sekunden seit 1970.
+/// What a user certificate states. Times in seconds since 1970.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CertInfo {
-    /// Die Zeile ohne Kommentar, so wie sie abgelegt wird.
+    /// The line without comment, as it is stored.
     pub text: String,
-    /// Name, den die Zertifizierungsstelle dem Zertifikat gegeben hat.
+    /// Name the certificate authority gave the certificate.
     pub key_id: String,
-    /// Benutzernamen, für die es gilt. Leer heißt: für jeden.
+    /// User names it applies to. Empty means: for everyone.
     pub principals: Vec<String>,
     pub valid_after: u64,
-    /// `None`: Es läuft nicht ab.
+    /// `None`: it does not expire.
     pub valid_before: Option<u64>,
-    /// Fingerabdruck der Zertifizierungsstelle, die unterschrieben hat.
+    /// Fingerprint of the certificate authority that signed.
     pub authority: String,
 }
 
-/// Was das Eintragen eines öffentlichen Schlüssels auf einem Server ergeben hat.
+/// What installing a public key on a server resulted in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Installed {
     Added,
-    /// Der Schlüssel stand schon in der Datei.
+    /// The key was already in the file.
     Present,
 }
 
 const ADDED: &str = "glowport:added";
 const PRESENT: &str = "glowport:present";
 
-/// Ein Schlüsselpaar in der Form, in der es im Tresor liegt.
+/// A key pair in the form in which it is stored in the vault.
 #[derive(Debug)]
 pub struct Material {
     pub kind: Kind,
-    /// Länge in Bit: Ed25519 256, ECDSA 256/384/521, RSA die Länge des Moduls.
+    /// Length in bits: Ed25519 256, ECDSA 256/384/521, RSA the modulus length.
     pub bits: u32,
-    /// Fingerabdruck wie bei OpenSSH: `SHA256:…`.
+    /// Fingerprint as in OpenSSH: `SHA256:…`.
     pub fingerprint: String,
-    /// Öffentlicher Schlüssel im OpenSSH-Format ohne Kommentar.
+    /// Public key in OpenSSH format without comment.
     pub public: String,
-    /// Privater Schlüssel im OpenSSH-Format, unverschlüsselt.
+    /// Private key in OpenSSH format, unencrypted.
     pub private: Secret,
-    /// Kommentar aus der Datei, oft `benutzer@rechner`.
+    /// Comment from the file, often `user@machine`.
     pub comment: String,
 }
 
-/// Was sich über eine Schlüsseldatei sagen lässt. Art, Länge und Fingerabdruck fehlen, solange die Datei
-/// verschlüsselt ist und ihr Format den öffentlichen Teil nicht offen nennt.
+/// What can be said about a key file. Kind, length and fingerprint are missing as long as the file
+/// is encrypted and its format does not name the public part openly.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Info {
     pub format: Format,
@@ -114,7 +114,7 @@ fn describe(public: &PublicKey) -> Result<(Kind, u32), KeyError> {
     }
 }
 
-/// Art und Länge zum Anzeigen: „Ed25519“, „ECDSA P-256“, „RSA 4096“. `None` bei Arten, die Glowport nicht führt.
+/// Kind and length for display: “Ed25519”, “ECDSA P-256”, “RSA 4096”. `None` for kinds Glowport does not support.
 pub(crate) fn label(public: &PublicKey) -> Option<String> {
     Some(match describe(public).ok()? {
         (Kind::Ed25519, _) => "Ed25519".into(),
@@ -130,14 +130,14 @@ fn fingerprint(public: &PublicKey) -> String {
 fn material(mut key: PrivateKey) -> Result<Material, KeyError> {
     let (kind, bits) = describe(key.public_key())?;
     let comment = key.comment().as_str_lossy().to_string();
-    // Der Kommentar gehört nicht zum Schlüssel; im Tresor trägt ihn der Name.
+    // The comment is not part of the key; in the vault the name carries it.
     key.set_comment("");
     let public = key.public_key().to_openssh().map_err(|_| KeyError::Unreadable)?.trim().to_string();
     let private = key.to_openssh(LineEnding::LF).map_err(|_| KeyError::Unreadable)?;
     Ok(Material { kind, bits, fingerprint: fingerprint(key.public_key()), public, private, comment })
 }
 
-/// Erzeugt ein neues Schlüsselpaar. RSA rechnet einige Sekunden; nicht auf einem Thread des Runtimes aufrufen.
+/// Generates a new key pair. RSA computes for a few seconds; do not call on a runtime thread.
 pub fn generate(kind: Kind, bits: u32) -> Result<Material, KeyError> {
     let mut rng = rand::rng();
     let key = match (kind, bits) {
@@ -151,7 +151,7 @@ pub fn generate(kind: Kind, bits: u32) -> Result<Material, KeyError> {
     material(key.map_err(|_| KeyError::Unreadable)?)
 }
 
-/// Erkennt Format und Verschlüsselung am Text, ohne etwas zu entschlüsseln.
+/// Recognises format and encryption from the text without decrypting anything.
 fn sniff(text: &str) -> Result<(Format, bool), KeyError> {
     if text.trim_start().starts_with("PuTTY-User-Key-File-") {
         let encrypted = text.lines().find_map(|line| line.strip_prefix("Encryption:")).is_some_and(|value| value.trim() != "none");
@@ -167,24 +167,24 @@ fn sniff(text: &str) -> Result<(Format, bool), KeyError> {
     Err(KeyError::Unreadable)
 }
 
-/// Liest einen privaten Schlüssel. Das Entschlüsseln rechnet spürbar; nicht auf einem Thread des Runtimes aufrufen.
+/// Reads a private key. Decrypting takes noticeable time; do not call on a runtime thread.
 pub fn import(text: &str, passphrase: Option<&str>) -> Result<Material, KeyError> {
     let (_, encrypted) = sniff(text)?;
     let passphrase = passphrase.filter(|p| !p.is_empty());
     if encrypted && passphrase.is_none() {
         return Err(KeyError::PassphraseRequired);
     }
-    // Eine falsche Passphrase und eine beschädigte Datei sind nach dem Entschlüsseln nicht zu unterscheiden.
+    // A wrong passphrase and a damaged file cannot be told apart after decrypting.
     let failed = if encrypted { KeyError::WrongPassphrase } else { KeyError::Unreadable };
     material(keys::decode_secret_key(text, passphrase.filter(|_| encrypted)).map_err(|_| failed)?)
 }
 
-/// Sagt, was in einer Schlüsseldatei steckt, ohne sie zu übernehmen. Ohne Passphrase kommt bei einer
-/// verschlüsselten Datei so viel heraus, wie sie offen nennt.
+/// Says what is inside a key file without taking it over. Without a passphrase, an encrypted file
+/// yields as much as it names openly.
 pub fn inspect(text: &str, passphrase: Option<&str>) -> Result<Info, KeyError> {
     let (format, encrypted) = sniff(text)?;
     if encrypted && passphrase.is_none_or(str::is_empty) {
-        // OpenSSH nennt den öffentlichen Teil auch in einer verschlüsselten Datei.
+        // OpenSSH names the public part even in an encrypted file.
         let open = (format == Format::Openssh).then(|| PrivateKey::from_openssh(text).ok()).flatten();
         let known = open.as_ref().and_then(|key| describe(key.public_key()).ok());
         let fingerprint = open.as_ref().map(|key| fingerprint(key.public_key()));
@@ -194,7 +194,7 @@ pub fn inspect(text: &str, passphrase: Option<&str>) -> Result<Info, KeyError> {
     Ok(Info { format, encrypted, kind: Some(key.kind), bits: Some(key.bits), fingerprint: Some(key.fingerprint), comment: key.comment })
 }
 
-/// Privater Schlüssel als OpenSSH-Datei, auf Wunsch mit Passphrase. `comment` steht danach in der Datei.
+/// Private key as an OpenSSH file, optionally with passphrase. `comment` is then in the file.
 pub fn export(private: &str, comment: &str, passphrase: Option<&str>) -> Result<Secret, KeyError> {
     let mut key = PrivateKey::from_openssh(private).map_err(|_| KeyError::Unreadable)?;
     key.set_comment(comment);
@@ -204,17 +204,17 @@ pub fn export(private: &str, comment: &str, passphrase: Option<&str>) -> Result<
     key.to_openssh(LineEnding::LF).map_err(|_| KeyError::Unreadable)
 }
 
-/// Ein öffentlicher Schlüssel, etwa der einer Zertifizierungsstelle.
+/// A public key, e.g. that of a certificate authority.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PublicInfo {
-    /// Art und Länge zum Anzeigen, etwa „Ed25519“.
+    /// Kind and length for display, e.g. “Ed25519”.
     pub label: String,
     pub fingerprint: String,
-    /// Die Zeile im OpenSSH-Format ohne Kommentar.
+    /// The line in OpenSSH format without comment.
     pub public: String,
 }
 
-/// Liest einen öffentlichen Schlüssel im OpenSSH-Format (eine Zeile, wie in einer `.pub`-Datei).
+/// Reads a public key in OpenSSH format (one line, as in a `.pub` file).
 pub fn inspect_public(text: &str) -> Result<PublicInfo, KeyError> {
     let mut key = PublicKey::from_openssh(text.trim()).map_err(|_| KeyError::Unreadable)?;
     key.set_comment("");
@@ -222,8 +222,8 @@ pub fn inspect_public(text: &str) -> Result<PublicInfo, KeyError> {
     Ok(PublicInfo { label, fingerprint: fingerprint(&key), public: key.to_openssh().map_err(|_| KeyError::Unreadable)?.trim().to_string() })
 }
 
-/// Liest ein Benutzer-Zertifikat und prüft, dass es zu diesem öffentlichen Schlüssel gehört. Ob die Unterschrift
-/// der Zertifizierungsstelle etwas gilt, entscheidet der Server, der ihr vertraut oder nicht.
+/// Reads a user certificate and checks that it belongs to this public key. Whether the certificate
+/// authority's signature counts for anything is decided by the server, which trusts it or not.
 pub fn inspect_certificate(text: &str, public: &str) -> Result<CertInfo, KeyError> {
     let certificate = Certificate::from_openssh(text.trim()).map_err(|_| KeyError::CertificateUnreadable)?;
     let key = PublicKey::from_openssh(public).map_err(|_| KeyError::Unreadable)?;
@@ -244,11 +244,11 @@ pub fn inspect_certificate(text: &str, public: &str) -> Result<CertInfo, KeyErro
     })
 }
 
-/// Befehl, der einen öffentlichen Schlüssel in `~/.ssh/authorized_keys` einträgt, falls er dort noch nicht steht.
+/// Command that adds a public key to `~/.ssh/authorized_keys` if it is not there yet.
 ///
-/// Läuft in jeder POSIX-Shell. Neue Dateien und Ordner gehören nur dem Benutzer (`umask 077`), eine letzte Zeile
-/// ohne Zeilenende wird vorher abgeschlossen. In den Befehl kommen nur der neu geschriebene Schlüssel und ein
-/// Kommentar aus harmlosen Zeichen, nichts davon kann die Shell als etwas anderes lesen.
+/// Runs in any POSIX shell. New files and folders belong only to the user (`umask 077`), a last line
+/// without a line ending is terminated first. Only the newly written key and a comment of harmless
+/// characters go into the command; none of it can be read by the shell as anything else.
 pub fn install_command(public: &str, comment: &str) -> Result<String, KeyError> {
     let mut key = PublicKey::from_openssh(public).map_err(|_| KeyError::Unreadable)?;
     key.set_comment("");
@@ -262,7 +262,7 @@ pub fn install_command(public: &str, comment: &str) -> Result<String, KeyError> 
     ))
 }
 
-/// Liest aus der Ausgabe von [`install_command`], was geschehen ist. `None`: Der Befehl lief nicht durch.
+/// Reads from the output of [`install_command`] what happened. `None`: the command did not run through.
 pub fn install_outcome(stdout: &[u8]) -> Option<Installed> {
     let text = String::from_utf8_lossy(stdout);
     text.lines().rev().find_map(|line| match line.trim() {
@@ -276,8 +276,8 @@ pub fn install_outcome(stdout: &[u8]) -> Option<Installed> {
 mod tests {
     use super::*;
 
-    // Wegwerf-Schlüssel nur für diese Tests: `ssh-keygen` (OpenSSH, PEM, PKCS#8, Passphrase „geheim“) und die
-    // Beispiele des Crates `ssh-key` für PuTTY (Passphrase „123“).
+    // Throwaway keys only for these tests: `ssh-keygen` (OpenSSH, PEM, PKCS#8, passphrase “geheim”) and the
+    // `ssh-key` crate's examples for PuTTY (passphrase “123”).
     const OPENSSH: &str = include_str!("../tests/keys/openssh_ed25519");
     const OPENSSH_ENC: &str = include_str!("../tests/keys/openssh_ed25519_enc");
     const PEM_RSA: &str = include_str!("../tests/keys/pem_rsa");
@@ -290,7 +290,7 @@ mod tests {
 
     #[test]
     fn every_format_is_read_and_ends_up_as_plain_openssh() {
-        // Die Fingerabdrücke stammen von `ssh-keygen -lf`.
+        // The fingerprints come from `ssh-keygen -lf`.
         let cases = [
             (OPENSSH, None, Kind::Ed25519, 256, "SHA256:TsL9IGRVqns40u3YoWfwomDoZn8GBnoLI+M0IJ2tUAU"),
             (OPENSSH_ENC, Some("geheim"), Kind::Ed25519, 256, "SHA256:+mcbLMkgoIlEAnnSBVbTyfVSZUNm5w/PZWj1l+QQtwg"),
@@ -303,7 +303,7 @@ mod tests {
             let key = import(text, passphrase).unwrap_or_else(|e| panic!("{fingerprint}: {e:?}"));
             assert_eq!((key.kind, key.bits, key.fingerprint.as_str()), (kind, bits, fingerprint));
             assert_eq!(key.public.split(' ').count(), 2, "ohne Kommentar: {}", key.public);
-            // Was im Tresor landet, lässt sich ohne Passphrase wieder lesen und ist derselbe Schlüssel.
+            // What ends up in the vault can be read again without passphrase and is the same key.
             let again = import(&key.private, None).unwrap();
             assert_eq!((again.fingerprint, again.public, again.comment.as_str()), (key.fingerprint, key.public, ""));
         }
@@ -330,7 +330,7 @@ mod tests {
             assert_eq!(import(text, Some("")).unwrap_err(), KeyError::PassphraseRequired);
             assert_eq!(import(text, Some("falsch")).unwrap_err(), KeyError::WrongPassphrase);
         }
-        // Eine überflüssige Passphrase stört nicht.
+        // A superfluous passphrase does no harm.
         assert!(import(OPENSSH, Some("unnötig")).is_ok());
         assert_eq!(import("kein Schlüssel", None).unwrap_err(), KeyError::Unreadable);
         assert_eq!(import("-----BEGIN OPENSSH PRIVATE KEY-----\nMüll\n-----END OPENSSH PRIVATE KEY-----\n", None).unwrap_err(), KeyError::Unreadable);
@@ -342,7 +342,7 @@ mod tests {
         let plain = inspect(OPENSSH, None).unwrap();
         assert_eq!((plain.format, plain.encrypted, plain.kind, plain.bits, plain.comment.as_str()), (Format::Openssh, false, Some(Kind::Ed25519), Some(256), "ich@laptop"));
 
-        // OpenSSH nennt Art und Fingerabdruck auch verschlüsselt, PEM und PuTTY erst nach der Passphrase.
+        // OpenSSH names kind and fingerprint even when encrypted, PEM and PuTTY only after the passphrase.
         let locked = inspect(OPENSSH_ENC, None).unwrap();
         assert_eq!((locked.encrypted, locked.kind, locked.fingerprint.as_deref()), (true, Some(Kind::Ed25519), Some("SHA256:+mcbLMkgoIlEAnnSBVbTyfVSZUNm5w/PZWj1l+QQtwg")));
         assert_eq!(inspect(PEM_RSA_ENC, None).unwrap(), Info { format: Format::Pem, encrypted: true, kind: None, bits: None, fingerprint: None, comment: String::new() });
@@ -389,7 +389,7 @@ mod tests {
         };
         assert!(probe.status.success());
 
-        // Eine vorhandene Datei, deren letzte Zeile kein Zeilenende hat.
+        // An existing file whose last line has no line ending.
         let file = home.join(".ssh").join("authorized_keys");
         std::fs::write(&file, "ssh-rsa AAAAaltbestand vorher").unwrap();
         let key = generate(Kind::Ed25519, 256).unwrap();
@@ -403,7 +403,7 @@ mod tests {
         let lines: Vec<String> = std::fs::read_to_string(&file).unwrap().lines().map(String::from).collect();
         assert_eq!(lines, ["ssh-rsa AAAAaltbestand vorher".to_string(), format!("{} Mein_Schl_ssel___rm_-rf__", key.public)]);
 
-        // Ohne vorhandenen Ordner legt der Befehl ihn an.
+        // Without an existing folder the command creates it.
         std::fs::remove_dir_all(home.join(".ssh")).unwrap();
         assert_eq!(install_outcome(&run(&home, &command).unwrap().stdout), Some(Installed::Added));
         assert!(file.exists());

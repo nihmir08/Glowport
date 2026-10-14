@@ -1,10 +1,10 @@
-//! Dienste von systemd: auflisten, starten, stoppen, neu starten, beim Start ein- und ausschalten.
+//! systemd services: list, start, stop, restart, enable and disable at boot.
 
 use std::collections::BTreeMap;
 
 use super::{quoted, sections, with_argument, As};
 
-/// Der Befehl für die Liste. Lesen darf das jeder Benutzer.
+/// The command for the list. Every user may read it.
 pub const LIST: &str = concat!(
     "sh -c '",
     "exec 2>/dev/null; export LC_ALL=C; ",
@@ -13,7 +13,7 @@ pub const LIST: &str = concat!(
     "'"
 );
 
-/// Mehr Dienste zeigt die Liste nicht.
+/// The list shows no more services than this.
 const MAX_SERVICES: usize = 2000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,7 +49,7 @@ impl Active {
         }
     }
 
-    /// Reihenfolge in der Liste: Fehlgeschlagenes zuerst, dann was läuft.
+    /// Order in the list: failed first, then what runs.
     fn rank(self) -> u8 {
         match self {
             Active::Failed => 0,
@@ -60,15 +60,15 @@ impl Active {
     }
 }
 
-/// Ob ein Dienst beim Start des Servers mitläuft.
+/// Whether a service starts when the server boots.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Enabled {
     Enabled,
     Disabled,
-    /// Lässt sich nicht einschalten: Er wird nur von anderen gestartet.
+    /// Cannot be enabled: it is only started by others.
     Static,
     Masked,
-    /// Etwas, das sich nicht umschalten lässt (erzeugt, flüchtig, Verweis) oder das systemd nicht nennt.
+    /// Something that cannot be toggled (generated, transient, alias) or that systemd does not name.
     Other,
 }
 
@@ -96,16 +96,16 @@ impl Enabled {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Service {
-    /// Der volle Name, etwa `cron.service`.
+    /// The full name, e.g. `cron.service`.
     pub unit: String,
     pub description: String,
     pub active: Active,
-    /// Der feinere Zustand von systemd, etwa `running`, `exited`, `dead`.
+    /// systemd's finer state, e.g. `running`, `exited`, `dead`.
     pub sub: String,
     pub enabled: Enabled,
 }
 
-/// Liest die Ausgabe von [`LIST`]. `None`: Der Server gibt die Liste nicht her.
+/// Reads the output of [`LIST`]. `None`: the server does not provide the list.
 pub fn parse(text: &str) -> Option<Vec<Service>> {
     let parts = sections(text);
     let units = parts.get("units")?;
@@ -121,11 +121,11 @@ pub fn parse(text: &str) -> Option<Vec<Service>> {
 
     let mut services: BTreeMap<String, Service> = BTreeMap::new();
     for line in units {
-        // Manche Fassungen stellen einem fehlgeschlagenen Dienst trotz `--plain` einen Punkt voran.
+        // Some versions put a dot in front of a failed service despite `--plain`.
         let line = line.trim_start().trim_start_matches(['●', '*', '○', '×']).trim_start();
         let mut words = line.split_whitespace();
         let (Some(unit), Some(load), Some(active), Some(sub)) = (words.next(), words.next(), words.next(), words.next()) else { continue };
-        // Was andere Dienste nur nennen, ohne dass es das gibt, lässt sich weder ansehen noch steuern.
+        // What other services merely name without it existing can neither be viewed nor controlled.
         if !valid_unit(unit) || load == "not-found" {
             continue;
         }
@@ -133,7 +133,7 @@ pub fn parse(text: &str) -> Option<Vec<Service>> {
         let enabled = if load == "masked" { Enabled::Masked } else { files.get(unit).copied().unwrap_or(Enabled::Other) };
         services.insert(unit.to_string(), Service { unit: unit.to_string(), description, active: Active::read(active), sub: sub.to_string(), enabled });
     }
-    // Dienste, die es gibt, die systemd aber gerade nicht geladen hat. Vorlagen (`name@.service`) sind keine Dienste.
+    // Services that exist but systemd has not loaded right now. Templates (`name@.service`) are not services.
     for (unit, enabled) in &files {
         if valid_unit(unit) && !unit.contains("@.") && !services.contains_key(*unit) {
             services.insert(unit.to_string(), Service { unit: unit.to_string(), description: String::new(), active: Active::Inactive, sub: "dead".into(), enabled: *enabled });
@@ -144,7 +144,7 @@ pub fn parse(text: &str) -> Option<Vec<Service>> {
     Some(list)
 }
 
-/// Ein Name, wie systemd ihn für einen Dienst vergibt: Buchstaben, Ziffern und `:-_.\@`, am Ende `.service`.
+/// A name as systemd assigns it to a service: letters, digits and `:-_.\@`, ending in `.service`.
 pub fn valid_unit(unit: &str) -> bool {
     let Some(stem) = unit.strip_suffix(".service") else { return false };
     !stem.is_empty() && unit.len() <= 256 && !unit.starts_with('-') && unit.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b':' | b'-' | b'_' | b'.' | b'\\' | b'@'))
@@ -170,24 +170,24 @@ impl Action {
         }
     }
 
-    /// Der Befehl für einen Dienst. `None`: Das ist kein Name eines Dienstes.
+    /// The command for a service. `None`: that is not a service name.
     pub fn command(self, unit: &str, how: As) -> Option<String> {
         valid_unit(unit).then(|| with_argument(&format!("{}systemctl {} \"$1\"", how.prefix(), self.verb()), unit))
     }
 
-    /// Derselbe Befehl, wie ihn ein Mensch tippt (für [`super::typed`]).
+    /// The same command as a human would type it (for [`super::typed`]).
     pub fn typed(self, unit: &str) -> Option<String> {
         valid_unit(unit).then(|| format!("systemctl {} {}", self.verb(), quoted(unit)))
     }
 }
 
-/// Zustand und letzte Meldungen eines Dienstes als Text. Endet bei einem Dienst, der nicht läuft, mit dem Wert 3;
-/// das ist kein Fehler.
+/// State and latest messages of a service as text. For a service that is not running it ends with the value 3;
+/// that is not an error.
 pub fn status_command(unit: &str, how: As) -> Option<String> {
     valid_unit(unit).then(|| with_argument(&format!("{}systemctl status --no-pager --full --lines=30 \"$1\"", how.prefix()), unit))
 }
 
-/// Was in einen neuen Tab getippt wird, damit dort das Journal des Dienstes mitläuft.
+/// What is typed into a new tab so the service's journal follows along there.
 pub fn journal_line(unit: &str, sudo: bool) -> Option<String> {
     valid_unit(unit).then(|| format!("{}journalctl -n 100 -f -u {}", if sudo { "sudo " } else { "" }, quoted(unit)))
 }
@@ -196,8 +196,8 @@ pub fn journal_line(unit: &str, sudo: bool) -> Option<String> {
 mod tests {
     use super::*;
 
-    /// Aufgezeichnet am Ubuntu 26.04 im WSL (systemd 259), gekürzt; dazu ein fehlgeschlagener Dienst und einer mit
-    /// umschriebenem Bindestrich im Namen.
+    /// Recorded on Ubuntu 26.04 in WSL (systemd 259), shortened; plus a failed service and one with
+    /// an escaped hyphen in its name.
     const SAMPLE: &str = "\
 @units
 apparmor.service                            loaded    inactive dead    Load AppArmor profiles
@@ -230,7 +230,7 @@ user@.service                                static          -
         assert_eq!(
             brief,
             [
-                // Fehlgeschlagenes zuerst, dann was gerade startet, dann was läuft, dann der Rest; jeweils nach Namen.
+                // Failed first, then what is starting, then what runs, then the rest; each by name.
                 ("kaputt.service", Active::Failed, "failed", Enabled::Disabled),
                 ("user@1000.service", Active::Activating, "start", Enabled::Other),
                 ("chrony.service", Active::Active, "running", Enabled::Enabled),
@@ -238,7 +238,7 @@ user@.service                                static          -
                 ("cron.service", Active::Active, "running", Enabled::Enabled),
                 ("systemd-fsck@dev-disk-by\\x2duuid-12ab.service", Active::Active, "exited", Enabled::Other),
                 ("apparmor.service", Active::Inactive, "dead", Enabled::Enabled),
-                // Nur als Datei bekannt, nicht geladen.
+                // Only known as a file, not loaded.
                 ("apt-news.service", Active::Inactive, "dead", Enabled::Static),
                 ("console-getty.service", Active::Inactive, "dead", Enabled::Masked),
                 ("rsync.service", Active::Inactive, "dead", Enabled::Disabled),

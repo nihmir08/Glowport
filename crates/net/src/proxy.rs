@@ -1,7 +1,7 @@
-//! Verbindungen über einen Proxy: HTTP (`CONNECT`) und SOCKS5, auf Wunsch mit Anmeldung am Proxy.
+//! Connections through a proxy: HTTP (`CONNECT`) and SOCKS5, optionally with authentication at the proxy.
 //!
-//! Der Name des Ziels geht unaufgelöst an den Proxy; er schlägt ihn nach. So funktionieren auch Namen, die nur
-//! hinter dem Proxy bekannt sind.
+//! The destination's name goes to the proxy unresolved; it looks it up. That way names only known
+//! behind the proxy work too.
 
 use std::{
     fmt,
@@ -15,7 +15,7 @@ use tokio::{
 
 use crate::Secret;
 
-/// Benutzer und Passwort für den Proxy.
+/// User and password for the proxy.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Login {
     pub user: String,
@@ -34,14 +34,14 @@ pub enum Proxy {
     Socks5 { host: String, port: u16, login: Option<Login> },
 }
 
-/// Mehr schickt kein Proxy als Antwort auf `CONNECT`; alles darüber ist kein Proxy.
+/// No proxy sends more than this in reply to `CONNECT`; anything beyond it is not a proxy.
 const MAX_HTTP_REPLY: usize = 8 * 1024;
 
 fn refused(text: impl Into<String>) -> Error {
     Error::new(ErrorKind::ConnectionRefused, text.into())
 }
 
-/// Base64 nach RFC 4648 für den Kopf `Proxy-Authorization`.
+/// Base64 per RFC 4648 for the `Proxy-Authorization` header.
 fn base64(input: &[u8]) -> String {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
@@ -54,16 +54,16 @@ fn base64(input: &[u8]) -> String {
     out
 }
 
-/// Öffnet über den Proxy eine Verbindung zu `host:port`. Danach verhält sich der Strom wie eine direkte Verbindung.
+/// Opens a connection to `host:port` through the proxy. After that the stream behaves like a direct connection.
 pub(crate) async fn connect(proxy: &Proxy, host: &str, port: u16) -> Result<TcpStream> {
     match proxy {
         Proxy::Http { host: proxy_host, port: proxy_port, login } => {
             let mut stream = TcpStream::connect((proxy_host.as_str(), *proxy_port)).await?;
-            // IPv6-Adressen stehen in einer Adresse mit Port in eckigen Klammern.
+            // IPv6 addresses are in square brackets in an address with a port.
             let target = if host.contains(':') { format!("[{host}]:{port}") } else { format!("{host}:{port}") };
             let login = login.as_ref().map(|l| format!("Proxy-Authorization: Basic {}\r\n", base64(format!("{}:{}", l.user, l.password.as_str()).as_bytes()))).unwrap_or_default();
             stream.write_all(format!("CONNECT {target} HTTP/1.1\r\nHost: {target}\r\n{login}\r\n").as_bytes()).await?;
-            // Byte für Byte bis zur Leerzeile: Was danach kommt, gehört schon dem SSH-Server.
+            // Byte by byte up to the empty line: whatever comes after it already belongs to the SSH server.
             let mut reply = Vec::new();
             while !reply.ends_with(b"\r\n\r\n") {
                 if reply.len() >= MAX_HTTP_REPLY {
@@ -80,14 +80,14 @@ pub(crate) async fn connect(proxy: &Proxy, host: &str, port: u16) -> Result<TcpS
         Proxy::Socks5 { host: proxy_host, port: proxy_port, login } => {
             let name = u8::try_from(host.len()).map_err(|_| Error::new(ErrorKind::InvalidInput, "host name too long for SOCKS5"))?;
             let mut stream = TcpStream::connect((proxy_host.as_str(), *proxy_port)).await?;
-            // Version 5 und die Methoden im Angebot: ohne Anmeldung (0), mit Benutzer und Passwort (2).
+            // Version 5 and the methods offered: no authentication (0), user and password (2).
             stream.write_all(if login.is_some() { &[5, 2, 0, 2] } else { &[5, 1, 0] }).await?;
             let mut chosen = [0u8; 2];
             stream.read_exact(&mut chosen).await?;
             match (chosen, login) {
                 ([5, 0], _) => {}
                 ([5, 2], Some(login)) => {
-                    // RFC 1929: Version 1, dann Benutzer und Passwort mit je einem Längenbyte davor.
+                    // RFC 1929: version 1, then user and password, each preceded by a length byte.
                     let too_long = || Error::new(ErrorKind::InvalidInput, "user or password too long for SOCKS5");
                     let mut request = vec![1, u8::try_from(login.user.len()).map_err(|_| too_long())?];
                     request.extend_from_slice(login.user.as_bytes());
@@ -102,7 +102,7 @@ pub(crate) async fn connect(proxy: &Proxy, host: &str, port: u16) -> Result<TcpS
                 }
                 _ => return Err(refused("the proxy wants a login")),
             }
-            // Verbinden (1) mit einem Namen (3), den der Proxy selbst auflöst.
+            // Connect (1) with a name (3) the proxy resolves itself.
             let mut request = vec![5, 1, 0, 3, name];
             request.extend_from_slice(host.as_bytes());
             request.extend_from_slice(&port.to_be_bytes());
@@ -112,7 +112,7 @@ pub(crate) async fn connect(proxy: &Proxy, host: &str, port: u16) -> Result<TcpS
             if head[1] != 0 {
                 return Err(refused(format!("the proxy could not connect (SOCKS5 code {})", head[1])));
             }
-            // Die Antwort nennt noch die Adresse, von der aus der Proxy verbunden hat; ihre Länge hängt von der Art ab.
+            // The answer also names the address the proxy connected from; its length depends on the type.
             let rest = match head[3] {
                 1 => 4 + 2,
                 4 => 16 + 2,

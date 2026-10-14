@@ -1,20 +1,20 @@
-//! Was Glowport über eine Maschine weiß, um sich mit ihr zu verbinden: Adresse, Benutzer, hinterlegte Schlüssel,
-//! Betriebssystem. Zusammengeführt aus dem, was Proxmox hergibt; reine Funktionen ohne Netz.
+//! What Glowport knows about a machine in order to connect to it: address, user, stored keys,
+//! operating system. Combined from what Proxmox provides; pure functions without network.
 
 use base64::{engine::general_purpose::STANDARD, engine::general_purpose::STANDARD_NO_PAD, Engine};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-/// Woher eine Adresse stammt.
+/// Where an address comes from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Source {
-    /// Feste Adresse aus Cloud-Init (`ipconfig0`).
+    /// Fixed address from Cloud-Init (`ipconfig0`).
     CloudInit,
-    /// Vom Gastagenten der VM gemeldet.
+    /// Reported by the VM's guest agent.
     Agent,
-    /// Feste Adresse aus den Einstellungen des Containers (`net0`).
+    /// Fixed address from the container's settings (`net0`).
     Config,
-    /// Vom laufenden Container gemeldet.
+    /// Reported by the running container.
     Guest,
 }
 
@@ -33,24 +33,24 @@ impl Source {
 pub struct Facts {
     pub address: Option<(String, Source)>,
     pub user: Option<String>,
-    /// Fingerabdrücke der in Cloud-Init hinterlegten öffentlichen Schlüssel (`SHA256:…`, wie OpenSSH sie zeigt).
+    /// Fingerprints of the public keys stored in Cloud-Init (`SHA256:…`, as OpenSSH shows them).
     pub keys: Vec<String>,
-    /// Kürzel des Betriebssystems, wie die Oberfläche sie kennt (`Ub`, `De`, …).
+    /// Short name of the operating system as the interface knows them (`Ub`, `De`, …).
     pub os: Option<&'static str>,
 }
 
-/// Eine Schnittstelle der Maschine mit ihren Adressen, wie Gastagent oder Container sie melden.
+/// One of the machine's interfaces with its addresses, as the guest agent or container reports them.
 pub type Interface = (String, Vec<String>);
 
-/// Die feste Adresse aus `ip=10.0.0.5/24,gw=10.0.0.1` (Cloud-Init) oder `name=eth0,bridge=vmbr0,ip=10.0.0.5/24`
-/// (Container). `None` bei `dhcp`, `manual`, `auto` oder ohne Angabe. IPv4 zählt vor IPv6.
+/// The fixed address from `ip=10.0.0.5/24,gw=10.0.0.1` (Cloud-Init) or `name=eth0,bridge=vmbr0,ip=10.0.0.5/24`
+/// (container). `None` for `dhcp`, `manual`, `auto` or without a value. IPv4 counts before IPv6.
 pub fn static_address(setting: &str) -> Option<String> {
     let value = |key: &str| setting.split(',').filter_map(|part| part.trim().split_once('=')).find(|(name, _)| *name == key).map(|(_, value)| value.split('/').next().unwrap_or(value).trim());
     [value("ip"), value("ip6")].into_iter().flatten().find(|address| address.parse::<std::net::IpAddr>().is_ok()).map(str::to_string)
 }
 
-/// Die Adresse, unter der die Maschine von außen erreichbar ist: IPv4 vor IPv6. Adressen, die nur in der Maschine
-/// gelten (`127.…`, `::1`, `fe80:…`), und die Brücken von Docker und anderen zählen nicht.
+/// The address under which the machine can be reached from outside: IPv4 before IPv6. Addresses that only apply
+/// inside the machine (`127.…`, `::1`, `fe80:…`), and the bridges of Docker and others, do not count.
 pub fn measured_address(interfaces: &[Interface]) -> Option<String> {
     let inner = |name: &str| name == "lo" || ["docker", "br-", "veth", "virbr", "cni", "flannel", "tailscale", "wg"].iter().any(|prefix| name.starts_with(prefix));
     let usable: Vec<std::net::IpAddr> = interfaces
@@ -66,8 +66,8 @@ pub fn measured_address(interfaces: &[Interface]) -> Option<String> {
     usable.iter().find(|address| address.is_ipv4()).or(usable.first()).map(ToString::to_string)
 }
 
-/// Fingerabdrücke der Schlüssel aus `sshkeys`. Proxmox liefert den Text wie in einer Adresse umschrieben
-/// (`%20`, `%0A`), eine Zeile je Schlüssel.
+/// Fingerprints of the keys from `sshkeys`. Proxmox delivers the text escaped like an address
+/// (`%20`, `%0A`), one line per key.
 pub fn key_fingerprints(encoded: &str) -> Vec<String> {
     let mut text = Vec::with_capacity(encoded.len());
     let bytes = encoded.as_bytes();
@@ -82,7 +82,7 @@ pub fn key_fingerprints(encoded: &str) -> Vec<String> {
     String::from_utf8_lossy(&text)
         .lines()
         .filter_map(|line| {
-            // `ssh-ed25519 AAAA… kommentar`, davor können Optionen stehen.
+            // `ssh-ed25519 AAAA… comment`, options may come before it.
             let mut words = line.split_whitespace().skip_while(|word| !(word.starts_with("ssh-") || word.starts_with("ecdsa-") || word.starts_with("sk-")));
             let blob = STANDARD.decode(words.nth(1)?).ok()?;
             Some(format!("SHA256:{}", STANDARD_NO_PAD.encode(Sha256::digest(&blob))))
@@ -90,10 +90,10 @@ pub fn key_fingerprints(encoded: &str) -> Vec<String> {
         .collect()
 }
 
-/// Das Kürzel des Betriebssystems aus dem, was Proxmox und der Gastagent nennen. Der Name der Maschine hilft, wenn
-/// Proxmox nur „Linux“ weiß (`l26`).
+/// The short name of the operating system from what Proxmox and the guest agent name. The machine's name helps when
+/// Proxmox only knows “Linux” (`l26`).
 pub fn os_code(ostype: Option<&str>, reported: Option<&str>, name: &str) -> Option<&'static str> {
-    // Die Kürzel stehen in `src/lib/os.ts`. Was dort kein eigenes hat, zeigt sich als „Linux“.
+    // The short names are in `src/lib/os.ts`. Whatever has none of its own there shows as “Linux”.
     const KNOWN: [(&str, &str); 13] = [
         ("ubuntu", "Ub"),
         ("debian", "De"),
@@ -112,19 +112,19 @@ pub fn os_code(ostype: Option<&str>, reported: Option<&str>, name: &str) -> Opti
     let texts = [reported.unwrap_or_default().to_lowercase(), ostype.unwrap_or_default().to_lowercase(), name.to_lowercase()];
     let found = texts.iter().find_map(|text| KNOWN.iter().find(|(word, _)| text.contains(word)).map(|(_, code)| *code));
     found.or_else(|| match ostype.unwrap_or_default() {
-        // So nennt Proxmox die Windows-Fassungen: wxp, w2k8, win10, win11 …
+        // This is how Proxmox names the Windows versions: wxp, w2k8, win10, win11 …
         os if os.starts_with('w') => Some("Win"),
         "l24" | "l26" => Some("Li"),
         _ => None,
     })
 }
 
-/// Führt zusammen, was über eine Maschine bekannt ist. `config` sind ihre Einstellungen in Proxmox, `interfaces`
-/// das, was sie gerade selbst meldet (leer, wenn sie aus ist oder nichts meldet), `reported` der Name des Systems
-/// vom Gastagenten.
+/// Combines what is known about a machine. `config` are its settings in Proxmox, `interfaces`
+/// what it currently reports itself (empty if it is off or reports nothing), `reported` the name of the system
+/// from the guest agent.
 pub fn facts(vm: bool, name: &str, config: &Value, interfaces: &[Interface], reported: Option<&str>) -> Facts {
     let text = |key: &str| config.get(key).and_then(Value::as_str);
-    // Eine feste Adresse gilt vor einer gemessenen: Sie stimmt auch, wenn die Maschine gerade aus ist.
+    // A fixed address applies before a measured one: it is right even when the machine is off.
     let fixed = (0..8).find_map(|n| text(&format!("{}{n}", if vm { "ipconfig" } else { "net" })).and_then(static_address));
     let address = match fixed {
         Some(address) => Some((address, if vm { Source::CloudInit } else { Source::Config })),
@@ -132,7 +132,7 @@ pub fn facts(vm: bool, name: &str, config: &Value, interfaces: &[Interface], rep
     };
     Facts {
         address,
-        // Container von Proxmox melden sich als root an; bei VMs sagt es Cloud-Init oder niemand.
+        // Proxmox containers sign in as root; for VMs Cloud-Init says so or nobody does.
         user: if vm { text("ciuser").filter(|user| !user.is_empty()).map(str::to_string) } else { Some("root".into()) },
         keys: text("sshkeys").map(key_fingerprints).unwrap_or_default(),
         os: os_code(text("ostype"), reported, name),
@@ -173,7 +173,7 @@ mod tests {
 
     #[test]
     fn stored_keys_are_known_by_their_fingerprint() {
-        // Ein eigens erzeugter Wegwerf-Schlüssel; der Fingerabdruck ist aus `ssh-keygen -lf` abgelesen.
+        // A throwaway key generated for this; the fingerprint was read from `ssh-keygen -lf`.
         let line = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOgQqXeoYfd9GJUg5ajXbvrpe+0M0f5PTO0MRd4ZpqK7 deploy@laptop";
         let own = "SHA256:HHT2sEZO+TuiQj394rcd79mgejTl0WQ0Gdawh2rVk/c".to_string();
         let encoded = format!("{}%0A%0Ano-pty%20{}%0Akein%20schluessel%0A", line.replace(' ', "%20"), line.replace(' ', "%20"));
@@ -198,13 +198,13 @@ mod tests {
         let eth = [("eth0".to_string(), vec!["10.0.10.99/24".to_string()])];
         let vm = json!({ "ipconfig0": "ip=10.0.10.11/24,gw=10.0.10.1", "ciuser": "deploy", "ostype": "l26", "sshkeys": "" });
         assert_eq!(facts(true, "web-01", &vm, &eth, Some("Ubuntu 24.04")), Facts { address: Some(("10.0.10.11".into(), Source::CloudInit)), user: Some("deploy".into()), keys: vec![], os: Some("Ub") });
-        // DHCP: Es zählt, was der Gastagent meldet. Ohne Cloud-Init nennt niemand einen Benutzer.
+        // DHCP: what the guest agent reports counts. Without Cloud-Init nobody names a user.
         assert_eq!(facts(true, "monitoring", &json!({ "ipconfig0": "ip=dhcp", "ostype": "l26" }), &eth, None), Facts { address: Some(("10.0.10.99".into(), Source::Agent)), user: None, keys: vec![], os: Some("Li") });
         assert_eq!(facts(true, "aus", &json!({ "ostype": "l26" }), &[], None).address, None, "aus und ohne feste Adresse");
-        // Container: feste Adresse aus net0, sonst die gemeldete; Benutzer root.
+        // Container: fixed address from net0, otherwise the reported one; user root.
         assert_eq!(facts(false, "pihole", &json!({ "net0": "name=eth0,bridge=vmbr0,ip=10.0.0.53/24", "ostype": "debian" }), &[], None), Facts { address: Some(("10.0.0.53".into(), Source::Config)), user: Some("root".into()), keys: vec![], os: Some("De") });
         assert_eq!(facts(false, "gitea", &json!({ "net0": "name=eth0,bridge=vmbr0,ip=dhcp", "ostype": "alpine" }), &eth, None).address, Some(("10.0.10.99".into(), Source::Guest)));
-        // Die zweite Netzkarte hat die feste Adresse.
+        // The second network card has the fixed address.
         assert_eq!(facts(false, "zwei", &json!({ "net0": "name=eth0,ip=dhcp", "net1": "name=eth1,ip=10.9.9.9/24" }), &[], None).address, Some(("10.9.9.9".into(), Source::Config)));
     }
 }

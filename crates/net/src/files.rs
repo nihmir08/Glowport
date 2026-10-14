@@ -296,13 +296,13 @@ impl Remote {
         })
     }
 
-    /// Nummer zu einem Benutzer- oder Gruppennamen; eine Zahl gilt als Nummer.
+    /// Number for a user or group name; a number counts as a number.
     fn id(wanted: &str, table: &HashMap<u32, String>) -> Result<u32, FileError> {
         let wanted = wanted.trim();
         wanted.parse().ok().or_else(|| table.iter().find(|(_, name)| name.as_str() == wanted).map(|(id, _)| *id)).ok_or_else(|| FileError::Failure(format!("unknown name: {wanted}")))
     }
 
-    /// Ändert Rechte und Besitzer, mit `recursive` auch an allem, was in einem Ordner liegt.
+    /// Changes permissions and owner, with `recursive` also on everything inside a folder.
     pub async fn change(&self, path: &str, change: &Change, recursive: bool) -> Result<(), FileError> {
         let names = self.names().await;
         let uid = change.owner.as_deref().map(|owner| Self::id(owner, &names.users)).transpose()?;
@@ -313,11 +313,11 @@ impl Remote {
     fn apply<'a>(&'a self, path: &'a str, mode: Option<u32>, uid: Option<u32>, gid: Option<u32>, recursive: bool) -> Pin<Box<dyn Future<Output = Result<(), FileError>> + Send + 'a>> {
         Box::pin(async move {
             let current = self.sftp.symlink_metadata(path).await?;
-            // Rechte einer Verknüpfung gibt es nicht; sie zu setzen träfe ihr Ziel.
+            // Links have no permissions; setting them would hit their target.
             if current.file_type() == FileType::Symlink {
                 return Ok(());
             }
-            // SFTP setzt Besitzer und Gruppe nur gemeinsam.
+            // SFTP only sets owner and group together.
             let owners = (uid.is_some() || gid.is_some()).then(|| (uid.or(current.uid).unwrap_or(0), gid.or(current.gid).unwrap_or(0)));
             if mode.is_some() || owners.is_some() {
                 self.sftp.set_metadata(path, only(mode, owners.map(|o| o.0), owners.map(|o| o.1), None)).await?;
@@ -331,7 +331,7 @@ impl Remote {
         })
     }
 
-    /// Liest höchstens `limit` Bytes vom Anfang einer Datei. Der zweite Wert sagt, ob sie länger ist.
+    /// Reads at most `limit` bytes from the start of a file. The second value says whether it is longer.
     pub async fn read(&self, path: &str, limit: u64) -> Result<(Vec<u8>, bool), FileError> {
         let file = self.sftp.open(path).await?;
         let mut bytes = Vec::new();
@@ -341,7 +341,7 @@ impl Remote {
         Ok((bytes, longer))
     }
 
-    /// Schreibt eine Datei neu. Gibt es sie schon, behält sie Rechte und Besitzer.
+    /// Writes a file anew. If it already exists, it keeps permissions and owner.
     pub async fn write(&self, path: &str, data: &[u8]) -> Result<(), FileError> {
         let mut file = self.sftp.open_with_flags(path, OpenFlags::WRITE | OpenFlags::CREATE | OpenFlags::TRUNCATE).await?;
         file.write_all(data).await?;
@@ -349,7 +349,7 @@ impl Remote {
         Ok(())
     }
 
-    /// Öffnet eine Datei zum Lesen ab der Stelle `offset`.
+    /// Opens a file for reading from position `offset`.
     pub async fn reader(&self, path: &str, offset: u64) -> Result<File, FileError> {
         let mut file = self.sftp.open(path).await?;
         if offset > 0 {
@@ -358,8 +358,8 @@ impl Remote {
         Ok(file)
     }
 
-    /// Öffnet eine Datei zum Schreiben. Ab `offset` 0 beginnt sie neu; sonst wird ab dort weitergeschrieben,
-    /// etwa um einen abgebrochenen Upload fortzusetzen.
+    /// Opens a file for writing. From `offset` 0 it starts anew; otherwise writing continues from there,
+    /// e.g. to resume an interrupted upload.
     pub async fn writer(&self, path: &str, offset: u64) -> Result<File, FileError> {
         let flags = if offset == 0 { OpenFlags::WRITE | OpenFlags::CREATE | OpenFlags::TRUNCATE } else { OpenFlags::WRITE | OpenFlags::CREATE };
         let mut file = self.sftp.open_with_flags(path, flags).await?;
@@ -369,12 +369,12 @@ impl Remote {
         Ok(file)
     }
 
-    /// Setzt die Änderungszeit, damit eine hochgeladene Datei so alt ist wie ihr Original.
+    /// Sets the modification time so an uploaded file is as old as its original.
     pub async fn touch(&self, path: &str, modified: u64) -> Result<(), FileError> {
         Ok(self.sftp.set_metadata(path, only(None, None, None, Some(modified.min(u64::from(u32::MAX)) as u32))).await?)
     }
 
-    /// Beendet SFTP und, falls es eine eigene Verbindung hatte, auch die.
+    /// Ends SFTP and, if it had a connection of its own, that too.
     pub async fn close(self) {
         let _ = self.sftp.close().await;
         if let Some(link) = self.link {
@@ -383,12 +383,12 @@ impl Remote {
     }
 }
 
-/// Verbindet wie [`crate::open`], aber ohne Terminal: Am Ende steht SFTP auf einer eigenen Verbindung.
+/// Connects like [`crate::open`], but without a terminal: in the end SFTP runs on a connection of its own.
 ///
-/// Rückfragen (Host-Schlüssel, Passwort, Fragen des Servers) kommen wie bei einer Sitzung als Ereignisse. Gelingt
-/// es, kommt als letztes Ereignis [`Event::Files`] mit der Verbindung; scheitert es oder schickt der Aufrufer
-/// [`Command::Close`], kommt [`Event::End`]. Danach ist nichts mehr zu erwarten. Der Kanal selbst schließt sich
-/// erst mit der Verbindung, weil sie ihn für spätere Meldungen des Servers festhält.
+/// Prompts (host key, password, server questions) arrive as events, as with a session. If it
+/// succeeds, the last event is [`Event::Files`] with the connection; if it fails or the caller sends
+/// [`Command::Close`], [`Event::End`] comes. Nothing more is to be expected after that. The channel itself only
+/// closes with the connection, because it holds on to it for later messages from the server.
 pub fn open(connect: Connect) -> Session {
     let (event_tx, events) = mpsc::channel(64);
     let (commands, mut command_rx) = mpsc::unbounded_channel::<Command>();
@@ -414,7 +414,7 @@ pub fn open(connect: Connect) -> Session {
     Session { commands, events }
 }
 
-/// Führt einen Befehl auf einem zusätzlichen Kanal aus und sammelt, was er ausgibt.
+/// Runs a command on an additional channel and collects what it outputs.
 pub async fn run(opened: Opened, command: &str) -> Result<Output, FileError> {
     let mut channel = opened.0;
     let work = async {

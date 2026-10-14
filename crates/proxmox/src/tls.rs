@@ -1,6 +1,6 @@
-//! Prüfung des Zertifikats eines Proxmox-Servers. Proxmox bringt ein selbst erstelltes Zertifikat mit, dem kein
-//! Rechner von sich aus traut; der Nutzer bestätigt deshalb einmal dessen Fingerabdruck, wie bei den bekannten
-//! Hosts von SSH. Danach gilt genau dieses Zertifikat und kein anderes.
+//! Checking a Proxmox server's certificate. Proxmox ships a self-signed certificate that no
+//! computer trusts on its own; the user therefore confirms its fingerprint once, as with SSH's known
+//! hosts. After that exactly this certificate applies and no other.
 
 use std::sync::Arc;
 
@@ -14,13 +14,13 @@ use sha2::{Digest, Sha256};
 
 use crate::{PveError, Shared};
 
-/// SHA-256 über das Zertifikat des Servers.
+/// SHA-256 over the server's certificate.
 pub type Fingerprint = [u8; 32];
 
-/// Was beim Verbinden zu sehen war: der Fingerabdruck, und ob das Zertifikat galt.
+/// What was seen while connecting: the fingerprint, and whether the certificate was valid.
 pub(crate) type Seen = Shared<Option<(Fingerprint, bool)>>;
 
-/// So zeigt Proxmox den Fingerabdruck: `5F:1A:…`, 32 Paare.
+/// This is how Proxmox shows the fingerprint: `5F:1A:…`, 32 pairs.
 pub fn fingerprint_text(fingerprint: &Fingerprint) -> String {
     fingerprint.iter().map(|byte| format!("{byte:02X}")).collect::<Vec<_>>().join(":")
 }

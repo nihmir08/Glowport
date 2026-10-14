@@ -1,14 +1,14 @@
-//! Prozesse: auflisten und beenden.
+//! Processes: list and end.
 //!
-//! Die Auslastung eines Prozesses ergibt sich erst aus zwei Messungen: `ps` nennt nur den Schnitt über seine ganze
-//! Laufzeit. Deshalb liefert jede Messung die verbrauchte Rechenzeit in Ticks und die Uhr des Servers; das Rechnen
-//! zwischen zwei Messungen überlässt dieses Modul dem Aufrufer (siehe [`cpu_between`]).
+//! A process's load only follows from two measurements: `ps` only names the average over its whole
+//! run time. That is why every measurement returns the CPU time used in ticks and the server's clock; computing
+//! between two measurements is left to the caller (see [`cpu_between`]).
 
 use std::collections::HashMap;
 
 use super::{sections, with_argument, As};
 
-/// Der Befehl für die Liste. Lesen darf das jeder Benutzer.
+/// The command for the list. Every user may read it.
 pub const LIST: &str = concat!(
     "sh -c '",
     "exec 2>/dev/null; export LC_ALL=C; ",
@@ -19,9 +19,9 @@ pub const LIST: &str = concat!(
     "'"
 );
 
-/// Mehr Prozesse liest die Liste nicht.
+/// The list reads no more processes than this.
 const MAX_PROCESSES: usize = 5000;
-/// So viel vom Befehl eines Prozesses bleibt.
+/// This much of a process's command is kept.
 const MAX_COMMAND: usize = 400;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -29,32 +29,32 @@ pub struct Process {
     pub pid: u32,
     pub parent: u32,
     pub user: String,
-    /// Kurzer Name: das Programm ohne Pfad und Argumente.
+    /// Short name: the program without path and arguments.
     pub name: String,
-    /// Der ganze Befehl mit Argumenten.
+    /// The whole command with arguments.
     pub command: String,
     /// Arbeitsspeicher in Bytes.
     pub memory: u64,
-    /// Sekunden, die er läuft.
+    /// Seconds it has been running.
     pub elapsed: u64,
     /// Verbrauchte Rechenzeit seit seinem Start, in Ticks (siehe [`Sample::ticks_per_second`]).
     pub ticks: u64,
-    /// Ein Faden des Kerns, kein Programm.
+    /// A kernel thread, not a program.
     pub kernel: bool,
 }
 
-/// Eine Messung.
+/// One measurement.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Sample {
     pub ticks_per_second: u32,
-    /// Sekunden seit dem Start des Servers: die Uhr für den Abstand zweier Messungen.
+    /// Seconds since the server started: the clock for the interval between two measurements.
     pub uptime: f64,
-    /// Arbeitsspeicher des Servers in Bytes.
+    /// The server's memory in bytes.
     pub memory_total: u64,
     pub processes: Vec<Process>,
 }
 
-/// Liest die Ausgabe von [`LIST`]. `None`: Der Server gibt die Liste nicht her.
+/// Reads the output of [`LIST`]. `None`: the server does not provide the list.
 pub fn parse(text: &str) -> Option<Sample> {
     let parts = sections(text);
     let clock = parts.get("clock")?;
@@ -78,7 +78,7 @@ pub fn parse(text: &str) -> Option<Sample> {
         if command.is_empty() {
             continue;
         }
-        // Fäden des Kerns stehen in eckigen Klammern und haben keinen eigenen Speicher.
+        // Kernel threads are in square brackets and have no memory of their own.
         let kernel = command.starts_with('[') && command.ends_with(']') && rss == 0;
         processes.push(Process {
             pid,
@@ -95,35 +95,35 @@ pub fn parse(text: &str) -> Option<Sample> {
     Some(Sample { ticks_per_second, uptime, memory_total, processes })
 }
 
-/// Aus einer Zeile von `/proc/<pid>/stat`: die Nummer und die verbrauchte Rechenzeit (im Programm und im Kern).
-/// Der Name in Klammern kann selbst Klammern und Leerzeichen enthalten; gezählt wird deshalb ab der letzten.
+/// From a line of `/proc/<pid>/stat`: the number and the CPU time used (in the program and in the kernel).
+/// The name in brackets can itself contain brackets and spaces; counting therefore starts from the last one.
 fn used(line: &str) -> Option<(u32, u64)> {
     let pid = line.split_whitespace().next()?.parse().ok()?;
     let mut fields = line[line.rfind(')')? + 1..].split_whitespace();
-    // Nach dem Namen: Zustand, dann zehn Felder bis `utime`, direkt dahinter `stime`.
+    // After the name: state, then ten fields up to `utime`, directly followed by `stime`.
     let user: u64 = fields.nth(11)?.parse().ok()?;
     let system: u64 = fields.next()?.parse().ok()?;
     Some((pid, user + system))
 }
 
-/// Der kurze Name eines Befehls: `/usr/sbin/nginx -g daemon off;` → `nginx`, `[kworker/0:1]` → `kworker/0:1`.
+/// The short name of a command: `/usr/sbin/nginx -g daemon off;` → `nginx`, `[kworker/0:1]` → `kworker/0:1`.
 fn name_of(command: &str) -> String {
     if let Some(thread) = command.strip_prefix('[').and_then(|rest| rest.strip_suffix(']')) {
         return thread.to_string();
     }
     let first = command.split_whitespace().next().unwrap_or(command);
-    // Manche Dienste nennen sich selbst, etwa `sshd: alex [priv]` oder `nginx: worker process`.
+    // Some services name themselves, e.g. `sshd: alex [priv]` or `nginx: worker process`.
     let first = first.trim_end_matches(':');
     first.rsplit('/').next().filter(|name| !name.is_empty()).unwrap_or(first).to_string()
 }
 
-/// Auslastung eines Prozesses zwischen zwei Messungen in Prozent eines Kerns (wie bei `top`: 200 heißt zwei Kerne
-/// voll). `None`: Den Prozess gab es vorher nicht, oder zwischen den Messungen lag keine Zeit.
+/// A process's load between two measurements in percent of one core (as in `top`: 200 means two cores
+/// fully used). `None`: the process did not exist before, or no time passed between the measurements.
 pub fn cpu_between(before: &Sample, after: &Sample, pid: u32) -> Option<f64> {
     let seconds = after.uptime - before.uptime;
     let old = before.processes.iter().find(|p| p.pid == pid)?;
     let new = after.processes.iter().find(|p| p.pid == pid)?;
-    // Dieselbe Nummer, aber kürzere Laufzeit: Das ist ein neuer Prozess.
+    // The same number but a shorter run time: that is a new process.
     if seconds <= 0.0 || new.elapsed < old.elapsed || new.ticks < old.ticks {
         return None;
     }
@@ -132,9 +132,9 @@ pub fn cpu_between(before: &Sample, after: &Sample, pid: u32) -> Option<f64> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Signal {
-    /// Bittet den Prozess, sich zu beenden.
+    /// Asks the process to end itself.
     Term,
-    /// Beendet ihn sofort, ohne dass er aufräumen kann.
+    /// Ends it at once, without it being able to clean up.
     Kill,
 }
 
@@ -146,12 +146,12 @@ impl Signal {
         }
     }
 
-    /// Der Befehl für einen Prozess. `None`: Diese Nummer beendet Glowport nicht (0 und 1: alles oder das System).
+    /// The command for a process. `None`: Glowport does not end this number (0 and 1: everything or the system).
     pub fn command(self, pid: u32, how: As) -> Option<String> {
         (pid > 1).then(|| with_argument(&format!("{}kill -{} \"$1\"", how.prefix(), self.name()), &pid.to_string()))
     }
 
-    /// Derselbe Befehl, wie ihn ein Mensch tippt (für [`super::typed`]).
+    /// The same command as a human would type it (for [`super::typed`]).
     pub fn typed(self, pid: u32) -> Option<String> {
         (pid > 1).then(|| format!("kill -{} {pid}", self.name()))
     }
@@ -161,8 +161,8 @@ impl Signal {
 mod tests {
     use super::*;
 
-    /// Aufgezeichnet am Ubuntu 26.04 im WSL (procps), gekürzt; dazu ein Faden des Kerns und Befehle mit
-    /// Leerzeichen und Doppelpunkt.
+    /// Recorded on Ubuntu 26.04 in WSL (procps), shortened; plus a kernel thread and commands with
+    /// spaces and a colon.
     const SAMPLE: &str = "\
 @clock
 100
@@ -202,7 +202,7 @@ unlesbar
                 (72, "systemd-resolve", "systemd-resolved", 0, 897, false),
                 (109, "root", "(udev-worker)", 0, 897, false),
                 (300, "www-data", "nginx", 6000, 120, false),
-                // Der Name im Kern enthält Klammern und Leerzeichen; gezählt wird ab der letzten Klammer.
+                // The name in the kernel contains brackets and spaces; counting starts from the last bracket.
                 (301, "alex", "python3", 300, 60, false),
             ],
             "unlesbare Zeilen fallen weg"
@@ -214,7 +214,7 @@ unlesbar
     #[test]
     fn load_is_what_happened_between_two_samples() {
         let before = parse(SAMPLE).unwrap();
-        // Fünf Sekunden später: nginx hat 250 Ticks mehr verbraucht (2,5 Sekunden Rechenzeit), der Bot 1000 (zwei Kerne voll).
+        // Five seconds later: nginx used 250 more ticks (2.5 seconds of CPU time), the bot 1000 (two cores fully used).
         let later = SAMPLE.replace("1000.50 80.60", "1005.50 80.60").replace("5000 1000 0 0 20", "5200 1050 0 0 20").replace("250 50 0 0 20 0 4", "1050 250 0 0 20 0 4").replace("     120 nginx", "     125 nginx").replace("      60 /usr/bin/python3", "      65 /usr/bin/python3");
         let after = parse(&later).unwrap();
         assert_eq!(cpu_between(&before, &after, 300), Some(50.0));
@@ -222,7 +222,7 @@ unlesbar
         assert_eq!(cpu_between(&before, &after, 1), Some(0.0));
         assert_eq!(cpu_between(&before, &after, 4711), None, "den gab es nicht");
         assert_eq!(cpu_between(&before, &before, 300), None, "keine Zeit vergangen");
-        // Dieselbe Nummer, neu vergeben: kürzere Laufzeit.
+        // The same number, assigned anew: shorter run time.
         let reused = parse(&later.replace("     125 nginx", "       2 nginx")).unwrap();
         assert_eq!(cpu_between(&before, &reused, 300), None);
     }
@@ -232,7 +232,7 @@ unlesbar
         assert_eq!(parse(""), None);
         assert_eq!(parse("@clock\n@mem\n@ps\n@stat\n"), None);
         assert_eq!(parse("@clock\n0\n1.0 1.0\n@ps\n"), None, "ohne Takt lässt sich nichts rechnen");
-        // BusyBox: Die Uhr gibt es, `ps` kennt die Spalten nicht.
+        // BusyBox: the clock exists, `ps` does not know the columns.
         assert_eq!(parse("@clock\n100\n5.00 5.00\n@mem\n@ps\n@stat\n").map(|s| s.processes.len()), Some(0));
     }
 

@@ -1,6 +1,6 @@
-//! Mosh gegen den eigenen Testserver. Ohne mosh gibt es den Rückfall auf SSH; mit `mosh-server` im WSL-Ubuntu
-//! dieses Rechners (über die Brücke des Testservers) den ganzen Weg samt Aussetzer. Fehlt das WSL-mosh, werden
-//! diese Fälle mit einer Meldung übersprungen.
+//! Mosh against the own test server. Without mosh there is the fallback to SSH; with `mosh-server` in this machine's
+//! WSL Ubuntu (through the test server's bridge) the whole way including a dropout. If mosh is missing in WSL,
+//! these cases are skipped with a message.
 
 use std::{path::PathBuf, sync::atomic::Ordering, time::Duration};
 
@@ -10,7 +10,7 @@ use tokio::time::timeout;
 
 const DISTRO: &str = "Ubuntu";
 
-/// Spielt die Oberfläche: nimmt jeden Server an, merkt sich Ausgabe und Mosh-Meldungen.
+/// Plays the interface: accepts every server, remembers output and Mosh messages.
 struct Driver {
     session: Session,
     output: String,
@@ -60,7 +60,7 @@ fn with_password() -> Options {
     Options { password: Some(("tester".into(), "richtig".into())), ..Options::default() }
 }
 
-/// Leerer Ordner als Heimat des Testservers: Dann laufen Befehle wirklich über `sh`, und dort gibt es kein mosh.
+/// Empty folder as the test server's home: then commands really run through `sh`, and there is no mosh there.
 struct Home(PathBuf);
 impl Home {
     fn new(name: &str) -> Self {
@@ -99,7 +99,7 @@ async fn without_mosh_server_the_session_falls_back_to_ssh() {
 async fn an_error_of_mosh_server_is_reported_with_its_first_line() {
     let home = Home::new("fehler");
     let running = server::start(Options { home: Some(home.0.clone()), ..with_password() }, server::key(1)).await.unwrap();
-    // `echo` statt mosh-server: antwortet, aber ohne `MOSH CONNECT`.
+    // `echo` instead of mosh-server: answers, but without `MOSH CONNECT`.
     let mosh = Mosh { server: Some("echo".into()), ..Mosh::default() };
     let mut driver = Driver::new(connect(running.address, mosh));
     assert_eq!(driver.until(Duration::from_secs(30), |d| d.output.ends_with(PROMPT)).await, None);
@@ -120,14 +120,14 @@ async fn over_mosh_the_terminal_survives_a_dropout() {
     driver.typed("stty size");
     assert_eq!(driver.until(Duration::from_secs(10), |d| d.output.contains("40 132")).await, None);
 
-    // Die SSH-Verbindung daneben gibt Kanäle für die Seitenleiste her.
+    // The SSH connection next to it provides channels for the sidebar.
     let (reply, answer) = tokio::sync::oneshot::channel();
     driver.send(Command::Open(reply));
     let opened = tokio::spawn(answer);
     assert_eq!(driver.until(Duration::from_secs(5), |_| opened.is_finished()).await, None);
     assert!(opened.await.unwrap().unwrap().is_some(), "kein Kanal neben Mosh");
 
-    // Aussetzer: neun Sekunden kein Paket. Getipptes geht nicht verloren.
+    // Dropout: nine seconds without a packet. Typed text is not lost.
     bridge.paused.store(true, Ordering::Relaxed);
     driver.typed("echo nach-$((1+1))");
     assert_eq!(driver.until(Duration::from_secs(15), |d| d.mosh.iter().any(|e| matches!(e, MoshEvent::Silent(Some(n)) if *n >= 7))).await, None, "{:?}", driver.mosh);
@@ -151,7 +151,7 @@ async fn exit_ends_the_mosh_session() {
 #[tokio::test]
 async fn without_udp_the_session_falls_back_to_ssh() {
     let Some(blocked) = bridge() else { return };
-    // Die Weiterleitung lässt nichts durch: wie eine Firewall, die die Ports von mosh sperrt.
+    // The forwarder lets nothing through: like a firewall that blocks mosh's ports.
     blocked.paused.store(true, Ordering::Relaxed);
     let running = server::start(Options { mosh: Some(blocked), ..with_password() }, server::key(1)).await.unwrap();
     let mut driver = Driver::new(connect(running.address, Mosh::default()));

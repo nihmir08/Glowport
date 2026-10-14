@@ -1,13 +1,13 @@
-//! Auslastung eines Servers: ein Befehl, der die Zahlen aus `/proc` und `df` einsammelt, und das Lesen seiner Ausgabe.
+//! A server's load: a command that collects the numbers from `/proc` and `df`, and reading its output.
 //!
-//! Geht nur unter Linux. Die Zähler für Rechenzeit und Netz laufen seit dem Start des Servers hoch; die Auslastung
-//! ergibt sich erst aus zwei Messungen nacheinander. Das Rechnen überlässt dieses Modul dem Aufrufer.
+//! Only works on Linux. The counters for CPU time and network rise from the server's start; the load
+//! only follows from two measurements in a row. The computing is left to the caller.
 
-/// Sammelt alles in einem Aufruf. Jeder Abschnitt beginnt mit einer Zeile `@name`. Läuft in `sh`, damit die
-/// Anmelde-Shell des Benutzers (fish, csh) keine Rolle spielt; was fehlt, bleibt einfach leer.
+/// Collects everything in one call. Every section starts with a line `@name`. Runs in `sh` so the
+/// user's login shell (fish, csh) does not matter; whatever is missing simply stays empty.
 pub const COMMAND: &str = concat!(
     "sh -c '",
-    // Fehlermeldungen (fehlende Dateien auf anderen Systemen) gehören nicht in die Ausgabe.
+    // Error messages (missing files on other systems) do not belong in the output.
     "exec 2>/dev/null; ",
     "echo @cpu; head -n 1 /proc/stat; ",
     "echo @cores; grep -c ^processor /proc/cpuinfo; ",
@@ -22,19 +22,19 @@ pub const COMMAND: &str = concat!(
     "'"
 );
 
-/// Mehr Platten zeigt die Anzeige nicht.
+/// The display shows no more disks than this.
 const MAX_DISKS: usize = 6;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Disk {
     pub mount: String,
     pub device: String,
-    /// Größe und Belegung in Bytes.
+    /// Size and usage in bytes.
     pub total: u64,
     pub used: u64,
 }
 
-/// Eine Messung. Speicher in Bytes, Rechenzeit in Ticks seit dem Start, Netz in Bytes seit dem Start.
+/// One measurement. Memory in bytes, CPU time in ticks since the start, network in bytes since the start.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Sample {
     pub cpu_total: u64,
@@ -48,22 +48,22 @@ pub struct Sample {
     pub disks: Vec<Disk>,
     pub net_rx: u64,
     pub net_tx: u64,
-    /// Sekunden seit dem Start.
+    /// Seconds since the start.
     pub uptime: u64,
-    /// Name des Systems, etwa „Ubuntu 24.04.1 LTS“.
+    /// Name of the system, e.g. “Ubuntu 24.04.1 LTS”.
     pub system: String,
     pub kernel: String,
     pub hostname: String,
 }
 
-/// Dateisysteme, die keinen Platz auf einer Platte bedeuten.
+/// File systems that do not mean space on a disk.
 fn pseudo(device: &str, mount: &str) -> bool {
     const DEVICES: [&str; 12] = ["tmpfs", "devtmpfs", "udev", "overlay", "shm", "none", "efivarfs", "squashfs", "cgroup", "cgroup2", "run", "dev"];
     const MOUNTS: [&str; 7] = ["/dev", "/proc", "/sys", "/run", "/snap", "/boot", "/var/lib/docker/overlay"];
     DEVICES.contains(&device) || device.starts_with("/dev/loop") || MOUNTS.iter().any(|prefix| mount == *prefix || mount.starts_with(&format!("{prefix}/")))
 }
 
-/// Liest die Ausgabe von [`COMMAND`]. `None`, wenn der Server die Zahlen nicht hergibt (kein Linux, kein `/proc`).
+/// Reads the output of [`COMMAND`]. `None` if the server does not provide the numbers (no Linux, no `/proc`).
 pub fn parse(text: &str) -> Option<Sample> {
     let mut sections: std::collections::HashMap<&str, Vec<&str>> = std::collections::HashMap::new();
     let mut current = "";
@@ -77,7 +77,7 @@ pub fn parse(text: &str) -> Option<Sample> {
     let lines = |name: &str| sections.get(name).cloned().unwrap_or_default();
     let numbers = |line: &str| line.split_whitespace().filter_map(|part| part.parse::<u64>().ok()).collect::<Vec<_>>();
 
-    // „cpu  user nice system idle iowait irq softirq steal guest guest_nice“; die Gastzeit steckt schon in user und nice.
+    // “cpu  user nice system idle iowait irq softirq steal guest guest_nice”; guest time is already contained in user and nice.
     let cpu = lines("cpu").into_iter().find(|line| line.starts_with("cpu "))?;
     let ticks = numbers(cpu);
     if ticks.len() < 4 {
@@ -88,7 +88,7 @@ pub fn parse(text: &str) -> Option<Sample> {
 
     let mem = |name: &str| lines("mem").into_iter().find_map(|line| line.strip_prefix(name)?.strip_prefix(':')?.split_whitespace().next()?.parse::<u64>().ok()).map(|kib| kib * 1024);
     let mem_total = mem("MemTotal")?;
-    // Sehr alte Kernel kennen `MemAvailable` nicht; frei plus Puffer und Zwischenspeicher kommt dem nahe.
+    // Very old kernels do not know `MemAvailable`; free plus buffers and cache comes close.
     let mem_available = mem("MemAvailable").unwrap_or_else(|| mem("MemFree").unwrap_or(0) + mem("Buffers").unwrap_or(0) + mem("Cached").unwrap_or(0)).min(mem_total);
 
     let mut load = [0.0; 3];
@@ -98,7 +98,7 @@ pub fn parse(text: &str) -> Option<Sample> {
         }
     }
 
-    // „eth0: rx_bytes rx_packets … (acht Felder) tx_bytes …“; die Schleife zählt nicht.
+    // “eth0: rx_bytes rx_packets … (eight fields) tx_bytes …”; loopback does not count.
     let (mut net_rx, mut net_tx) = (0u64, 0u64);
     for line in lines("net") {
         let Some((name, rest)) = line.split_once(':') else { continue };
@@ -109,7 +109,7 @@ pub fn parse(text: &str) -> Option<Sample> {
         }
     }
 
-    // „Filesystem 1024-blocks Used Available Capacity Mounted on“. Ein Gerät, das mehrfach eingehängt ist, zählt einmal.
+    // “Filesystem 1024-blocks Used Available Capacity Mounted on”. A device mounted several times counts once.
     let mut disks: Vec<Disk> = Vec::new();
     for line in lines("disk") {
         let parts: Vec<&str> = line.split_whitespace().collect();
@@ -125,7 +125,7 @@ pub fn parse(text: &str) -> Option<Sample> {
             None => disks.push(disk),
         }
     }
-    // Die Wurzel zuerst, dann die größten.
+    // The root first, then the largest.
     disks.sort_by(|a, b| (b.mount == "/").cmp(&(a.mount == "/")).then(b.total.cmp(&a.total)).then(a.mount.cmp(&b.mount)));
     disks.truncate(MAX_DISKS);
 
@@ -228,7 +228,7 @@ VERSION_ID=\"24.04\"
 
     #[test]
     fn other_systems_give_nothing() {
-        // FreeBSD, macOS, Windows: kein /proc, die Abschnitte bleiben leer.
+        // FreeBSD, macOS, Windows: no /proc, the sections stay empty.
         assert_eq!(parse("@cpu\n@cores\n@mem\n@load\n@uptime\n@net\n@disk\n@kernel\n14.1-RELEASE\n@host\nbsd\n@os\n"), None);
         assert_eq!(parse(""), None);
         assert_eq!(parse("'sh' is not recognized as an internal or external command"), None);

@@ -1,13 +1,13 @@
-//! Verwaltung eines Linux-Servers über Befehle auf der bestehenden Verbindung: Docker, systemd-Dienste, Prozesse
-//! (`docs/verwaltung.md`).
+//! Managing a Linux server through commands on the existing connection: Docker, systemd services, processes
+//! (`docs/management.md`).
 //!
-//! Dieses Modul baut Befehle und liest ihre Ausgabe; es führt selbst nichts aus. Jede Liste entsteht aus einem
-//! einzigen Aufruf, dessen Ausgabe in Abschnitte zerfällt, die mit einer Zeile `@name` beginnen (wie bei
-//! [`crate::stats`]). Alles läuft in `sh`, damit die Anmelde-Shell des Benutzers (fish, csh) keine Rolle spielt, und
-//! mit `LC_ALL=C`, damit die Meldungen englisch und damit lesbar sind.
+//! This module builds commands and reads their output; it runs nothing itself. Every list comes from a
+//! single call whose output splits into sections that start with a line `@name` (as in
+//! [`crate::stats`]). Everything runs in `sh`, so the user's login shell (fish, csh) does not matter, and
+//! with `LC_ALL=C`, so the messages are in English and therefore readable.
 //!
-//! Was vom Server kommt (Kennungen von Containern, Namen von Diensten, Prozessnummern), geht nie als Text in einen
-//! Befehl: Es wird auf seine Form geprüft und als eigenes Argument übergeben (`"$1"`).
+//! What comes from the server (container IDs, service names, process numbers) never goes into a
+//! command as text: it is checked for its form and passed as an argument of its own (`"$1"`).
 
 pub mod docker;
 pub mod processes;
@@ -15,17 +15,17 @@ pub mod services;
 
 use std::collections::HashMap;
 
-/// Mit welchen Rechten ein Befehl läuft.
+/// With which permissions a command runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum As {
-    /// Als der angemeldete Benutzer.
+    /// As the signed-in user.
     User,
-    /// Mit `sudo -n`: ohne Passwortabfrage, sonst gar nicht.
+    /// With `sudo -n`: without a password prompt, otherwise not at all.
     Sudo,
 }
 
 impl As {
-    /// Was vor dem Programm steht.
+    /// What goes before the program.
     fn prefix(self) -> &'static str {
         match self {
             As::User => "",
@@ -34,25 +34,25 @@ impl As {
     }
 }
 
-/// Was nach einem Versuch gilt.
+/// What applies after an attempt.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Verdict {
     Done,
-    /// Dem angemeldeten Benutzer fehlen die Rechte: mit [`As::Sudo`] noch einmal.
+    /// The signed-in user lacks permissions: once more with [`As::Sudo`].
     NeedsRoot,
-    /// `sudo` will ein Passwort. Das gibt der Nutzer selbst im Terminal ein, siehe [`typed`].
+    /// `sudo` wants a password. The user types it in the terminal themselves, see [`typed`].
     NeedsPassword,
-    /// Es ging aus einem anderen Grund nicht; der Text ist die Meldung des Servers.
+    /// It failed for another reason; the text is the server's message.
     Failed(String),
 }
 
-/// Meldungen, mit denen Programme fehlende Rechte anzeigen.
+/// Messages with which programs report missing permissions.
 const DENIED: [&str; 8] = ["permission denied", "access denied", "operation not permitted", "authentication required", "authentication is required", "must be root", "are you root", "not permitted"];
-/// Meldungen von `sudo -n`, wenn es ein Passwort bräuchte (klassisches sudo und sudo-rs).
+/// Messages of `sudo -n` when it would need a password (classic sudo and sudo-rs).
 const PASSWORD: [&str; 5] = ["a password is required", "password is required", "authentication is required", "a terminal is required", "no tty present"];
 
-/// Deutet das Ende eines Befehls, den dieses Modul gebaut hat: `ok` ist sein Erfolg, `text` seine Ausgabe samt
-/// Fehlermeldungen.
+/// Interprets the end of a command this module built: `ok` is its success, `text` its output including
+/// error messages.
 pub fn verdict(ok: bool, text: &str, how: As) -> Verdict {
     if ok {
         return Verdict::Done;
@@ -65,7 +65,7 @@ pub fn verdict(ok: bool, text: &str, how: As) -> Verdict {
     }
 }
 
-/// Die Meldung des Servers in einer Länge, die sich zeigen lässt: die letzten Zeilen, ohne Leerzeilen.
+/// The server's message at a length that can be shown: the last lines, without empty lines.
 fn message(text: &str) -> String {
     const LINES: usize = 6;
     const CHARS: usize = 600;
@@ -77,25 +77,25 @@ fn message(text: &str) -> String {
     }
 }
 
-/// Was der Nutzer selbst im Terminal abschickt, wenn `sudo` ein Passwort will. `command` ist der Befehl ohne `sudo`,
-/// so wie ihn ein Mensch tippen würde (siehe etwa [`docker::Action::typed`]).
+/// What the user sends in the terminal themselves when `sudo` wants a password. `command` is the command without `sudo`,
+/// as a human would type it (see e.g. [`docker::Action::typed`]).
 pub fn typed(command: &str) -> String {
     format!("sudo {command}")
 }
 
-/// Ein Wort so, dass jede Shell es wörtlich nimmt.
+/// A word in a form every shell takes literally.
 pub(crate) fn quoted(word: &str) -> String {
     format!("'{}'", word.replace('\'', r"'\''"))
 }
 
-/// Ein Befehl mit genau einem Wert vom Server. Der Wert steht nicht im Text des Befehls, sondern kommt als
-/// eigenes Argument dazu und heißt darin `"$1"`. Fehlermeldungen landen mit in der Ausgabe.
+/// A command with exactly one value from the server. The value is not in the command's text but comes as
+/// an argument of its own and is called `"$1"` there. Error messages end up in the output too.
 fn with_argument(script: &str, argument: &str) -> String {
     debug_assert!(!script.contains('\''), "das Skript steht selbst in einfachen Anführungszeichen");
     format!("sh -c 'exec 2>&1; export LC_ALL=C; {script}' sh {}", quoted(argument))
 }
 
-/// Zerlegt eine Ausgabe in ihre Abschnitte. Was vor dem ersten `@name` steht, zählt nicht.
+/// Splits an output into its sections. Whatever comes before the first `@name` does not count.
 fn sections(text: &str) -> HashMap<&str, Vec<&str>> {
     let mut out: HashMap<&str, Vec<&str>> = HashMap::new();
     let mut current = None;
@@ -115,9 +115,9 @@ fn sections(text: &str) -> HashMap<&str, Vec<&str>> {
     out
 }
 
-/// Findet heraus, was ein Server hergibt. Läuft einmal je Sitzung.
+/// Finds out what a server offers. Runs once per session.
 ///
-/// `ps` zählt nur, wenn es die Spalten kennt, die [`processes`] braucht (procps; das `ps` von BusyBox nicht).
+/// `ps` only counts if it knows the columns [`processes`] needs (procps; BusyBox's `ps` does not).
 pub const PROBE: &str = concat!(
     "sh -c '",
     "exec 2>/dev/null; ",
@@ -129,19 +129,19 @@ pub const PROBE: &str = concat!(
     "'"
 );
 
-/// Was es auf einem Server zu verwalten gibt.
+/// What there is to manage on a server.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Abilities {
-    /// Die Sitzung ist als `root` angemeldet.
+    /// The session is signed in as `root`.
     pub root: bool,
     pub docker: bool,
     pub services: bool,
     pub processes: bool,
-    /// `sudo` geht ohne Passwort.
+    /// `sudo` works without a password.
     pub sudo: bool,
 }
 
-/// Liest die Ausgabe von [`PROBE`].
+/// Reads the output of [`PROBE`].
 pub fn abilities(text: &str) -> Abilities {
     let sections = sections(text);
     let filled = |name: &str| sections.get(name).is_some_and(|lines| lines.iter().any(|line| !line.trim().is_empty()));
@@ -160,14 +160,14 @@ mod tests {
 
     #[test]
     fn the_probe_tells_what_a_server_offers() {
-        // Ubuntu im WSL als gewöhnlicher Benutzer: systemd und procps, kein Docker, sudo nur mit Passwort.
+        // Ubuntu in WSL as an ordinary user: systemd and procps, no Docker, sudo only with a password.
         let ubuntu = "@uid\n1000\n@docker\n@systemd\n/usr/bin/systemctl\n@ps\n      1       2 root\n@sudo\n";
         assert_eq!(abilities(ubuntu), Abilities { root: false, docker: false, services: true, processes: true, sudo: false });
         let root = "@uid\n0\n@docker\n/usr/bin/docker\n@systemd\n/usr/bin/systemctl\n@ps\n      1  864000 root\n@sudo\nyes\n";
         assert_eq!(abilities(root), Abilities { root: true, docker: true, services: true, processes: true, sudo: true });
-        // Alpine im Container: kein systemd, das ps von BusyBox kennt die Spalten nicht.
+        // Alpine in a container: no systemd, BusyBox's ps does not know the columns.
         assert_eq!(abilities("@uid\n0\n@docker\n@systemd\n@ps\n@sudo\n"), Abilities { root: true, ..Abilities::default() });
-        // Kein Linux, keine Shell, die antwortet.
+        // No Linux, no shell that answers.
         assert_eq!(abilities(""), Abilities::default());
         assert_eq!(abilities("irgendetwas\nganz anderes"), Abilities::default());
     }
@@ -175,7 +175,7 @@ mod tests {
     #[test]
     fn a_refusal_says_what_to_try_next() {
         assert_eq!(verdict(true, "permission denied", As::User), Verdict::Done, "gelungen ist gelungen");
-        // Als Benutzer abgelehnt: mit sudo noch einmal.
+        // Refused as the user: once more with sudo.
         for text in [
             "permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock",
             "Failed to restart cron.service: Interactive authentication required.\nSee system logs and 'systemctl status cron.service' for details.",
@@ -184,15 +184,15 @@ mod tests {
         ] {
             assert_eq!(verdict(false, text, As::User), Verdict::NeedsRoot, "{text}");
         }
-        // sudo will ein Passwort: klassisches sudo und sudo-rs.
+        // sudo wants a password: classic sudo and sudo-rs.
         for text in ["sudo: a password is required", "sudo: interactive authentication is required", "sudo: a terminal is required to read the password; either use the -S option"] {
             assert_eq!(verdict(false, text, As::Sudo), Verdict::NeedsPassword, "{text}");
         }
-        // Alles andere ist ein Fehler mit der Meldung des Servers, auch unter sudo.
+        // Everything else is an error with the server's message, also under sudo.
         assert_eq!(verdict(false, "Error response from daemon: No such container: abc\n", As::User), Verdict::Failed("Error response from daemon: No such container: abc".into()));
         assert_eq!(verdict(false, "Failed to start nix.service: Unit nix.service not found.", As::Sudo), Verdict::Failed("Failed to start nix.service: Unit nix.service not found.".into()));
         assert_eq!(verdict(false, "alex is not in the sudoers file.", As::Sudo), Verdict::Failed("alex is not in the sudoers file.".into()));
-        // Lange Ausgaben: die letzten Zeilen.
+        // Long output: the last lines.
         let long = (1..=20).map(|n| format!("Zeile {n}\n\n")).collect::<String>();
         assert_eq!(verdict(false, &long, As::User), Verdict::Failed("Zeile 15\nZeile 16\nZeile 17\nZeile 18\nZeile 19\nZeile 20".into()));
         let Verdict::Failed(cut) = verdict(false, &"ä".repeat(2000), As::User) else { panic!() };
@@ -213,7 +213,7 @@ mod tests {
         let parts = sections("davor\n@eins\na\nb\n@leer\n@zwei\nc\n@Kein Abschnitt\n@\n");
         assert_eq!(parts.get("eins"), Some(&vec!["a", "b"]));
         assert_eq!(parts.get("leer"), Some(&vec![]));
-        // Zeilen, die nur so aussehen, gehören zum Inhalt.
+        // Lines that only look like it belong to the content.
         assert_eq!(parts.get("zwei"), Some(&vec!["c", "@Kein Abschnitt", "@"]));
         assert_eq!(parts.len(), 3);
     }

@@ -1,4 +1,4 @@
-//! Sitzungen gegen den eigenen Testserver: der ganze Weg vom Verbinden bis zum Ende.
+//! Sessions against the own test server: the whole way from connecting to the end.
 
 use std::{collections::VecDeque, path::PathBuf, time::Duration};
 
@@ -7,7 +7,7 @@ use glowport_testserver::{self as server, Options, PROMPT};
 use russh::keys::PublicKey;
 use tokio::time::timeout;
 
-/// Wegwerf-Schlüssel nur für diese Tests, mit `ssh-keygen -t ed25519 -N test-passphrase` erzeugt.
+/// Throwaway key only for these tests, generated with `ssh-keygen -t ed25519 -N test-passphrase`.
 const ENCRYPTED_KEY: &str = "-----BEGIN OPENSSH PRIVATE KEY-----
 b3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jdHIAAAAGYmNyeXB0AAAAGAAAABDBw/Y9R+
 vWsWSGFygsP/TdAAAAGAAAAAEAAAAzAAAAC3NzaC1lZDI1NTE5AAAAIDys3AvfCy6SxfZO
@@ -20,20 +20,20 @@ O3jk4sUQfHo9MAev8H7tnr1dp1qmdnGEgq8zc=
 const ENCRYPTED_KEY_PUBLIC: &str = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDys3AvfCy6SxfZOiMxTF6NyOkeHlispFMFFCUbiwNWy glowport-testschluessel";
 const PASSPHRASE: &str = "test-passphrase";
 
-/// Spielt die Rolle der Oberfläche: beantwortet Rückfragen nach Vorgabe und merkt sich, was geschah.
+/// Plays the part of the interface: answers prompts as instructed and remembers what happened.
 struct Driver {
     session: Session,
     accept_host_key: bool,
-    /// Antworten auf Passwort- und Passphrase-Rückfragen, der Reihe nach. `None` bricht ab.
+    /// Answers to password and passphrase prompts, in order. `None` cancels.
     answers: VecDeque<Option<&'static str>>,
     output: String,
     phases: Vec<Phase>,
     host_key: Option<HostKey>,
-    /// Adressen aller Server, die ihren Schlüssel gezeigt haben, in dieser Reihenfolge.
+    /// Addresses of all servers that showed their key, in this order.
     host_keys: Vec<(String, u16, String)>,
-    /// Schlüssel dieser Server werden abgelehnt.
+    /// These servers' keys are refused.
     distrust: Vec<u16>,
-    /// Für welche Station zuletzt gefragt wurde.
+    /// For which hop the last question was asked.
     stations: Vec<Station>,
     asked: Vec<(SecretKind, u32)>,
     notices: Vec<&'static str>,
@@ -62,7 +62,7 @@ impl Driver {
         }
     }
 
-    /// Verarbeitet Ereignisse, bis `done` zutrifft (dann `None`) oder die Sitzung endet (dann ihr Ende).
+    /// Processes events until `done` holds (then `None`) or the session ends (then its end).
     async fn until(&mut self, done: impl Fn(&Driver) -> bool) -> Option<End> {
         loop {
             if done(self) {
@@ -98,7 +98,7 @@ impl Driver {
         self.until(|_| false).await.expect("Ende erwartet")
     }
 
-    /// Wartet, bis die Shell bereit ist.
+    /// Waits until the shell is ready.
     async fn prompt(&mut self) {
         let seen = self.output.len();
         assert_eq!(self.until(|d| d.output[seen..].ends_with(PROMPT)).await, None, "Sitzung endete vor der Eingabeaufforderung");
@@ -127,7 +127,7 @@ fn connect(address: std::net::SocketAddr, password: Option<&str>) -> Connect {
     }
 }
 
-/// Schreibt eine Schlüsseldatei in den Temp-Ordner; wird beim Verlassen gelöscht.
+/// Writes a key file into the temp folder; deleted when leaving.
 struct KeyFile(PathBuf);
 impl KeyFile {
     fn new(name: &str, contents: &str) -> Self {
@@ -155,7 +155,7 @@ async fn password_login_gives_a_working_shell() {
     assert_eq!(key.algorithm, "ssh-ed25519");
     assert!(key.fingerprint.starts_with("SHA256:") && key.openssh.starts_with("ssh-ed25519 "));
 
-    // Die Größe beim Verbinden kommt an, eine spätere Änderung auch.
+    // The size when connecting arrives, and so does a later change.
     driver.typed("size");
     driver.prompt().await;
     assert!(driver.output.contains("80x24"), "{}", driver.output);
@@ -206,14 +206,14 @@ async fn wrong_saved_password_leads_to_prompts() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn a_server_that_only_takes_keys_says_so_when_there_is_none() {
-    // Ohne Passwort-Anmeldung, wie ein Server mit `PasswordAuthentication no`.
+    // Without password sign-in, like a server with `PasswordAuthentication no`.
     let running = server::start(Options { authorized_keys: vec![server::key(7).public_key().clone()], ..Options::default() }, server::key(1)).await.unwrap();
     let mut driver = Driver::new(connect(running.address, None));
     assert_eq!(driver.end().await, End::AuthFailed);
     assert_eq!(driver.notices, ["key_required"]);
     assert!(driver.asked.is_empty(), "es gibt nichts zu fragen");
 
-    // Mit einem Schlüssel, den der Server nicht kennt, ist der Grund ein anderer.
+    // With a key the server does not know, the reason is a different one.
     let key = keys::generate(keys::Kind::Ed25519, 256).unwrap();
     let mut driver = Driver::new(Connect { key: Some(key.private.clone()), ..connect(running.address, None) });
     assert_eq!(driver.end().await, End::AuthFailed);
@@ -242,7 +242,7 @@ async fn key_file_logs_in_and_asks_for_its_passphrase() {
     let file = KeyFile::new("verschluesselt", ENCRYPTED_KEY);
     let with_key = |password| Connect { key_file: Some(file.0.clone()), ..connect(running.address, password) };
 
-    // Falsche Passphrase, dann die richtige: Anmeldung über den Schlüssel, ohne Passwort.
+    // Wrong passphrase, then the right one: sign-in via the key, without password.
     let mut driver = Driver::new(with_key(None));
     driver.answers = [Some("falsch"), Some(PASSPHRASE)].into();
     driver.prompt().await;
@@ -250,13 +250,13 @@ async fn key_file_logs_in_and_asks_for_its_passphrase() {
     assert_eq!(driver.asked, [(SecretKind::Passphrase { file: file_name.clone() }, 1), (SecretKind::Passphrase { file: file_name }, 2)]);
     assert!(driver.accepted_password.is_none());
 
-    // Drei falsche Passphrasen: Der Schlüssel fällt aus, das gespeicherte Passwort rettet die Anmeldung.
+    // Three wrong passphrases: the key drops out, the saved password rescues the sign-in.
     let mut driver = Driver::new(with_key(Some("richtig")));
     driver.answers = [Some("a"), Some("b"), Some("c")].into();
     driver.prompt().await;
     assert_eq!(driver.notices, ["key_unreadable"]);
 
-    // Abbrechen der Passphrase bricht das Verbinden ab.
+    // Cancelling the passphrase cancels connecting.
     let mut driver = Driver::new(with_key(Some("richtig")));
     driver.answers = [None].into();
     assert_eq!(driver.end().await, End::User);
@@ -271,7 +271,7 @@ async fn unusable_or_unauthorised_key_falls_back_to_the_password() {
     driver.prompt().await;
     assert_eq!(driver.notices, ["key_unreadable"]);
 
-    // Ein gültiger Schlüssel, den der Server nicht kennt.
+    // A valid key the server does not know.
     let stranger = KeyFile::new("fremd", ENCRYPTED_KEY);
     let mut driver = Driver::new(Connect { key_file: Some(stranger.0.clone()), ..connect(running.address, Some("richtig")) });
     driver.answers = [Some(PASSPHRASE)].into();
@@ -288,13 +288,13 @@ async fn key_from_the_vault_logs_in_without_any_question() {
     driver.prompt().await;
     assert!(driver.asked.is_empty() && driver.notices.is_empty(), "weder Passphrase noch Passwort: {:?}", driver.notices);
 
-    // Ein Schlüssel, den der Server nicht kennt: Hinweis, dann rettet das gespeicherte Passwort die Anmeldung.
+    // A key the server does not know: a notice, then the saved password rescues the sign-in.
     let stranger = keys::generate(keys::Kind::Ecdsa, 256).unwrap();
     let mut driver = Driver::new(Connect { key: Some(stranger.private), ..connect(running.address, Some("richtig")) });
     driver.prompt().await;
     assert_eq!(driver.notices, ["key_rejected"]);
 
-    // Der Schlüssel aus dem Tresor kommt vor der Schlüsseldatei; passt er, wird die Datei gar nicht gelesen.
+    // The key from the vault comes before the key file; if it fits, the file is not even read.
     let unused = KeyFile::new("unbenutzt", ENCRYPTED_KEY);
     let mut driver = Driver::new(Connect { key: Some(known.private), key_file: Some(unused.0.clone()), ..connect(running.address, None) });
     driver.prompt().await;
@@ -305,7 +305,7 @@ async fn key_from_the_vault_logs_in_without_any_question() {
     assert_eq!(driver.notices, ["key_unreadable"]);
 }
 
-/// Heimatverzeichnis für den Testserver, das mit dem Test verschwindet.
+/// Home directory for the test server that disappears with the test.
 struct Home(PathBuf);
 impl Home {
     fn new(name: &str) -> Self {
@@ -332,14 +332,14 @@ async fn public_key_is_installed_over_ssh_and_logs_in_afterwards() {
     let key = keys::generate(keys::Kind::Ed25519, 256).unwrap();
     let command = keys::install_command(&key.public, "arbeit").unwrap();
 
-    // Noch kennt der Server den Schlüssel nicht.
+    // The server does not know the key yet.
     let mut driver = Driver::new(Connect { key: Some(key.private.clone()), ..connect(running.address, Some("richtig")) });
     driver.prompt().await;
     assert_eq!(driver.notices, ["key_rejected"]);
 
-    // Ohne hinterlegtes Passwort bräuchte es eine Rückfrage: Das scheitert sofort, statt zu warten.
+    // Without a stored password a prompt would be needed: that fails at once instead of waiting.
     assert_eq!(execute(&connect(running.address, None), &command, |_, _, _| true).await.unwrap_err(), End::AuthFailed);
-    // Einem Server, dessen Schlüssel nicht bekannt ist, wird nichts geschickt.
+    // Nothing is sent to a server whose key is not known.
     assert_eq!(execute(&connect(running.address, Some("richtig")), &command, |_, _, _| false).await.unwrap_err(), End::HostKeyRejected);
     assert!(!home.0.join(".ssh").exists());
 
@@ -348,7 +348,7 @@ async fn public_key_is_installed_over_ssh_and_logs_in_afterwards() {
     let second = execute(&connect(running.address, Some("richtig")), &command, |_, _, _| true).await.unwrap();
     assert_eq!(keys::install_outcome(&second.stdout), Some(keys::Installed::Present));
 
-    // Jetzt führt der Schlüssel allein hinein.
+    // Now the key alone gets in.
     let mut driver = Driver::new(Connect { key: Some(key.private), ..connect(running.address, None) });
     driver.prompt().await;
     assert!(driver.asked.is_empty() && driver.notices.is_empty());
@@ -362,7 +362,7 @@ async fn jump_servers_are_chained_each_with_its_own_login() {
     let target = server::start(with_password(), server::key(3)).await.unwrap();
     let via = |address, password, tag: &str, jump: Option<Connect>| Connect { tag: Some(tag.into()), jump: jump.map(Box::new), ..connect(address, password) };
 
-    // Zwei Stationen: Jede zeigt ihren Schlüssel, jede meldet sich mit ihrem eigenen Passwort an, die Shell läuft am Ziel.
+    // Two hops: each shows its key, each signs in with its own password, the shell runs on the destination.
     let chain = via(target.address, Some("richtig"), "ziel", Some(via(second.address, Some("zwei"), "b", Some(via(first.address, Some("eins"), "a", None)))));
     let mut driver = Driver::new(chain);
     driver.prompt().await;
@@ -372,19 +372,19 @@ async fn jump_servers_are_chained_each_with_its_own_login() {
     driver.typed("exit");
     assert_eq!(driver.end().await, End::Remote { exit_status: Some(0) });
 
-    // Fehlt einer Station das Passwort, wird für genau diese Station gefragt.
+    // If a hop lacks its password, exactly that hop is asked.
     let mut driver = Driver::new(via(target.address, Some("richtig"), "ziel", Some(via(first.address, None, "a", None))));
     driver.answers = [Some("eins")].into();
     driver.prompt().await;
     assert_eq!(driver.stations, [Station { label: format!("tester@127.0.0.1:{}", first.address.port()), tag: Some("a".into()) }]);
 
-    // Wird dem Schlüssel einer Station nicht vertraut, kommt die Verbindung nicht zustande; das Ziel wird nie gefragt.
+    // If a hop's key is not trusted, the connection does not come about; the destination is never asked.
     let mut driver = Driver::new(via(target.address, Some("richtig"), "ziel", Some(via(first.address, Some("eins"), "a", None))));
     driver.distrust = vec![first.address.port()];
     assert_eq!(driver.end().await, End::HostKeyRejected);
     assert_eq!(driver.host_keys.len(), 1);
 
-    // Eine Station, die nicht weiterreicht, oder ein Ziel, das von ihr aus nicht erreichbar ist.
+    // A hop that does not forward, or a destination that cannot be reached from it.
     let closed = server::start(with_password(), server::key(4)).await.unwrap();
     let mut driver = Driver::new(via(target.address, Some("richtig"), "ziel", Some(via(closed.address, Some("richtig"), "zu", None))));
     assert!(matches!(driver.end().await, End::ConnectFailed(_)));
@@ -400,12 +400,12 @@ async fn start_command_and_environment_reach_the_shell() {
     let running = server::start(with_password(), server::key(1)).await.unwrap();
     let env = vec![("LANG".to_string(), "de_DE.UTF-8".to_string()), ("STUFE".to_string(), "test".to_string())];
     let mut driver = Driver::new(Connect { startcmd: Some("  env  ".into()), env, ..connect(running.address, Some("richtig")) });
-    // Die Begrüßung endet mit der Eingabeaufforderung, danach tippt Glowport den Startbefehl.
+    // The greeting ends with the prompt, after which Glowport types the startup command.
     assert_eq!(driver.until(|d| d.output.contains("STUFE=test") && d.output.ends_with(PROMPT)).await, None);
     assert!(driver.output.contains("LANG=de_DE.UTF-8"), "{}", driver.output);
 }
 
-/// Ein eigener Agent für Tests auf einer eigenen Pipe, damit der Agent des Rechners unberührt bleibt.
+/// An agent of its own for tests on a pipe of its own, so the machine's agent stays untouched.
 #[cfg(windows)]
 async fn start_agent(name: &str, keys: &[russh::keys::PrivateKey]) -> glowport_net::Agents {
     use russh::keys::agent::{client::AgentClient, server::serve};
@@ -413,7 +413,7 @@ async fn start_agent(name: &str, keys: &[russh::keys::PrivateKey]) -> glowport_n
 
     let path = format!(r"\\.\pipe\glowport-test-{}-{name}", std::process::id());
     let first = ServerOptions::new().first_pipe_instance(true).create(&path).unwrap();
-    // Jede Verbindung bekommt ihre eigene Instanz der Pipe; die nächste steht bereit, bevor die aktuelle übergeben wird.
+    // Every connection gets its own instance of the pipe; the next is ready before the current one is handed over.
     let connections = futures::stream::unfold((first, path.clone()), |(waiting, path)| async move {
         waiting.connect().await.ok()?;
         let next = ServerOptions::new().create(&path).ok()?;
@@ -434,35 +434,35 @@ async fn agent_keys_log_in_and_the_agent_can_be_forwarded() {
     let agents = start_agent("anmelden", &[other.clone(), known.clone()]).await;
     let running = server::start(Options { authorized_keys: vec![known.public_key().clone()], ..with_password() }, server::key(1)).await.unwrap();
 
-    // Was der Agent anbietet, lässt sich auflisten, ohne dass ein Schlüssel ihn verlässt.
+    // What the agent offers can be listed without a key leaving it.
     let listed = glowport_net::agent::list(&agents).await;
     assert_eq!(listed.iter().map(|a| (a.kind, a.running, a.keys.len())).collect::<Vec<_>>(), [(glowport_net::agent::Kind::OpenSsh, true, 2), (glowport_net::agent::Kind::Pageant, false, 0)]);
     assert!(listed[0].keys.iter().any(|k| k.label == "Ed25519" && k.fingerprint == known.public_key().fingerprint(Default::default()).to_string()));
 
-    // Der Server kennt nur den zweiten Schlüssel des Agenten: Der erste wird abgelehnt, der zweite führt hinein.
+    // The server only knows the agent's second key: the first is refused, the second gets in.
     let mut driver = Driver::new(Connect { agent: Some(agents.clone()), ..connect(running.address, None) });
     driver.prompt().await;
     assert!(driver.asked.is_empty(), "keine Rückfrage, der Agent unterschreibt");
-    // Ohne Weiterreichen sieht der Server keinen Agenten.
+    // Without forwarding the server sees no agent.
     driver.typed("agent");
     driver.prompt().await;
     assert!(driver.output.contains("kein Agent"), "{}", driver.output);
 
-    // Mit Weiterreichen kann der Server den Agenten fragen.
+    // With forwarding the server can query the agent.
     let mut driver = Driver::new(Connect { agent: Some(agents.clone()), agent_forward: true, ..connect(running.address, None) });
     driver.prompt().await;
     driver.typed("agent");
     driver.prompt().await;
     assert!(driver.output.contains(&known.public_key().fingerprint(Default::default()).to_string()), "{}", driver.output);
 
-    // Weiterreichen ohne Agent gibt es nicht, auch wenn es eingeschaltet ist.
+    // There is no forwarding without an agent, even if it is switched on.
     let mut driver = Driver::new(Connect { agent_forward: true, ..connect(running.address, Some("richtig")) });
     driver.prompt().await;
     driver.typed("agent");
     driver.prompt().await;
     assert!(driver.output.contains("kein Agent"));
 
-    // Läuft kein Agent, geht es still mit den anderen Wegen weiter.
+    // If no agent runs, it quietly continues with the other ways.
     let nowhere = glowport_net::Agents { openssh: Some(format!(r"\\.\pipe\glowport-test-{}-fehlt", std::process::id())), pageant: false };
     assert!(glowport_net::agent::list(&nowhere).await.iter().all(|a| !a.running));
     let mut driver = Driver::new(Connect { agent: Some(nowhere), ..connect(running.address, Some("richtig")) });
@@ -482,7 +482,7 @@ async fn old_devices_need_the_legacy_setting() {
     driver.prompt().await;
     assert!(driver.output.contains("vt100"), "{}", driver.output);
 
-    // Die Einstellung stört bei einem heutigen Server nicht.
+    // The setting does no harm with a current server.
     let modern = server::start(with_password(), server::key(2)).await.unwrap();
     let mut driver = Driver::new(Connect { legacy: true, keepalive: Duration::ZERO, ..connect(modern.address, Some("richtig")) });
     driver.prompt().await;
@@ -491,8 +491,8 @@ async fn old_devices_need_the_legacy_setting() {
     assert!(driver.output.contains("xterm-256color"));
 }
 
-/// Winziger Proxy für Tests: nimmt eine Verbindung an, liest das Ziel nach den Regeln von `kind` und reicht durch.
-/// Mit `-auth` am Ende verlangt er die Anmeldung `tester` / `geheim`.
+/// Tiny proxy for tests: accepts a connection, reads the destination by the rules of `kind` and passes through.
+/// With `-auth` at the end it requires the sign-in `tester` / `geheim`.
 async fn start_proxy(kind: &'static str) -> (std::net::SocketAddr, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
@@ -569,7 +569,7 @@ async fn connections_go_through_http_and_socks_proxies() {
     for kind in ["http", "socks5"] {
         let (proxy, seen) = start_proxy(kind).await;
         let proxy = if kind == "http" { Proxy::Http { host: "127.0.0.1".into(), port: proxy.port(), login: None } } else { Proxy::Socks5 { host: "127.0.0.1".into(), port: proxy.port(), login: None } };
-        // Der Name geht unaufgelöst an den Proxy.
+        // The name goes to the proxy unresolved.
         let mut driver = Driver::new(Connect { host: "localhost".into(), proxy: Some(proxy), ..connect(running.address, Some("richtig")) });
         driver.prompt().await;
         assert_eq!(*seen.lock().unwrap(), [format!("localhost:{}", running.address.port())], "{kind}");
@@ -577,7 +577,7 @@ async fn connections_go_through_http_and_socks_proxies() {
         assert_eq!(driver.end().await, End::Remote { exit_status: Some(0) });
     }
 
-    // Lehnt der Proxy ab oder gibt es ihn nicht, kommt die Verbindung nicht zustande.
+    // If the proxy refuses or does not exist, the connection does not come about.
     let (proxy, _) = start_proxy("http").await;
     let mut driver = Driver::new(Connect { host: "verboten.test".into(), proxy: Some(Proxy::Http { host: "127.0.0.1".into(), port: proxy.port(), login: None }), ..connect(running.address, Some("richtig")) });
     let End::ConnectFailed(reason) = driver.end().await else { panic!("Ablehnung erwartet") };
@@ -588,7 +588,7 @@ async fn connections_go_through_http_and_socks_proxies() {
     let mut driver = Driver::new(Connect { proxy: Some(Proxy::Socks5 { host: "127.0.0.1".into(), port: gone, login: None }), ..connect(running.address, Some("richtig")) });
     assert!(matches!(driver.end().await, End::ConnectFailed(_)));
 
-    // Proxys, die eine Anmeldung verlangen: mit den richtigen Daten hinein, ohne oder mit falschen nicht.
+    // Proxies that require authentication: in with the right details, not without or with wrong ones.
     let login = |password: &str| Some(Login { user: "tester".into(), password: Secret::new(password.into()) });
     for kind in ["http-auth", "socks5-auth"] {
         let (address, _) = start_proxy(kind).await;
@@ -603,7 +603,7 @@ async fn connections_go_through_http_and_socks_proxies() {
     assert!(!format!("{:?}", login("geheim")).contains("geheim"), "das Passwort steht nicht in Protokollen");
 }
 
-/// Stellt ein Benutzer-Zertifikat aus, wie es eine Zertifizierungsstelle mit `ssh-keygen -s` täte.
+/// Issues a user certificate the way a certificate authority would with `ssh-keygen -s`.
 fn certificate(ca: &russh::keys::PrivateKey, subject: &keys::Material, principal: &str, valid: std::ops::Range<u64>) -> String {
     use russh::keys::ssh_key::certificate::{Builder, CertType};
     let subject = PublicKey::from_openssh(&subject.public).unwrap();
@@ -620,7 +620,7 @@ async fn certificates_log_in_where_only_the_authority_is_trusted() {
     let key = keys::generate(keys::Kind::Ed25519, 256).unwrap();
     let with = |certificate: &str, password| Connect { key: Some(key.private.clone()), certificate: Some(certificate.into()), ..connect(running.address, password) };
 
-    // Der Server kennt den Schlüssel nicht, nur die Stelle, die ihn beglaubigt hat.
+    // The server does not know the key, only the authority that certified it.
     let good = certificate(&ca, &key, "tester", now - 60..now + 3600);
     let info = keys::inspect_certificate(&format!("{good} kommentar"), &key.public).unwrap();
     assert_eq!((info.key_id.as_str(), info.principals.as_slice(), info.valid_before), ("test-zertifikat", ["tester".to_string()].as_slice(), Some(now + 3600)));
@@ -630,7 +630,7 @@ async fn certificates_log_in_where_only_the_authority_is_trusted() {
     driver.prompt().await;
     assert!(driver.asked.is_empty() && driver.notices.is_empty());
 
-    // Abgelaufen, für einen anderen Benutzer oder von einer fremden Stelle: abgelehnt, das Passwort rettet die Anmeldung.
+    // Expired, for another user or from a foreign authority: refused, the password rescues the sign-in.
     let stranger = server::key(21);
     for bad in [certificate(&ca, &key, "tester", now - 7200..now - 3600), certificate(&ca, &key, "root", now - 60..now + 3600), certificate(&stranger, &key, "tester", now - 60..now + 3600)] {
         let mut driver = Driver::new(with(&bad, Some("richtig")));
@@ -638,7 +638,7 @@ async fn certificates_log_in_where_only_the_authority_is_trusted() {
         assert_eq!(driver.notices, ["certificate_rejected", "key_rejected"]);
     }
 
-    // Ein Zertifikat für einen anderen Schlüssel wird gar nicht erst hinterlegt.
+    // A certificate for a different key is not even stored.
     let other = keys::generate(keys::Kind::Ed25519, 256).unwrap();
     assert_eq!(keys::inspect_certificate(&good, &other.public).unwrap_err(), keys::KeyError::CertificateMismatch);
     assert_eq!(keys::inspect_certificate("kein Zertifikat", &key.public).unwrap_err(), keys::KeyError::CertificateUnreadable);
@@ -657,18 +657,18 @@ async fn servers_certified_by_a_trusted_authority_need_no_question() {
     let trusted = vec![ca.public_key().to_openssh().unwrap()];
     assert_eq!(keys::inspect_public(&format!("{} unsere-ca", trusted[0])).unwrap().fingerprint, ca.public_key().fingerprint(Default::default()).to_string());
 
-    // Gültiges Zertifikat der vertrauten Stelle für diese Adresse: keine Rückfrage zum Schlüssel.
+    // Valid certificate from the trusted authority for this address: no prompt about the key.
     let good = server::start(Options { host_certificate: Some(issue(&ca, "127.0.0.1", now - 60..now + 3600)), ..with_password() }, host_key.clone()).await.unwrap();
     let mut driver = Driver::new(Connect { authorities: trusted.clone(), ..connect(good.address, Some("richtig")) });
     driver.prompt().await;
     assert!(driver.host_keys.is_empty(), "das Zertifikat hat genügt");
 
-    // Wer keiner Stelle vertraut, bekommt den bloßen Schlüssel gezeigt wie immer.
+    // Whoever trusts no authority is shown the bare key as always.
     let mut driver = Driver::new(connect(good.address, Some("richtig")));
     driver.prompt().await;
     assert_eq!(driver.host_keys.len(), 1);
 
-    // Für einen anderen Namen ausgestellt, abgelaufen oder von einer fremden Stelle: Das Zertifikat zählt nicht, es wird gefragt.
+    // Issued for another name, expired or from a foreign authority: the certificate does not count, the user is asked.
     let stranger = server::key(31);
     for bad in [issue(&ca, "anderswo.test", now - 60..now + 3600), issue(&ca, "127.0.0.1", now - 7200..now - 3600), issue(&stranger, "127.0.0.1", now - 60..now + 3600)] {
         let running = server::start(Options { host_certificate: Some(bad), ..with_password() }, host_key.clone()).await.unwrap();
@@ -685,7 +685,7 @@ async fn servers_certified_by_a_trusted_authority_need_no_question() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn unreachable_server_fails_to_connect() {
-    // Ein Port, auf dem gerade noch jemand lauschte und jetzt niemand mehr.
+    // A port someone was listening on a moment ago and now nobody is.
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let address = listener.local_addr().unwrap();
     drop(listener);
@@ -707,14 +707,14 @@ async fn dropped_connection_is_reported_as_lost() {
 async fn closing_works_at_any_time() {
     let running = server::start(with_password(), server::key(1)).await.unwrap();
 
-    // Während eine Rückfrage offen ist.
+    // While a prompt is open.
     let mut driver = Driver::new(connect(running.address, None));
     assert_eq!(driver.until(|d| d.phases.contains(&Phase::Authenticating)).await, None);
     driver.send(Command::Close);
     driver.answers = [Some("richtig")].into();
     assert_eq!(driver.end().await, End::User);
 
-    // Mitten in der Sitzung.
+    // In the middle of the session.
     let mut driver = Driver::new(connect(running.address, Some("richtig")));
     driver.prompt().await;
     driver.send(Command::Close);
@@ -745,7 +745,7 @@ async fn banner_and_operating_system_are_reported() {
     assert_eq!(driver.os.as_deref(), Some("Ub"));
     assert_eq!(driver.banner.as_deref(), Some("Zutritt nur für Befugte\n"), "Steuerzeichen werden entfernt");
 
-    // Ein Server, der die Abfrage ablehnt, stört die Sitzung nicht.
+    // A server that refuses the query does not disturb the session.
     let plain = server::start(with_password(), server::key(1)).await.unwrap();
     let mut driver = Driver::new(Connect { detect_os: true, ..connect(plain.address, Some("richtig")) });
     driver.prompt().await;
