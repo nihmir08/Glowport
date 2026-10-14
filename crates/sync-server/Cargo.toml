@@ -1,0 +1,32 @@
+[package]
+name = "glowport-sync-server"
+description = "Sync-Server von Glowport zum Selbstbetreiben. Sieht nur verschlüsselte Datensätze."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "glowport-sync"
+path = "src/main.rs"
+
+[dependencies]
+glowport-core = { path = "../core" }
+glowport-sync-proto = { path = "../sync-proto" }
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "matched-path", "query", "tokio", "ws"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "time", "macros", "signal"] }
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+rand_core = { version = "0.6", features = ["getrandom"] }
+ed25519-dalek = "2"
+subtle = "2"
+# Eigenes TLS für den Betrieb ohne vorgeschalteten Webserver. `ring` wie überall im Projekt.
+axum-server = { version = "0.7", default-features = false, features = ["tls-rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+base64 = "0.22"
+thiserror = "2.0.21"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+rcgen = { version = "0.14", default-features = false, features = ["ring", "pem"] }

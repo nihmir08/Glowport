@@ -1,0 +1,22 @@
+[package]
+name = "glowport-core"
+description = "Kern von Glowport: Tresor, Datenmodell, Vererbung. Ohne Tauri testbar."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Die Krypto-Bausteine sind bewusst auf eine zusammenpassende, lange erprobte Reihe festgelegt
+# (digest 0.10, rand_core 0.6). Ein Wechsel auf neuere Hauptversionen ist eine eigene, geprüfte Aufgabe.
+[dependencies]
+argon2 = "0.5"
+hkdf = "0.12"
+sha2 = "0.10"
+chacha20poly1305 = "0.10"
+ed25519-dalek = "2"
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+zeroize = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+thiserror = "2.0.21"

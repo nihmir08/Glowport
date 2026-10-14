@@ -1,0 +1,4 @@
+# Die C-Laufzeit fest einbauen: Sonst braucht Glowport das „Visual C++ Redistributable“ (VCRUNTIME140.dll),
+# das auf einem frischen Windows fehlen kann. Dann startet das Programm gar nicht erst.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

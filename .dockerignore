@@ -1,0 +1,12 @@
+# Für den Bau des Sync-Servers (server/Dockerfile) braucht es nur den Rust-Quelltext.
+.git
+target
+node_modules
+dist
+dist-server
+entwuerfe
+public
+src
+scripts
+docs
+*.log

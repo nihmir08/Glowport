@@ -1,0 +1,33 @@
+[workspace]
+resolver = "2"
+members = ["src-tauri", "crates/core", "crates/net", "crates/extras", "crates/import", "crates/testserver", "crates/sync-proto", "crates/sync-server", "crates/sync", "crates/proxmox", "crates/ftp"]
+# Der RDP-Kern steht für sich, mit eigener Cargo.lock: IronRDP nagelt Vorabversionen der Krypto-Bibliotheken fest
+# (über `picky` und `sspi`), die sich mit denen von russh nicht in einer gemeinsamen Auflösung vertragen.
+exclude = ["crates/rdp"]
+
+[workspace.package]
+version = "1.0.0"
+edition = "2021"
+license = "MIT"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+# Die Schlüsselableitung wäre unoptimiert um ein Vielfaches langsamer; im Entwicklungsmodus soll sie sich wie später anfühlen.
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3
+
+# Dasselbe gilt für RSA: Primzahlen suchen dauert unoptimiert Minuten statt Sekunden.
+[profile.dev.package.rsa]
+opt-level = 3
+
+[profile.dev.package.crypto-bigint]
+opt-level = 3
+
+[profile.dev.package.crypto-primes]
+opt-level = 3

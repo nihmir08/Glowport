@@ -1,0 +1,22 @@
+[package]
+name = "glowport-proxmox"
+description = "Zugriff auf die Schnittstelle von Proxmox VE: Maschinen auflisten, schalten, ihre Adresse herausfinden."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+# Dieselbe Einstellung wie beim Abgleich: rustls mit `ring`, geprüft gegen den Zertifikatsspeicher des Systems.
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls-no-provider"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-platform-verifier = "0.7"
+tokio = { version = "1", features = ["time"] }
+serde_json = "1"
+sha2 = "0.10"
+base64 = "0.22"
+thiserror = "2.0.21"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
+# Der nachgebaute Proxmox-Server, gegen den der Zugriff geprüft wird.
+glowport-testserver = { path = "../testserver" }

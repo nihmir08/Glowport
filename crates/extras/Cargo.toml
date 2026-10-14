@@ -1,0 +1,24 @@
+[package]
+name = "glowport-extras"
+description = "Terminals von Glowport jenseits von SSH: Shells dieses Rechners, Telnet, serielle Leitung. Kennt weder Tresor noch Oberfläche."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+# Nur für die Formen einer Sitzung (`Session`, `Event`, `Command`): Jede Art von Terminal spricht dieselbe Sprache.
+glowport-net = { path = "../net" }
+tokio = { version = "1", features = ["rt", "net", "sync", "time", "macros", "io-util"] }
+# Pseudo-Terminal für Shells dieses Rechners; unter Windows ConPTY.
+portable-pty = "0.9"
+# Ohne `libudev`: Das bräuchte unter Linux eine Systembibliothek beim Bauen. Unter Windows ändert es nichts.
+serialport = { version = "4.10", default-features = false }
+# Für TCP-Keepalive bei Telnet: Das Protokoll selbst kennt kein Lebenszeichen.
+socket2 = "0.6"
+
+[target.'cfg(windows)'.dependencies]
+# Git für Windows und die WSL-Distributionen stehen in der Registry.
+winreg = "0.55"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread"] }

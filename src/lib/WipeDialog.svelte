@@ -1,0 +1,64 @@
+<script lang="ts">
+  import { vaultWipe } from './backend';
+  import { errorText, vault } from './data.svelte';
+  import { t } from './i18n.svelte';
+  import { sync } from './sync.svelte';
+  import Button from './ui/Button.svelte';
+  import Dialog from './ui/Dialog.svelte';
+
+  /**
+   * Rückfrage vor „Abmelden und Daten auf diesem PC löschen“. Geht auch gesperrt (vom Sperrbildschirm aus); dann
+   * kann sich Glowport beim Sync-Server nicht abmelden, weil der Zugang verschlüsselt im Tresor liegt.
+   */
+  let { open = $bindable(false) }: { open?: boolean } = $props();
+
+  let understood = $state(false);
+  let busy = $state(false);
+  let error = $state('');
+  /** Das Abmelden beim Server ist gescheitert; der nächste Klick löscht trotzdem. */
+  let force = $state(false);
+
+  const linked = $derived(vault.state === 'open' && sync.linked);
+
+  $effect(() => {
+    if (open) return;
+    understood = force = busy = false;
+    error = '';
+  });
+
+  async function wipe() {
+    busy = true;
+    error = '';
+    try {
+      // Gelingt es, startet Glowport neu; zurück kommt nur ein Fehler.
+      await vaultWipe(force);
+    } catch (e) {
+      error = errorText(e);
+      // Was auch immer beim Abmelden schiefging: Löschen darf trotzdem gehen, nur bewusst.
+      force = linked;
+    } finally {
+      busy = false;
+    }
+  }
+</script>
+
+<Dialog bind:open title={t('wipe.title')}>
+  <p>{t('wipe.text')}</p>
+  <div class="warnbox"><span>{t('wipe.warn')}</span></div>
+  {#if linked}
+    <p>{t('wipe.linked', { server: sync.server })}</p>
+  {:else if vault.state !== 'open'}
+    <p>{t('wipe.locked')}</p>
+  {/if}
+  <label class="check"><input type="checkbox" bind:checked={understood} disabled={busy} />{t('wipe.ack')}</label>
+  {#if error}
+    <p class="errline" role="alert">{error}</p>
+    {#if force}<p>{t('wipe.force')}</p>{/if}
+  {/if}
+  {#snippet actions()}
+    <Button onclick={() => (open = false)} disabled={busy}>{t('common.cancel')}</Button>
+    <Button variant="danger" icon="trash" disabled={!understood || busy} onclick={wipe}>
+      {busy ? t('wipe.busy') : force ? t('wipe.confirm.force') : t('wipe.confirm')}
+    </Button>
+  {/snippet}
+</Dialog>

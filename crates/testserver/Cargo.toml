@@ -1,0 +1,25 @@
+[package]
+name = "glowport-testserver"
+description = "Kleiner SSH-Server für die Tests von Glowport. Nicht Teil des Programms."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+russh = { version = "0.63", default-features = false, features = ["ring", "flate2", "rsa"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "time", "macros", "io-util"] }
+# Für die Zufallszahl im Zertifikat, das der Testserver sich selbst ausstellen lässt.
+rand = "0.10"
+russh-sftp = "3.0.1"
+# Für den nachgebauten Proxmox-Server (`pve`): HTTPS mit einem selbst erstellten Zertifikat.
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"] }
+axum-server = { version = "0.7", default-features = false, features = ["tls-rustls-no-provider"] }
+rcgen = { version = "0.14", default-features = false, features = ["ring", "pem"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+serde_json = "1"
+sha2 = "0.10"
+# Für den FTP-Server (`ftp`): offen und über FTPS, auf einem Ordner dieses Rechners.
+libunftp = { version = "0.23", default-features = false, features = ["ring"] }
+unftp-sbe-fs = "0.4"
+unftp-core = "0.1"
+async-trait = "0.1"

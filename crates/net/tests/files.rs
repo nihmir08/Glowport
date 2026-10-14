@@ -1,0 +1,299 @@
+//! Dateien über SFTP gegen den eigenen Testserver.
+
+use std::{
+    path::PathBuf,
+    sync::atomic::{AtomicU32, Ordering},
+    time::Duration,
+};
+
+use glowport_net::files::{self, Change, FileError, Kind, Remote};
+use glowport_net::{open, Command, Connect, End, Event, Phase, Secret};
+use glowport_testserver::{self as server, sftp::HOME, Options, Running};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    sync::oneshot,
+    time::timeout,
+};
+
+static SEQ: AtomicU32 = AtomicU32::new(0);
+
+/// Ein leerer Ordner, der als Dateisystem des Servers dient. Er verschwindet mit dem Test.
+struct Root(PathBuf);
+
+impl Root {
+    fn new() -> Self {
+        let path = std::env::temp_dir().join(format!("glowport-sftp-{}-{}", std::process::id(), SEQ.fetch_add(1, Ordering::Relaxed)));
+        let _ = std::fs::remove_dir_all(&path);
+        std::fs::create_dir_all(&path).expect("Ordner für den Test");
+        Root(path)
+    }
+
+    /// Pfad auf diesem Rechner zu einem Pfad im Dateisystem des Servers.
+    fn local(&self, path: &str) -> PathBuf {
+        path.split('/').filter(|part| !part.is_empty()).fold(self.0.clone(), |at, part| at.join(part))
+    }
+
+    fn put(&self, path: &str, content: &[u8]) {
+        let local = self.local(path);
+        std::fs::create_dir_all(local.parent().expect("Ordner darüber")).expect("Ordner anlegen");
+        std::fs::write(local, content).expect("Datei schreiben");
+    }
+}
+
+impl Drop for Root {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+async fn serve(root: &Root, options: Options) -> Running {
+    let options = Options { password: Some(("tester".into(), "richtig".into())), files: Some(root.0.clone()), ..options };
+    server::start(options, server::key(1)).await.expect("Testserver")
+}
+
+fn target(running: &Running) -> Connect {
+    Connect { host: "127.0.0.1".into(), port: running.address.port(), user: "tester".into(), password: Some(Secret::new("richtig".into())), detect_os: false, ..Connect::default() }
+}
+
+async fn remote(running: &Running) -> Remote {
+    Remote::connect(&target(running), |_, _, _| true).await.expect("SFTP-Verbindung")
+}
+
+#[tokio::test]
+async fn lists_a_folder_with_kinds_sizes_and_owner_names() {
+    let root = Root::new();
+    root.put("/etc/passwd", b"root:x:0:0:root:/root:/bin/bash\ntester:x:1000:1000::/home/tester:/bin/sh\n");
+    root.put("/etc/group", b"root:x:0:\nstaff:x:1000:tester\n");
+    root.put("/srv/data/notes.txt", b"hallo");
+    std::fs::create_dir_all(root.local("/srv/data/sub")).unwrap();
+    let running = serve(&root, Options::default()).await;
+    let remote = remote(&running).await;
+
+    assert_eq!(remote.home().await.unwrap(), HOME);
+    assert_eq!(remote.resolve("/srv/./data/sub/..").await.unwrap(), "/srv/data");
+
+    let mut entries = remote.list("/srv/data").await.unwrap();
+    entries.sort_by(|a, b| a.name.cmp(&b.name));
+    assert_eq!(entries.iter().map(|e| (e.name.as_str(), e.kind)).collect::<Vec<_>>(), [("notes.txt", Kind::File), ("sub", Kind::Dir)]);
+    let notes = &entries[0];
+    assert_eq!((notes.size, notes.mode, notes.owner.as_str(), notes.group.as_str()), (5, 0o644, "tester", "staff"));
+    assert!(notes.modified > 1_600_000_000, "Änderungszeit fehlt: {}", notes.modified);
+    assert_eq!(entries[1].mode, 0o755);
+
+    assert_eq!(remote.list("/gibt/es/nicht").await, Err(FileError::NoSuchFile));
+}
+
+#[tokio::test]
+async fn creates_renames_and_removes_even_full_folders() {
+    let root = Root::new();
+    let running = serve(&root, Options::default()).await;
+    let remote = remote(&running).await;
+
+    remote.mkdir("/srv").await.unwrap();
+    remote.mkdir("/srv/alt").await.unwrap();
+    remote.write("/srv/alt/a.txt", b"eins").await.unwrap();
+    remote.mkdir("/srv/alt/tief").await.unwrap();
+    remote.write("/srv/alt/tief/b.txt", b"zwei").await.unwrap();
+
+    remote.rename("/srv/alt", "/srv/neu").await.unwrap();
+    assert!(!root.local("/srv/alt").exists());
+    assert_eq!(std::fs::read(root.local("/srv/neu/tief/b.txt")).unwrap(), b"zwei");
+    // Umbenennen überschreibt nichts.
+    remote.write("/srv/x.txt", b"x").await.unwrap();
+    assert!(matches!(remote.rename("/srv/x.txt", "/srv/neu").await, Err(FileError::Failure(_))));
+
+    remote.remove("/srv/x.txt").await.unwrap();
+    remote.remove("/srv/neu").await.unwrap();
+    assert!(!root.local("/srv/neu").exists());
+    assert_eq!(remote.remove("/srv/neu").await, Err(FileError::NoSuchFile));
+}
+
+#[tokio::test]
+async fn changes_mode_and_owner_also_for_everything_inside() {
+    let root = Root::new();
+    root.put("/etc/passwd", b"tester:x:1000:1000::/home/tester:/bin/sh\nwww-data:x:33:33::/var/www:/usr/sbin/nologin\n");
+    root.put("/etc/group", b"tester:x:1000:\nwww-data:x:33:\n");
+    root.put("/srv/app/index.html", b"<html>");
+    root.put("/srv/app/css/site.css", b"body{}");
+    let running = serve(&root, Options::default()).await;
+    let files = running.files.clone().unwrap();
+    let remote = remote(&running).await;
+
+    remote.change("/srv/app/index.html", &Change { mode: Some(0o600), ..Change::default() }, false).await.unwrap();
+    assert_eq!(files.mode("/srv/app/index.html"), Some(0o600));
+    assert_eq!(files.mode("/srv/app/css/site.css"), None, "ohne „auch darin“ bleibt der Rest unberührt");
+
+    remote.change("/srv/app", &Change { mode: Some(0o750), owner: Some("www-data".into()), group: None }, true).await.unwrap();
+    assert_eq!(files.mode("/srv/app/css/site.css"), Some(0o750));
+    let entry = remote.stat("/srv/app/css/site.css", true).await.unwrap();
+    assert_eq!((entry.owner.as_str(), entry.group.as_str(), entry.uid, entry.gid), ("www-data", "tester", 33, 1000));
+
+    let unknown = remote.change("/srv/app", &Change { owner: Some("niemand-den-es-gibt".into()), ..Change::default() }, false).await;
+    assert!(matches!(unknown, Err(FileError::Failure(_))), "{unknown:?}");
+}
+
+#[tokio::test]
+async fn reads_with_a_limit_and_writes_back() {
+    let root = Root::new();
+    root.put("/etc/hosts", b"127.0.0.1 localhost\n");
+    let running = serve(&root, Options::default()).await;
+    let remote = remote(&running).await;
+
+    assert_eq!(remote.read("/etc/hosts", 1024).await.unwrap(), (b"127.0.0.1 localhost\n".to_vec(), false));
+    assert_eq!(remote.read("/etc/hosts", 9).await.unwrap(), (b"127.0.0.1".to_vec(), true));
+
+    remote.write("/etc/hosts", b"kurz\n").await.unwrap();
+    assert_eq!(std::fs::read(root.local("/etc/hosts")).unwrap(), b"kurz\n", "der alte, längere Inhalt muss weg sein");
+}
+
+#[tokio::test]
+async fn continues_a_file_from_an_offset_in_both_directions() {
+    let root = Root::new();
+    let content: Vec<u8> = (0..200_000u32).map(|i| (i % 251) as u8).collect();
+    root.put("/srv/gross.bin", &content);
+    let running = serve(&root, Options::default()).await;
+    let remote = remote(&running).await;
+
+    // Herunterladen ab der Mitte.
+    let mut rest = Vec::new();
+    remote.reader("/srv/gross.bin", 120_000).await.unwrap().read_to_end(&mut rest).await.unwrap();
+    assert_eq!(rest, &content[120_000..]);
+
+    // Hochladen: erst ein Stück, dann der Rest ab dort.
+    let mut first = remote.writer("/srv/kopie.bin", 0).await.unwrap();
+    first.write_all(&content[..70_000]).await.unwrap();
+    first.shutdown().await.unwrap();
+    drop(first);
+    assert_eq!(remote.stat("/srv/kopie.bin", true).await.unwrap().size, 70_000);
+    let mut second = remote.writer("/srv/kopie.bin", 70_000).await.unwrap();
+    second.write_all(&content[70_000..]).await.unwrap();
+    second.shutdown().await.unwrap();
+    drop(second);
+    assert_eq!(std::fs::read(root.local("/srv/kopie.bin")).unwrap(), content);
+
+    remote.touch("/srv/kopie.bin", 1_700_000_000).await.unwrap();
+    assert_eq!(remote.stat("/srv/kopie.bin", true).await.unwrap().modified, 1_700_000_000);
+}
+
+#[tokio::test]
+async fn reports_folders_that_must_not_be_changed() {
+    let root = Root::new();
+    root.put("/etc/fstab", b"# leer\n");
+    let running = serve(&root, Options { files_read_only: vec!["/etc".into()], ..Options::default() }).await;
+    let remote = remote(&running).await;
+
+    assert_eq!(remote.write("/etc/fstab", b"kaputt").await, Err(FileError::PermissionDenied));
+    assert_eq!(remote.mkdir("/etc/neu").await, Err(FileError::PermissionDenied));
+    assert_eq!(remote.remove("/etc/fstab").await, Err(FileError::PermissionDenied));
+    assert_eq!(remote.change("/etc/fstab", &Change { mode: Some(0o777), ..Change::default() }, false).await, Err(FileError::PermissionDenied));
+    assert_eq!(std::fs::read(root.local("/etc/fstab")).unwrap(), b"# leer\n");
+    assert_eq!(FileError::PermissionDenied.code(), "permission_denied");
+}
+
+#[tokio::test]
+async fn refuses_to_connect_when_stored_credentials_do_not_suffice() {
+    let root = Root::new();
+    let running = serve(&root, Options::default()).await;
+    let wrong = Connect { password: Some(Secret::new("falsch".into())), ..target(&running) };
+    assert!(matches!(Remote::connect(&wrong, |_, _, _| true).await, Err(End::AuthFailed)));
+    assert!(matches!(Remote::connect(&target(&running), |_, _, _| false).await, Err(End::HostKeyRejected)));
+}
+
+#[tokio::test]
+async fn connects_for_files_alone_and_asks_like_a_terminal_would() {
+    let root = Root::new();
+    root.put("/srv/da.txt", b"hier");
+    let running = serve(&root, Options::default()).await;
+    // Kein Passwort hinterlegt: Erst kommt der Schlüssel des Servers, dann die Frage nach dem Passwort.
+    let mut session = files::open(Connect { password: None, ..target(&running) });
+    let mut asked = Vec::new();
+    let remote = loop {
+        match timeout(Duration::from_secs(10), session.events.recv()).await.expect("nichts geschah") {
+            Some(Event::HostKey { reply, .. }) => {
+                asked.push("schlüssel");
+                reply.send(true).unwrap();
+            }
+            Some(Event::Secret { attempt, reply, .. }) => {
+                asked.push(if attempt == 1 { "passwort" } else { "noch einmal" });
+                reply.send(Some(Secret::new(if attempt == 1 { "falsch" } else { "richtig" }.into()))).unwrap();
+            }
+            Some(Event::Files(found)) => break found,
+            Some(Event::End(end)) => panic!("endete: {end:?}"),
+            Some(_) => {}
+            None => panic!("Strom endete ohne Ergebnis"),
+        }
+    };
+    assert_eq!(asked, ["schlüssel", "passwort", "noch einmal"]);
+    assert_eq!(remote.read("/srv/da.txt", 100).await.unwrap().0, b"hier");
+
+    // Bricht der Nutzer die Rückfrage ab, endet es wie vom Nutzer beendet; ebenso, wenn er zwischendurch schließt.
+    let mut session = files::open(Connect { password: None, ..target(&running) });
+    let end = loop {
+        match timeout(Duration::from_secs(10), session.events.recv()).await.expect("nichts geschah").expect("Strom endete ohne Ende") {
+            Event::HostKey { reply, .. } => reply.send(true).unwrap(),
+            Event::Secret { reply, .. } => reply.send(None).unwrap(),
+            Event::End(end) => break end,
+            _ => {}
+        }
+    };
+    assert_eq!(end, End::User);
+    let mut session = files::open(Connect { password: None, ..target(&running) });
+    let end = loop {
+        match timeout(Duration::from_secs(10), session.events.recv()).await.expect("nichts geschah").expect("Strom endete ohne Ende") {
+            // Die Frage bleibt unbeantwortet; stattdessen wird geschlossen.
+            Event::HostKey { reply, .. } => {
+                session.commands.send(Command::Close).unwrap();
+                std::mem::forget(reply);
+            }
+            Event::End(end) => break end,
+            _ => {}
+        }
+    };
+    assert_eq!(end, End::User);
+}
+
+#[tokio::test]
+async fn says_so_when_the_server_has_no_sftp() {
+    let running = server::start(Options { password: Some(("tester".into(), "richtig".into())), ..Options::default() }, server::key(1)).await.unwrap();
+    assert!(matches!(Remote::connect(&target(&running), |_, _, _| true).await, Err(End::ConnectFailed(reason)) if reason == "sftp: not_supported"));
+}
+
+#[tokio::test]
+async fn opens_sftp_and_runs_commands_on_the_connection_of_a_terminal() {
+    let root = Root::new();
+    root.put("/srv/da.txt", b"hier");
+    let running = serve(&root, Options { exec_output: Some("antwort\n".into()), ..Options::default() }).await;
+    let mut session = open(target(&running));
+
+    // Vor der Shell gibt es keinen zusätzlichen Kanal.
+    let (reply, early) = oneshot::channel();
+    session.commands.send(Command::Open(reply)).unwrap();
+
+    loop {
+        match timeout(Duration::from_secs(10), session.events.recv()).await.expect("nichts geschah").expect("Sitzung endete") {
+            Event::HostKey { reply, .. } => drop(reply.send(true)),
+            Event::Phase(Phase::Connected) => break,
+            Event::End(end) => panic!("Sitzung endete: {end:?}"),
+            _ => {}
+        }
+    }
+    assert!(early.await.unwrap().is_none());
+
+    let (reply, opened) = oneshot::channel();
+    session.commands.send(Command::Open(reply)).unwrap();
+    let remote = Remote::on(opened.await.unwrap().expect("zusätzlicher Kanal")).await.unwrap();
+    assert_eq!(remote.read("/srv/da.txt", 100).await.unwrap().0, b"hier");
+
+    let (reply, opened) = oneshot::channel();
+    session.commands.send(Command::Open(reply)).unwrap();
+    let output = files::run(opened.await.unwrap().unwrap(), "irgendwas").await.unwrap();
+    assert_eq!(output.stdout, b"antwort\n");
+
+    // Das Terminal läuft daneben weiter.
+    session.commands.send(Command::Input(b"exit\r".to_vec())).unwrap();
+    loop {
+        if let Event::End(end) = timeout(Duration::from_secs(10), session.events.recv()).await.expect("nichts geschah").expect("Sitzung verschwand") {
+            break assert!(matches!(end, End::Remote { .. }), "{end:?}");
+        }
+    }
+}

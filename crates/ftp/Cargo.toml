@@ -1,0 +1,27 @@
+[package]
+name = "glowport-ftp"
+description = "FTP und FTPS für den Dateimanager von Glowport. Kennt weder Tresor noch Oberfläche."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+# Nur für die Formen des Dateimanagers (`Entry`, `Kind`, `FileError`): FTP spricht dieselbe Sprache wie SFTP.
+glowport-net = { path = "../net" }
+# FTPS über rustls mit `ring`, wie im übrigen Projekt.
+# `deprecated` schaltet in der Bibliothek FTPS von Anfang an frei (Port 990); manche Hoster bieten nur das.
+suppaftp = { version = "12.2", default-features = false, features = ["tokio-rustls-ring", "deprecated"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+tokio = { version = "1", features = ["rt", "net", "sync", "time", "macros", "io-util"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-platform-verifier = "0.7"
+sha2 = "0.10"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "fs"] }
+# Der nachgebaute FTP-Server, gegen den geprüft wird.
+libunftp = { version = "0.23", default-features = false, features = ["ring"] }
+unftp-sbe-fs = "0.4"
+async-trait = "0.1"
+rcgen = { version = "0.14", default-features = false, features = ["ring", "pem"] }
+unftp-core = "0.1"

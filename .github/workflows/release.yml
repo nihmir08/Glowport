@@ -1,0 +1,67 @@
+# Baut Glowport für Windows und veröffentlicht es, sobald ein Tag wie v1.2.3 gepusht wird.
+# Das Release bekommt den Installer, die portable Fassung und latest.json; daran erkennen installierte
+# Fassungen das Update. Ausgelöst wird es mit `node scripts/release.mjs <Version>`.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      # Beim Bauen eingebettet: Wo Glowport nach Updates sieht und gegen welchen Schlüssel es sie prüft.
+      GLOWPORT_UPDATE_URL: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
+      GLOWPORT_UPDATE_PUBKEY: dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU3NkFDMUUyRTE4MTcxOUQKUldTZGNZSGg0c0ZxVjh6ajFPNisyZmRIMmh2aUQrNUI4ZEFiTEthdnJGVjlNd1h3M1M5MjZJRUgK
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Tag und Version vergleichen, Text aus CHANGELOG.md
+        id: notes
+        shell: bash
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then echo "::error::Tag $GITHUB_REF_NAME passt nicht zur Version $version"; exit 1; fi
+          node scripts/notizen.mjs "$version" > notes.md
+          { echo 'body<<GLOWPORT_NOTES'; cat notes.md; echo 'GLOWPORT_NOTES'; } >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: '. -> target'
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Glowport __VERSION__
+          releaseBody: ${{ steps.notes.outputs.body }}
+          releaseDraft: false
+          prerelease: false
+          args: --config src-tauri/tauri.release.conf.json
+
+      - name: Portable Fassung anhängen
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/portable.mjs
+          gh release upload "$GITHUB_REF_NAME" target/release/bundle/portable/*.zip --clobber

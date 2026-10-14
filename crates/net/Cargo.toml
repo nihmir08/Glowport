@@ -1,0 +1,24 @@
+[package]
+name = "glowport-net"
+description = "SSH-Verbindungen von Glowport. Kennt weder Tresor noch Oberfläche."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+# `ring` statt `aws-lc-rs`, weil das unter Windows ohne NASM und CMake baut (Erfahrung aus NexusSSH).
+# `des` nur für die Einstellung „alte Verfahren erlauben“ (3des-cbc auf alten Netzwerkgeräten).
+russh = { version = "0.63", default-features = false, features = ["ring", "flate2", "rsa", "des"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "sync", "time", "macros", "io-util"] }
+# Dieselbe Fassung, die russh zum Erzeugen von Schlüsseln erwartet.
+rand = "0.10"
+zeroize = "1"
+russh-sftp = "3.0.1"
+# Mosh (Meilenstein 12): unabhängige Umsetzung unter MIT oder Apache-2.0; die übrigen Rust-Umsetzungen sind GPL.
+# Nur als Git-Abhängigkeit zu haben. Sie nagelt `aes` auf 0.9.1; russh nimmt dieselbe Fassung (siehe Cargo.lock).
+mosh-client = { git = "https://github.com/wandcs/mosh-client-rs", tag = "v0.1.4", version = "=0.1.4" }
+
+[dev-dependencies]
+glowport-testserver = { path = "../testserver" }
+# Für den Test-Agenten auf einer eigenen Pipe; russh bringt das Crate ohnehin mit.
+futures = "0.3"
