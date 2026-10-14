@@ -1305,6 +1305,7 @@ export const de = {
   'upd.install': 'Jetzt installieren',
   'upd.installing': 'Installiert …',
   'upd.preview': 'In der Vorschau wird nichts installiert.',
+  'upd.done': 'Glowport ist jetzt auf Version {version}.',
   'lock.restore': 'Stattdessen eine Sicherung einspielen …',
   'lock.restore.done': 'Sicherung eingespielt. Sie öffnet sich mit ihrem Master-Passwort.',
   'err.import_unreadable': 'Die Datei ließ sich nicht lesen. {message}',

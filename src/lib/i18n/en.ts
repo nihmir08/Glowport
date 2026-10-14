@@ -1307,6 +1307,7 @@ export const en: Record<keyof typeof de, string> = {
   'upd.install': 'Install now',
   'upd.installing': 'Installing …',
   'upd.preview': 'Nothing is installed in the preview.',
+  'upd.done': 'Glowport is now on version {version}.',
   'lock.restore': 'Restore a backup instead …',
   'lock.restore.done': 'Backup restored. It opens with its master password.',
   'err.import_unreadable': 'The file could not be read. {message}',

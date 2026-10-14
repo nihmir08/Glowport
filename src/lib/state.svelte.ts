@@ -81,6 +81,8 @@ export interface Settings {
   updateCheck: boolean;
   /** Wann zuletzt nachgesehen wurde, in Millisekunden seit 1970. */
   updateChecked: number;
+  /** Die Version, die zuletzt lief. Weicht sie beim Start ab, wurde Glowport aktualisiert; leer beim ersten Start. */
+  lastVersion: string;
 }
 
 export const DEFAULT_ACCENT = '#FE9803';
@@ -126,6 +128,7 @@ export const settings = $state<Settings>({
   localShell: '',
   updateCheck: true,
   updateChecked: 0,
+  lastVersion: '',
 });
 
 export const ui = $state({

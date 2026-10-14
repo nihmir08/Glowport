@@ -134,6 +134,9 @@
     if (typeof s.localShell === 'string' && s.localShell.length <= 80) settings.localShell = s.localShell;
     if (typeof s.updateCheck === 'boolean') settings.updateCheck = s.updateCheck;
     if (inRange(s.updateChecked, 0, Number.MAX_SAFE_INTEGER)) settings.updateChecked = s.updateChecked;
+    if (typeof s.lastVersion === 'string' && s.lastVersion.length <= 40) settings.lastVersion = s.lastVersion;
+    // Einstellungen einer Fassung, die sich ihre Version noch nicht merkte: Auch das ist ein Update.
+    else if (typeof s.updateCheck === 'boolean') settings.lastVersion = 'älter';
   }
 
   // Der Kern erfährt höchstens alle 15 Sekunden von Eingaben; genauer muss die Auto-Sperre es nicht wissen.

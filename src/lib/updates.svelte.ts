@@ -43,7 +43,12 @@ export async function checkForUpdate(manual: boolean) {
 
 /** Beim Start und danach stündlich nachsehen, solange es eingeschaltet ist; nicht während schon installiert wird. */
 export async function initUpdates() {
-  if (inApp) updates.enabled = !!(await appInfo().catch(() => null))?.updates;
+  const info = inApp ? await appInfo().catch(() => null) : null;
+  if (inApp) updates.enabled = !!info?.updates;
+  // Lief zuletzt eine andere Version, ist das Update angekommen: einmal sagen, dann merken.
+  const version = info?.version ?? __APP_VERSION__;
+  if (settings.lastVersion && settings.lastVersion !== version) toast(t('upd.done', { version }), 'ok');
+  settings.lastVersion = version;
   if (!inApp || !updates.enabled) return;
   const look = () => {
     if (settings.updateCheck && !updates.progress) void checkForUpdate(false);

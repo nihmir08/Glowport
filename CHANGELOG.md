@@ -4,6 +4,12 @@ Jede Version steht hier unter `## <Version>`. Der Abschnitt wird beim Release zu
 
 Each version is listed here under `## <version>`. The section becomes the release text on GitHub and in Glowport's update dialog.
 
+## 1.0.1
+
+- Nach einem Update nennt Glowport beim nächsten Start die neue Version.
+
+- After an update, Glowport names the new version on the next start.
+
 ## 1.0.0
 
 Erste öffentliche Version. / First public release.
