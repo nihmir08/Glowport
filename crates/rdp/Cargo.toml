@@ -1,7 +1,7 @@
 [package]
 name = "glowport-rdp"
 description = "RDP-Sitzungen von Glowport: anmelden, Bild als geänderte Bereiche, Eingaben. Kennt weder Tresor noch Oberfläche."
-version = "1.0.0"
+version = "1.0.1"
 edition = "2021"
 license = "MIT"
 

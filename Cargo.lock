@@ -2202,7 +2202,7 @@ dependencies = [
 
 [[package]]
 name = "glowport"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "chrono",
  "drag",
@@ -2231,7 +2231,7 @@ dependencies = [
 
 [[package]]
 name = "glowport-core"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "argon2 0.5.3",
  "chacha20poly1305",
@@ -2249,7 +2249,7 @@ dependencies = [
 
 [[package]]
 name = "glowport-extras"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "glowport-net",
  "portable-pty",
@@ -2261,7 +2261,7 @@ dependencies = [
 
 [[package]]
 name = "glowport-ftp"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "glowport-net",
@@ -2279,7 +2279,7 @@ dependencies = [
 
 [[package]]
 name = "glowport-import"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "base64 0.22.1",
  "encoding_rs",
@@ -2292,7 +2292,7 @@ dependencies = [
 
 [[package]]
 name = "glowport-net"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "futures",
  "glowport-testserver",
@@ -2306,7 +2306,7 @@ dependencies = [
 
 [[package]]
 name = "glowport-proxmox"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "base64 0.22.1",
  "glowport-testserver",
@@ -2321,7 +2321,7 @@ dependencies = [
 
 [[package]]
 name = "glowport-sync"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "base64 0.22.1",
  "futures-util",
@@ -2343,7 +2343,7 @@ dependencies = [
 
 [[package]]
 name = "glowport-sync-proto"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "base64 0.22.1",
  "glowport-core",
@@ -2352,7 +2352,7 @@ dependencies = [
 
 [[package]]
 name = "glowport-sync-server"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "axum",
  "axum-server",
@@ -2375,7 +2375,7 @@ dependencies = [
 
 [[package]]
 name = "glowport-testserver"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "axum",
