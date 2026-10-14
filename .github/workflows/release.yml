@@ -1,6 +1,6 @@
-# Baut Glowport für Windows und veröffentlicht es, sobald ein Tag wie v1.2.3 gepusht wird.
-# Das Release bekommt den Installer, die portable Fassung und latest.json; daran erkennen installierte
-# Fassungen das Update. Ausgelöst wird es mit `node scripts/release.mjs <Version>`.
+# Builds Glowport for Windows and publishes it as soon as a tag like v1.2.3 is pushed.
+# The release gets the installer, the portable version and latest.json, which installed
+# copies use to find the update. Triggered by `node scripts/release.mjs <version>`.
 name: Release
 
 on:
@@ -17,7 +17,7 @@ jobs:
   windows:
     runs-on: windows-latest
     env:
-      # Beim Bauen eingebettet: Wo Glowport nach Updates sieht und gegen welchen Schlüssel es sie prüft.
+      # Built into the program: where Glowport looks for updates and which key their signature must match.
       GLOWPORT_UPDATE_URL: https://github.com/${{ github.repository }}/releases/latest/download/latest.json
       GLOWPORT_UPDATE_PUBKEY: dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU3NkFDMUUyRTE4MTcxOUQKUldTZGNZSGg0c0ZxVjh6ajFPNisyZmRIMmh2aUQrNUI4ZEFiTEthdnJGVjlNd1h3M1M5MjZJRUgK
     steps:
@@ -28,12 +28,12 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Tag und Version vergleichen, Text aus CHANGELOG.md
+      - name: Check tag against version, read notes from CHANGELOG.md
         id: notes
         shell: bash
         run: |
           version=$(node -p "require('./package.json').version")
-          if [ "v$version" != "$GITHUB_REF_NAME" ]; then echo "::error::Tag $GITHUB_REF_NAME passt nicht zur Version $version"; exit 1; fi
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then echo "::error::Tag $GITHUB_REF_NAME does not match version $version"; exit 1; fi
           node scripts/notizen.mjs "$version" > notes.md
           { echo 'body<<GLOWPORT_NOTES'; cat notes.md; echo 'GLOWPORT_NOTES'; } >> "$GITHUB_OUTPUT"
 
@@ -58,7 +58,7 @@ jobs:
           prerelease: false
           args: --config src-tauri/tauri.release.conf.json
 
-      - name: Portable Fassung anhängen
+      - name: Attach the portable version
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

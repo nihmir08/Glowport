@@ -17,25 +17,20 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
 
 copyFileSync(exe, join(stage, 'Glowport.exe'));
-writeFileSync(join(stage, 'portable'), 'Solange diese Datei neben Glowport.exe liegt, bleiben alle Daten im Ordner "data" daneben.\r\n');
+writeFileSync(join(stage, 'portable'), 'As long as this file sits next to Glowport.exe, all data stays in the "data" folder beside it.\r\n');
 writeFileSync(
-  join(stage, 'LIESMICH.txt'),
+  join(stage, 'README.txt'),
   [
-    `Glowport ${version}, portable Fassung`,
-    '',
-    'Glowport.exe starten. Tresor, Einstellungen und Mitschnitte landen im Ordner "data" neben dem Programm;',
-    'auf dem PC selbst bleibt nichts zurück. Zum Mitnehmen den ganzen Ordner kopieren.',
-    '',
-    'Den Ordner an einen Ort legen, an dem du schreiben darfst (nicht unter "C:\\Program Files").',
-    'Diese Fassung aktualisiert sich nicht selbst: Für eine neue Version Glowport.exe ersetzen, "data" bleibt.',
-    '',
-    'Glowport zeigt seine Oberfläche mit WebView2 von Microsoft. Windows 11 bringt es mit; unter Windows 10',
-    'ist es meist vorhanden, sonst gibt es den Installer bei Microsoft ("WebView2 Runtime").',
-    '',
     `Glowport ${version}, portable version`,
     '',
     'Start Glowport.exe. Vault, settings and recordings go into the "data" folder next to the program;',
     'nothing is left on the PC itself. To take it with you, copy the whole folder.',
+    '',
+    'Put the folder somewhere you can write to (not under "C:\\Program Files").',
+    'This version does not update itself: for a new version, replace Glowport.exe and keep "data".',
+    '',
+    'Glowport draws its interface with Microsoft WebView2. Windows 11 includes it; on Windows 10 it is',
+    'usually present, otherwise Microsoft offers the installer ("WebView2 Runtime").',
     '',
   ].join('\r\n'),
 );
