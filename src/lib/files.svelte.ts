@@ -6,7 +6,7 @@ import { claim, view } from './sessions.svelte';
 import { settings, toast, ui } from './state.svelte';
 import type { Answer, BackendError, FileEntry, Listing, Place, Policy, Prompt, Transfer, Watched, FtpPlace } from './types';
 
-/** Sortierung einer Dateiliste. Ordner stehen immer vor Dateien. */
+/** Sort order of a file list. Folders always come before files. */
 export interface Sort {
   by: 'name' | 'size' | 'modified';
   desc: boolean;
@@ -20,34 +20,34 @@ const samePlace = (a: Place | null, b: Place | null) => {
 };
 
 /**
- * Der Blick in einen Ordner an einem Ort: Pfad, Inhalt, Auswahl, Sortierung.
- * Die Dateileiste am Terminal hat einen je Bereich, die Seite „Dateien“ einen je Spalte.
+ * The view into a folder at a location: path, content, selection, sort order.
+ * The file bar at the terminal has one per pane, the Files page one per column.
  */
 export class Browser {
   place = $state<Place | null>(null);
   listing = $state<Listing | null>(null);
   loading = $state(false);
-  /** Fehlertext, wenn sich der Ordner nicht lesen ließ. */
+  /** Error text if the folder could not be read. */
   error = $state<string | null>(null);
-  /** Pfade der ausgewählten Einträge. */
+  /** Paths of the selected entries. */
   selected = $state<string[]>([]);
   sort = $state<Sort>({ by: 'name', desc: false });
-  /** Eingrenzen der Liste nach Namen. */
+  /** Filtering the list by name. */
   filter = $state('');
-  /** Rückfrage, auf die der Verbindungsaufbau zu einem Host gerade wartet (unbekannter Server, Passwort). */
+  /** Prompt the connection setup to a host is currently waiting for (unknown server, password). */
   prompt = $state<Prompt | null>(null);
-  /** Die Verbindung, die gerade mit Rückfragen aufgebaut wird, und wie man ihre Ereignisse wieder abgibt. */
+  /** The connection currently being set up with prompts, and how to release its events again. */
   private link: { id: number; release: () => void } | null = null;
-  /** Von hier aus spannt Umschalt+Klick die Auswahl auf. */
+  /** From here Shift+click extends the selection. */
   private anchor: string | null = null;
-  /** Nur die Antwort auf die jüngste Anfrage zählt. */
+  /** Only the answer to the latest request counts. */
   private ticket = 0;
 
   get path(): string | null {
     return this.listing?.path ?? null;
   }
 
-  /** Was zu sehen ist: gefiltert, sortiert, Ordner zuerst. */
+  /** What can be seen: filtered, sorted, folders first. */
   get entries(): FileEntry[] {
     const word = this.filter.trim().toLowerCase();
     const { by, desc } = this.sort;
@@ -61,7 +61,7 @@ export class Browser {
     return (this.listing?.entries ?? []).filter((e) => this.selected.includes(e.path));
   }
 
-  /** Wechselt den Ort und beginnt in `path` oder im Heimatverzeichnis. */
+  /** Changes the location and starts in `path` or the home directory. */
   async open(place: Place, path?: string) {
     this.unlink();
     this.place = place;
@@ -73,9 +73,9 @@ export class Browser {
   }
 
   /**
-   * Öffnet einen Ordner; ohne Angabe das Heimatverzeichnis. Bei einem Fehler bleibt der alte Inhalt stehen.
-   * Braucht ein Host erst eine Rückfrage (unbekannter Server, Passwort), wird sie gestellt und danach geöffnet;
-   * `ask` verhindert, dass das ein zweites Mal geschieht.
+   * Opens a folder; without one, the home directory. On an error the old content stays.
+   * If a host first needs a prompt (unknown server, password), it is asked and the folder opened afterwards;
+   * `ask` prevents that from happening a second time.
    */
   async go(path?: string, ask = true): Promise<boolean> {
     const place = this.place;
@@ -103,7 +103,7 @@ export class Browser {
     }
   }
 
-  /** Baut die Verbindung zu einem Host mit Rückfragen auf, wie ein Terminal es täte, und öffnet danach den Ordner. */
+  /** Sets up the connection to a host with prompts, as a terminal would, and then opens the folder. */
   private async connect(place: FtpPlace | { kind: 'host'; id: string }, path?: string): Promise<boolean> {
     const ticket = this.ticket;
     this.unlink();
@@ -137,16 +137,16 @@ export class Browser {
     });
   }
 
-  /** Beantwortet die Rückfrage des Verbindungsaufbaus. */
+  /** Answers the connection setup's prompt. */
   answer(reply: Answer) {
     if (!this.link) return;
-    // Ein Server aus der Schnellverbindung lässt sich nicht umstellen wie ein Host: Er wird als FTPS neu geöffnet.
+    // A server from quick connect cannot be switched like a host: it is reopened as FTPS.
     if (reply.kind === 'plain' && reply.secure && this.place?.kind === 'ftp') return void this.open({ ...this.place, security: 'explicit' });
     this.prompt = null;
     void sessionAnswer(this.link.id, reply);
   }
 
-  /** Gibt einen laufenden Verbindungsaufbau auf; mit `close` wird er auch im Kern beendet. */
+  /** Gives up a running connection setup; with `close` it is also ended in the core. */
   private unlink(close = true) {
     const link = this.link;
     this.link = null;
@@ -159,7 +159,7 @@ export class Browser {
   up = () => (this.listing?.parent != null ? this.go(this.listing.parent) : Promise.resolve(false));
   refresh = () => this.go(this.listing?.path);
 
-  /** Vergisst alles; der Ort ist nicht mehr erreichbar. */
+  /** Forgets everything; the location can no longer be reached. */
   reset() {
     this.unlink();
     this.ticket++;
@@ -170,7 +170,7 @@ export class Browser {
     this.selected = [];
   }
 
-  /** Auswahl wie im Explorer: Klick wählt einen, Strg schaltet um, Umschalt spannt auf. */
+  /** Selection as in Explorer: click selects one, Ctrl toggles, Shift extends. */
   pick(entry: FileEntry, event: { ctrlKey: boolean; shiftKey: boolean }) {
     const shown = this.entries.map((e) => e.path);
     if (event.shiftKey && this.anchor && shown.includes(this.anchor)) {
@@ -183,7 +183,7 @@ export class Browser {
     else this.selected = [entry.path];
   }
 
-  /** Rechtsklick: Der Eintrag gehört danach zur Auswahl, eine bestehende Mehrfachauswahl bleibt. */
+  /** Right-click: the entry then belongs to the selection, an existing multi-selection stays. */
   include(entry: FileEntry) {
     if (!this.selected.includes(entry.path)) (this.selected = [entry.path]), (this.anchor = entry.path);
   }
@@ -191,7 +191,7 @@ export class Browser {
   showsPlace = (place: Place) => samePlace(this.place, place);
 }
 
-/** Alle Blicke, die gerade etwas zeigen; nach einem fertigen Transfer lesen sie ihren Ordner neu. */
+/** All views currently showing something; after a finished transfer they read their folder anew. */
 const browsers = new Set<Browser>();
 export function newBrowser(): Browser {
   const browser = new Browser();
@@ -200,17 +200,17 @@ export function newBrowser(): Browser {
 }
 export const dropBrowser = (browser: Browser) => void browsers.delete(browser);
 
-/** Die beiden Spalten der Seite „Dateien“. Sie behalten ihren Stand, wenn man die Seite verlässt. */
+/** The two columns of the Files page. They keep their state when you leave the page. */
 export const columns = { left: newBrowser(), right: newBrowser() };
 
 const bars = new Map<string, Browser>();
-/** Der Blick der Dateileiste für einen Terminal-Bereich. */
+/** The file bar's view for a terminal pane. */
 export function barFor(pane: string): Browser {
   let browser = bars.get(pane);
   if (!browser) bars.set(pane, (browser = newBrowser()));
   return browser;
 }
-/** Räumt die Blicke geschlossener Bereiche weg. */
+/** Clears away the views of closed panes. */
 export function pruneBars(alive: string[]) {
   for (const [key, browser] of bars) if (!alive.includes(key)) (bars.delete(key), dropBrowser(browser));
 }
@@ -218,14 +218,14 @@ export function pruneBars(alive: string[]) {
 // ---------- Transfers ----------
 
 /**
- * Stand der Transfers. Die Liste zeigt sich an zwei Stellen: unten auf der Seite „Dateien“ (`dock`)
- * und sonst schwebend über der Statusleiste (`panel`). Beide merken sich getrennt, ob sie offen sind.
+ * State of the transfers. The list shows in two places: at the bottom of the Files page (`dock`)
+ * and otherwise floating above the status bar (`panel`). Both remember separately whether they are open.
  */
 export const transfers = $state<{ list: Transfer[]; watched: Watched[]; panel: boolean; dock: boolean; loaded: boolean }>({ list: [], watched: [], panel: false, dock: false, loaded: false });
 
 const onFilesPage = () => view.active === 'home' && ui.page === 'files';
 export const transfersShown = () => (onFilesPage() ? transfers.dock : transfers.panel);
-/** Zeigt oder verbirgt die Liste der Transfers dort, wo man gerade ist; ohne Angabe wird umgeschaltet. */
+/** Shows or hides the transfer list wherever you are; without a value it toggles. */
 export function showTransfers(on = !transfersShown()) {
   if (onFilesPage()) transfers.dock = on;
   else transfers.panel = on;
@@ -233,7 +233,7 @@ export function showTransfers(on = !transfersShown()) {
 
 export const isActive = (x: Transfer) => x.state === 'running' || x.state === 'queued';
 export const activeTransfers = () => transfers.list.filter(isActive);
-/** Fortschritt aller laufenden und wartenden Transfers zusammen, 0 bis 1. */
+/** Progress of all running and waiting transfers together, 0 to 1. */
 export function overallProgress(): number {
   const open = transfers.list.filter((x) => isActive(x) || x.state === 'paused');
   const bytes = open.reduce((n, x) => n + x.bytes, 0);
@@ -241,7 +241,7 @@ export function overallProgress(): number {
 }
 export const overallSpeed = () => transfers.list.reduce((n, x) => n + (x.state === 'running' ? x.speed : 0), 0);
 
-/** Meldet die Oberfläche für den Stand der Transfers an. Einmal beim Start aufrufen. */
+/** Subscribes the interface to the transfer state. Call once on start. */
 export function initFiles(): () => void {
   transferList()
     .then((list) => (transfers.list = list))
@@ -254,7 +254,7 @@ export function initFiles(): () => void {
     onTransfers((list) => {
       const finished = list.filter((x) => x.state === 'done').length > transfers.list.filter((x) => x.state === 'done').length;
       transfers.list = list;
-      // Was angekommen ist, soll in den offenen Listen erscheinen.
+      // What arrived should appear in the open lists.
       if (finished) for (const browser of browsers) if (browser.listing && !browser.loading) void browser.refresh();
     }),
     onWatched((list) => (transfers.watched = list)),
@@ -262,16 +262,16 @@ export function initFiles(): () => void {
   return () => stops.forEach((stop) => stop());
 }
 
-/** Der letzte Teil eines Pfads, nur zum Vergleichen und Anzeigen von Namen. */
+/** The last part of a path, only for comparing and displaying names. */
 const baseName = (path: string) => path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? path;
 
 /**
- * Was mit Namen geschieht, die es im Zielordner schon gibt. Steht in den Einstellungen „Fragen“, wird nachgesehen
- * und nur dann gefragt, wenn wirklich etwas kollidiert. `null` heißt: Der Nutzer hat abgebrochen.
+ * What happens with names that already exist in the destination folder. If the settings say “Ask”, it checks
+ * and only asks if something really collides. `null` means: the user cancelled.
  */
 async function decide(to: Place, dest: string, names: string[]): Promise<Policy | null> {
   if (settings.transferConflict !== 'ask') return settings.transferConflict;
-  // Windows unterscheidet Groß- und Kleinschreibung nicht.
+  // Windows does not distinguish upper and lower case.
   const key = (name: string) => (to.kind === 'local' ? name.toLowerCase() : name);
   const there = new Set((await fsList(to, dest)).entries.map((e) => key(e.name)));
   const present = names.filter((name) => there.has(key(name)));
@@ -279,13 +279,13 @@ async function decide(to: Place, dest: string, names: string[]): Promise<Policy 
   return new Promise((resolve) => (fileUi.conflict = { names: present, to, dest, resolve }));
 }
 
-/** Reiht Pfade eines Orts für einen Zielordner ein. Liefert, ob etwas eingereiht wurde. */
+/** Queues a location's paths for a destination folder. Returns whether something was queued. */
 export async function enqueue(from: Place, paths: string[], to: Place, dest: string): Promise<boolean> {
   if (!paths.length) return false;
   try {
     const policy = await decide(to, dest, paths.map(baseName));
     if (!policy) return false;
-    // Auf der Seite „Dateien“ zeigt sich die Warteschlange von selbst; im Terminal meldet die Statusleiste den Fortschritt.
+    // On the Files page the queue shows itself; in the terminal the status bar reports the progress.
     if (onFilesPage()) transfers.dock = true;
     await transferStart({ from, paths, to, dest, policy, parallel: settings.transferParallel });
     return true;
@@ -295,10 +295,10 @@ export async function enqueue(from: Place, paths: string[], to: Place, dest: str
   }
 }
 
-/** Überträgt Einträge von einem Ort in einen Ordner an einem anderen. */
+/** Transfers entries from one location into a folder at another. */
 export const send = (from: Place, entries: FileEntry[], to: Place, dest: string) => enqueue(from, entries.map((e) => e.path), to, dest);
 
-/** Lädt Einträge auf diesen PC, in den Ordner aus den Einstellungen oder den Download-Ordner von Windows. */
+/** Downloads entries to this PC, into the folder from the settings or the Windows downloads folder. */
 export async function download(from: Place, entries: FileEntry[]) {
   try {
     const dest = settings.downloadDir || (await fsDownloads());
@@ -308,7 +308,7 @@ export async function download(from: Place, entries: FileEntry[]) {
   }
 }
 
-/** Lässt Dateien dieses PCs wählen und lädt sie in den Ordner hoch. */
+/** Lets the user choose files on this PC and uploads them into the folder. */
 export async function upload(to: Place, dest: string) {
   try {
     const paths = await pickUploads();
@@ -318,24 +318,24 @@ export async function upload(to: Place, dest: string) {
   }
 }
 
-// ---------- Fenster und Dialoge rund um Dateien ----------
+// ---------- Windows and dialogs around files ----------
 
-/** Was gerade über der Oberfläche offen ist. Gezeichnet wird alles in FileDialogs.svelte. */
+/** What is currently open above the interface. Everything is drawn in FileDialogs.svelte. */
 export const fileUi = $state<{
-  /** Datei im Editor oder in der Vorschau. */
+  /** File in the editor or the preview. */
   viewer: { place: Place; entry: FileEntry; edit: boolean; browser: Browser | null } | null;
-  /** Rechte und Besitzer ändern. */
+  /** Change permissions and owner. */
   perms: { browser: Browser; entries: FileEntry[] } | null;
-  /** Suche unterhalb des offenen Ordners. */
+  /** Search below the open folder. */
   search: { browser: Browser } | null;
-  /** Ordner abgleichen: links gegen rechts. */
+  /** Folder sync: left against right. */
   compare: { left: Browser; right: Browser } | null;
-  /** Neuer Ordner (ohne Eintrag) oder Umbenennen. */
+  /** New folder (without entry) or rename. */
   naming: { browser: Browser; entry: FileEntry | null } | null;
   removing: { browser: Browser; entries: FileEntry[] } | null;
-  /** Kontextmenü eines Eintrags oder der leeren Fläche. */
+  /** Context menu of an entry or the empty area. */
   menu: { browser: Browser; entry: FileEntry | null; x: number; y: number; other: Browser | null; pane: string | null } | null;
-  /** Rückfrage vor einem Transfer: Diese Namen gibt es im Zielordner schon. */
+  /** Prompt before a transfer: these names already exist in the destination folder. */
   conflict: { names: string[]; to: Place; dest: string; resolve: (policy: Policy | null) => void } | null;
 }>({ viewer: null, perms: null, search: null, compare: null, naming: null, removing: null, menu: null, conflict: null });
 
@@ -356,7 +356,7 @@ export function iconFor(entry: Pick<FileEntry, 'name' | 'kind'>): IconName {
   return 'file';
 }
 
-/** Doppelklick auf eine Datei: Bilder in die Vorschau, alles andere zum Bearbeiten (eingebaut oder im eigenen Programm). */
+/** Double-click on a file: images into the preview, everything else for editing (built in or in your own program). */
 export function openFile(browser: Browser, entry: FileEntry, edit = !isImage(entry.name)) {
   const place = browser.place;
   if (!place) return;
@@ -369,10 +369,10 @@ export function openFile(browser: Browser, entry: FileEntry, edit = !isImage(ent
   fileUi.viewer = { place, entry, edit, browser };
 }
 
-/** Beschriftung für „dorthin übertragen“. */
+/** Label for “transfer there”. */
 export const sendLabel = (to: Place | null) => (to?.kind === 'local' ? t('files.send.local') : t('files.send', { to: placeName(to) }));
 
-/** Öffnet einen Host in der rechten Spalte der Seite „Dateien“. So „verbindet“ sich ein FTP-Host: Er hat kein Terminal. */
+/** Opens a host in the right column of the Files page. That is how an FTP host “connects”: it has no terminal. */
 export function openInFiles(id: string) {
   ui.page = 'files';
   if (!columns.left.place) void columns.left.open({ kind: 'local' });
@@ -380,14 +380,14 @@ export function openInFiles(id: string) {
   void columns.right.open({ kind: 'host', id }, dir || undefined);
 }
 
-/** Öffnet einen FTP-Server aus der Schnellverbindung in der rechten Spalte der Seite „Dateien“. */
+/** Opens an FTP server from quick connect in the right column of the Files page. */
 export function openPlaceInFiles(place: FtpPlace, path?: string) {
   ui.page = 'files';
   if (!columns.left.place) void columns.left.open({ kind: 'local' });
   void columns.right.open(place, path || undefined);
 }
 
-/** So heißt ein Server aus der Schnellverbindung: `benutzer@adresse`, mit dem Port, wenn er nicht der übliche ist. */
+/** What a server from quick connect is called: `user@address`, with the port if it is not the usual one. */
 export const ftpPlaceName = (place: FtpPlace) => `${place.user ? `${place.user}@` : ''}${place.host}${place.port === (place.security === 'implicit' ? 990 : 21) ? '' : `:${place.port}`}`;
 
 export function placeName(place: Place | null, fallback = ''): string {
@@ -409,7 +409,7 @@ export function formatSize(bytes: number): string {
   return `${value >= 100 ? value.toFixed(0) : value.toFixed(1).replace('.', settings.lang === 'de' ? ',' : '.')} ${units[unit]}`;
 }
 
-/** Heute die Uhrzeit, sonst das Datum; mit `full` beides. */
+/** Today the time, otherwise the date; with `full` both. */
 export function formatWhen(ms: number, full = false): string {
   const locale = settings.lang === 'de' ? 'de-DE' : 'en-GB';
   const date = new Date(ms);
@@ -419,7 +419,7 @@ export function formatWhen(ms: number, full = false): string {
   return new Date().toDateString() === date.toDateString() ? time : day;
 }
 
-/** Rechte in der Schreibweise von `ls -l`: „drwxr-xr-x“. */
+/** Permissions in `ls -l` notation: “drwxr-xr-x”. */
 export function modeText(entry: Pick<FileEntry, 'mode' | 'kind'>): string {
   if (entry.mode === null) return '';
   const bits = 'rwxrwxrwx'.split('').map((letter, i) => (entry.mode! & (0o400 >> i) ? letter : '-'));
@@ -434,9 +434,9 @@ export function formatDuration(seconds: number): string {
   return t('time.hours', { h: Math.floor(seconds / 3600), m: Math.round((seconds % 3600) / 60) });
 }
 
-// ---------- Ziehen von einer Liste in eine andere ----------
+// ---------- Dragging from one list into another ----------
 
-/** Was gerade zwischen zwei Dateilisten gezogen wird und worüber es schwebt. */
+/** What is currently being dragged between two file lists and what it hovers over. */
 export const fileDrag = $state<{
   item: { from: Browser; entries: FileEntry[] } | null;
   over: Browser | null;
@@ -444,15 +444,15 @@ export const fileDrag = $state<{
   x: number;
   y: number;
   moved: boolean;
-  /** Der Zeiger hat das Fenster verlassen: Die Dateien werden für den Explorer bereitgelegt, Fortschritt 0 bis 1. */
+  /** The pointer left the window: the files are being prepared for Explorer, progress 0 to 1. */
   staging: number | null;
 }>({ item: null, over: null, dir: null, x: 0, y: 0, moved: false, staging: null });
 
 /**
- * Zieht Einträge aus dem Fenster heraus, in den Explorer oder ein anderes Programm. Was auf diesem PC liegt, geht
- * sofort; was auf einem Server liegt, wird erst in einen Arbeitsordner geholt, solange die Maustaste gedrückt bleibt.
- * `state` sagt, ob sie es noch ist, ob losgelassen wurde oder ob der Zeiger ins Fenster zurückgekehrt ist.
- * Liefert, ob der Zug an Windows übergeben wurde.
+ * Drags entries out of the window, into Explorer or another program. What is on this PC goes
+ * right away; what is on a server is first fetched into a working folder while the mouse button stays pressed.
+ * `state` says whether it still is, whether it was released or whether the pointer returned into the window.
+ * Returns whether the drag was handed to Windows.
  */
 async function leaveWindow(from: Place, entries: FileEntry[], state: () => 'held' | 'released' | 'returned'): Promise<boolean> {
   try {
@@ -471,9 +471,9 @@ async function leaveWindow(from: Place, entries: FileEntry[], state: () => 'held
         }, 50);
       });
       if (!ready) {
-        // Losgelassen oder gescheitert, bevor alles da war: Der Rest wird nicht mehr geholt.
+        // Released or failed before everything was there: the rest is no longer fetched.
         void transferControl(staged.ids, 'cancel');
-        // Zurück im Fenster geht der Zug dort weiter; nur wer draußen loslässt, erfährt, warum nichts ankam.
+        // Back in the window the drag continues there; only whoever releases outside learns why nothing arrived.
         if (state() !== 'returned') toast(t('files.dragout.released'), 'err');
         return false;
       }
@@ -490,15 +490,15 @@ async function leaveWindow(from: Place, entries: FileEntry[], state: () => 'held
   }
 }
 
-/** Beginnt auf einem Eintrag: Ab ein paar Pixeln Weg wird die Auswahl gezogen; losgelassen über einer anderen Liste wird übertragen. */
+/** Starts on an entry: after a few pixels of movement the selection is dragged; released over another list it is transferred. */
 export function startFileDrag(event: PointerEvent, from: Browser) {
   const start = { x: event.clientX, y: event.clientY };
   fileDrag.moved = false;
-  /** Der Zug hat das Fenster verlassen und geht jetzt an Windows. */
+  /** The drag left the window and now goes to Windows. */
   let left = false;
-  /** Der Zug ist zu Ende: losgelassen, abgebrochen oder an Windows übergeben. */
+  /** The drag is over: released, cancelled or handed to Windows. */
   let ended = false;
-  /** Der Zeiger ist ins Fenster zurückgekehrt, bevor Windows übernommen hat. */
+  /** The pointer returned into the window before Windows took over. */
   let returned = false;
   const move = (e: PointerEvent) => {
     if (!fileDrag.item) {
@@ -508,13 +508,13 @@ export function startFileDrag(event: PointerEvent, from: Browser) {
     }
     fileDrag.x = e.clientX;
     fileDrag.y = e.clientY;
-    // Über den Rand hinaus: Das Fenster kann nicht mehr sehen, wohin es geht; ab hier zieht Windows.
+    // Beyond the edge: the window can no longer see where it is going; from here Windows drags.
     const outside = e.clientX < 0 || e.clientY < 0 || e.clientX > innerWidth || e.clientY > innerHeight;
     const item = fileDrag.item;
     if (outside && !left && inApp && item.from.place) {
       left = true;
       returned = false;
-      // Hat Windows übernommen, ist der Zug für das Fenster vorbei; sonst geht er hier weiter.
+      // If Windows took over, the drag is over for the window; otherwise it continues here.
       void leaveWindow(item.from.place, item.entries, () => (ended ? 'released' : returned ? 'returned' : 'held')).then((handed) => (handed ? stop(new Event('dragout')) : (left = false)));
     } else if (!outside && left && fileDrag.staging !== null) {
       returned = true;
@@ -529,7 +529,7 @@ export function startFileDrag(event: PointerEvent, from: Browser) {
     removeEventListener('keydown', escape);
     const { item, over, dir } = fileDrag;
     fileDrag.item = fileDrag.over = fileDrag.dir = null;
-    // Der Klick, der auf das Loslassen folgt, soll die Auswahl nicht verändern.
+    // The click that follows the release should not change the selection.
     setTimeout(() => (fileDrag.moved = false));
     if (e.type === 'pointerup' && !left && item?.from.place && over?.place && over.listing && over !== item.from) void send(item.from.place, item.entries, over.place, dir ?? over.listing.path);
   };

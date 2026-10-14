@@ -12,7 +12,7 @@
   import Icon from '../ui/Icon.svelte';
   import OsIcon from '../ui/OsIcon.svelte';
 
-  /** Dateien in zwei Spalten: dieser PC und ein Server, oder zwei Server. Dazwischen wird übertragen und abgeglichen. */
+  /** Files in two columns: this PC and a server, or two servers. Transfers and syncing happen between them. */
   const { left, right } = columns;
   const LOCAL = 'local';
 
@@ -20,7 +20,7 @@
     if (!left.place) void left.open({ kind: 'local' });
   });
 
-  /** Hosts für die Auswahl einer Spalte, nach ihrem Gruppenweg sortiert. */
+  /** Hosts for a column's choice, sorted by their group path. */
   const hosts = $derived(
     fileHosts()
       .map((host) => ({ id: host.id, name: host.name, group: groupPath(host.group).map((g) => g.name).join(' / ') }))
@@ -28,10 +28,10 @@
   );
   const groups = $derived([...new Set(hosts.map((h) => h.group))]);
 
-  /** Ein Server aus der Schnellverbindung steht in der Auswahl, solange er offen ist. */
+  /** A server from quick connect is in the choice as long as it is open. */
   const DIRECT = 'direct';
   const valueOf = (browser: Browser) => (browser.place?.kind === 'host' ? browser.place.id : browser.place?.kind === 'ftp' ? DIRECT : browser.place ? LOCAL : '');
-  /** Bei FTP: ob die Verbindung zu diesem Ort unverschlüsselt läuft. `null` für alles andere. */
+  /** For FTP: whether the connection to this location runs unencrypted. `null` for everything else. */
   const ftpPlain = (browser: Browser): boolean | null => {
     const place = browser.place;
     if (place?.kind === 'ftp') return place.security === 'none';
@@ -129,7 +129,7 @@
   {#if transfers.dock}<Transfers dock />{/if}
 </div>
 
-<!-- Ein Host, der sich nicht still anmelden kann, fragt hier wie im Terminal: Schlüssel des Servers, Passwort. -->
+<!-- A host that cannot sign in silently asks here as in the terminal: server key, password. -->
 {#each [left, right] as browser (browser)}
   {#if browser.prompt}<SessionPrompt prompt={browser.prompt} name={placeName(browser.place)} onanswer={(reply) => browser.answer(reply)} />{/if}
 {/each}

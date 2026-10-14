@@ -10,13 +10,13 @@
   import Dialog from '../ui/Dialog.svelte';
   import Icon from '../ui/Icon.svelte';
 
-  /** Führt ein Snippet auf vielen Hosts aus, ohne Terminal, und zeigt je Host, was herauskam. */
+  /** Runs a snippet on many hosts, without a terminal, and shows per host what came out. */
   let { snippet, onclose }: { snippet: Snippet; onclose: () => void } = $props();
 
-  // Der Dialog wird je Snippet neu erzeugt ({#key}); die Startwerte werden bewusst nur einmal gelesen.
+  // The dialog is created anew per snippet ({#key}); the initial values are deliberately read only once.
   const first = (() => snippet)();
   const variables = variablesOf(first.command);
-  /** Nummer dieses Laufs, unter der er sich abbrechen lässt. */
+  /** Number of this run, under which it can be cancelled. */
   const run = Date.now();
 
   let values = $state<Record<string, string>>({ ...lastValues(first.id) });
@@ -24,7 +24,7 @@
   let picked = $state<string[]>([]);
   let results = $state<Record<string, RunResult>>({});
   let phase = $state<'pick' | 'running' | 'done'>('pick');
-  /** Der Host, dessen Ausgabe unten zu lesen ist. */
+  /** The host whose output can be read below. */
   let shown = $state<string | null>(null);
 
   const command = $derived(fill(snippet.command, values));
@@ -34,14 +34,14 @@
       .filter((h) => !needle || [h.name, h.address, pathLabel(h.group)].some((text) => text.toLowerCase().includes(needle)))
       .sort((a, b) => pathLabel(a.group).localeCompare(pathLabel(b.group)) || a.name.localeCompare(b.name)),
   );
-  /** Gruppen der obersten Ebenen, die Hosts enthalten: Ein Klick wählt alle ihre Hosts, auch die in Untergruppen. */
+  /** Top-level groups that contain hosts: a click selects all their hosts, also those in subgroups. */
   const groups = $derived(
     vault.groups
       .map((g) => ({ group: g, ids: sshHosts().filter((h) => h.group && descendants(g.id).includes(h.group)).map((h) => h.id) }))
       .filter((entry) => entry.ids.length > 1)
       .sort((a, b) => pathLabel(a.group.id).localeCompare(pathLabel(b.group.id))),
   );
-  /** Die gewählten Hosts, unabhängig davon, was gerade im Suchfeld steht. */
+  /** The chosen hosts, regardless of what is in the search field right now. */
   const ran = $derived(sshHosts().filter((h) => picked.includes(h.id)).sort((a, b) => pathLabel(a.group).localeCompare(pathLabel(b.group)) || a.name.localeCompare(b.name)));
   const finished = $derived(Object.values(results).filter((r) => r.state !== 'running'));
   const ok = $derived(finished.filter((r) => r.state === 'done' && r.exit === 0).length);
@@ -52,7 +52,7 @@
     picked = picked.includes(id) ? picked.filter((p) => p !== id) : [...picked, id];
   }
 
-  /** Wählt alle Hosts einer Gruppe; sind schon alle gewählt, nimmt der Klick sie wieder heraus. */
+  /** Selects all hosts of a group; if all are already selected, the click removes them again. */
   function toggleGroup(ids: string[]) {
     picked = ids.every((id) => picked.includes(id)) ? picked.filter((id) => !ids.includes(id)) : [...new Set([...picked, ...ids])];
   }
@@ -72,7 +72,7 @@
     try {
       await snippetRun(run, command, picked, (result) => {
         results[result.host] = result;
-        // Die erste fertige Ausgabe wird gleich gezeigt; danach entscheidet der Klick.
+        // The first finished output is shown right away; after that the click decides.
         if (result.state !== 'running' && shown === null) shown = result.host;
       });
     } catch (e) {

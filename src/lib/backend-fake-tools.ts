@@ -1,15 +1,15 @@
-// Ersatz für Port-Regeln, das Ausführen von Snippets auf Hosts und die Server-Info in der Vorschau im Browser.
-// Nichts davon öffnet einen Port oder spricht mit einem Server; die Zahlen sind erfunden.
+// Stand-in for port rules, running snippets on hosts and the server info in the browser preview.
+// None of it opens a port or talks to a server; the numbers are made up.
 
 import type { Answer, Forward, ForwardState, RunResult, SessionEvent, StatsSample } from './types';
 
 interface World {
-  /** Ein Host aus dem Ersatz-Tresor. `silent`: meldet er sich ohne Rückfrage an? */
+  /** A host from the stand-in vault. `silent`: does it sign in without a prompt? */
   host(id: string): { name: string; address: string; os: string | null; silent: boolean } | null;
   forward(id: string): Forward | null;
-  /** Die Ersatz-Sitzung mit dieser Nummer, solange ihre Shell läuft. */
+  /** The stand-in session with this number, as long as its shell runs. */
   session(id: number): { name: string; os: string | null } | null;
-  /** Schickt ein Ereignis, wie es eine Verbindung an die Oberfläche schickt (Rückfragen, Ende). */
+  /** Sends an event as a connection sends it to the interface (prompts, end). */
   emit(event: SessionEvent): void;
 }
 
@@ -24,7 +24,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // ---------- Port-Regeln ----------
 
 const states = new Map<string, ForwardState>();
-/** Verbindungen, die auf eine Antwort warten: Nummer der Verbindung → Regel. */
+/** Connections waiting for an answer: connection number → rule. */
 const asking = new Map<number, string>();
 let connectionSeq = 100_000;
 let emitForwards: (list: ForwardState[]) => void = () => {};
@@ -37,13 +37,13 @@ function run(id: string) {
   const state = states.get(id);
   const rule = world?.forward(id);
   if (!state || !rule) return;
-  // Zwei Regeln können auf diesem PC nicht denselben Port belegen.
+  // Two rules cannot occupy the same port on this PC.
   const clash = rule.kind !== 'remote' && [...states.values()].some((s) => s.id !== id && s.phase === 'running' && world?.forward(s.id)?.kind !== 'remote' && world?.forward(s.id)?.bindPort === rule.bindPort);
   Object.assign(state, clash ? { phase: 'failed', error: 'port_in_use', message: null } : { phase: 'running', error: null, since: Date.now() });
   publish();
 }
 
-/** Lässt laufende Regeln nach Betrieb aussehen. */
+/** Makes running rules look busy. */
 function tick() {
   let changed = false;
   for (const state of states.values()) {
@@ -67,7 +67,7 @@ export const fakeForwards = {
     ticker ??= setInterval(tick, 1000);
     return () => {};
   },
-  /** Schaltet eine Regel ein und liefert die Nummer der Verbindung, über die Rückfragen kommen. */
+  /** Switches a rule on and returns the number of the connection prompts come through. */
   start: async (id: string): Promise<number> => {
     const rule = world?.forward(id) ?? fail('not_found');
     const host = world?.host(rule.host) ?? fail('invalid', 'host_missing');
@@ -87,11 +87,11 @@ export const fakeForwards = {
     for (const [connection, rule] of asking) if (rule === id) asking.delete(connection);
     publish();
   },
-  /** Eine Regel wurde gelöscht oder geändert: Sie läuft nicht weiter. */
+  /** A rule was deleted or changed: it does not keep running. */
   forget: (id: string) => {
     if (states.delete(id)) publish();
   },
-  /** Beantwortet die Rückfrage einer Regel. Liefert false, wenn die Nummer zu keiner gehört. */
+  /** Answers a rule's prompt. Returns false if the number belongs to none. */
   answer: (connection: number, answer: Answer): boolean => {
     const id = asking.get(connection);
     if (!id) return false;
@@ -112,7 +112,7 @@ export const fakeForwards = {
     }
     return true;
   },
-  /** Bricht einen Verbindungsaufbau ab, der noch auf eine Antwort wartet. */
+  /** Cancels a connection setup still waiting for an answer. */
   close: (connection: number): boolean => {
     const id = asking.get(connection);
     if (!id) return false;
@@ -123,11 +123,11 @@ export const fakeForwards = {
   },
 };
 
-// ---------- Snippets auf Hosts ausführen ----------
+// ---------- Running snippets on hosts ----------
 
 const cancelled = new Set<number>();
 
-/** Was ein Befehl in der Vorschau ausgibt. Bekannte Befehle sehen echt aus, der Rest nennt sich selbst. */
+/** What a command prints in the preview. Known commands look real, the rest names itself. */
 function output(command: string, name: string): { text: string; exit: number } {
   const n = name.length;
   const first = command.trim().split(/\s+/)[0];
@@ -143,7 +143,7 @@ function output(command: string, name: string): { text: string; exit: number } {
 }
 
 export const fakeRun = {
-  /** Tut so, als liefe der Befehl auf jedem Host; drei gleichzeitig. */
+  /** Pretends the command runs on every host; three at a time. */
   run: async (run: number, command: string, hosts: string[], onResult: (result: RunResult) => void): Promise<void> => {
     const queue = [...hosts];
     const worker = async () => {
@@ -192,7 +192,7 @@ export const fakeStats = {
     const c = counters.get(id) ?? { at: now - 2000, total: 0, idle: 0, rx: 4.2e9, tx: 9.1e8, started: now };
     counters.set(id, c);
     const dt = Math.max(1, now - c.at);
-    // Eine ruhige Welle mit gelegentlichen Spitzen, je Host etwas anders.
+    // A calm wave with occasional peaks, a little different per host.
     const wave = Math.sin(now / 7000 + seed) * 0.5 + 0.5;
     const busy = Math.min(0.97, 0.08 + wave * 0.34 + Math.random() * 0.07 + (Math.floor(now / 23_000 + seed) % 5 === 0 ? 0.3 : 0));
     const ticks = (dt / 10) * cores;

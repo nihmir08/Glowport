@@ -41,7 +41,7 @@
     void drop(() => authorityDelete(entry.id));
   }
 
-  /** Der öffentliche Schlüssel der Stelle aus einer Datei statt aus der Zwischenablage. */
+  /** The authority's public key from a file instead of the clipboard. */
   async function pickAuthorityKey() {
     try {
       const file = await pickTextFile('.pub');

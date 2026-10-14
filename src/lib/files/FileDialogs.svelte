@@ -14,14 +14,14 @@
   import FolderCompare from './FolderCompare.svelte';
   import PermsDialog from './PermsDialog.svelte';
 
-  /** Alles, was sich rund um Dateien über die Oberfläche legt: Menü, Dialoge, Editor und die Marke beim Ziehen. Einmal im Fenster eingehängt. */
+  /** Everything around files that lies over the interface: menu, dialogs, editor and the badge while dragging. Mounted once in the window. */
   let name = $state('');
   let busy = $state(false);
 
   const naming = $derived(fileUi.naming);
   const conflict = $derived(fileUi.conflict);
 
-  /** Beantwortet die Rückfrage zu vorhandenen Namen; `null` bricht den Transfer ab. */
+  /** Answers the prompt about existing names; `null` cancels the transfer. */
   function settle(policy: Policy | null) {
     fileUi.conflict?.resolve(policy);
     fileUi.conflict = null;
@@ -66,7 +66,7 @@
     }
   }
 
-  /** Markiert beim Umbenennen den Namen ohne Endung. */
+  /** When renaming, selects the name without extension. */
   function selectStem(node: HTMLInputElement) {
     node.focus();
     const dot = node.value.lastIndexOf('.');
@@ -130,7 +130,7 @@
 </Dialog>
 
 {#if fileDrag.staging !== null}
-  <!-- Der Zeiger ist außerhalb des Fensters; der Hinweis steht deshalb fest am unteren Rand. -->
+  <!-- The pointer is outside the window; so the notice sits fixed at the bottom edge. -->
   <div class="dragchip files pinned"><Icon name="download" size={14} /><b>{t('files.dragout.staging', { n: Math.round(fileDrag.staging * 100) })}</b></div>
 {:else if fileDrag.item}
   <div class="dragchip files" style="left:{fileDrag.x}px;top:{fileDrag.y}px">

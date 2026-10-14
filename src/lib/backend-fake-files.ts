@@ -1,5 +1,5 @@
-// Ersatz-Dateisysteme und Ersatz-Transfers für die Vorschau im Browser. Wie backend-fake.ts nie Teil des Programms.
-// Jeder Host bekommt beim ersten Zugriff denselben kleinen Beispielbaum; „Dieser PC“ einen eigenen.
+// Stand-in file systems and stand-in transfers for the browser preview. Like backend-fake.ts never part of the program.
+// Every host gets the same small sample tree on first access; “This PC” one of its own.
 
 import type { BackendError, ChmodRequest, DiffEntry, FileContent, FileEntry, FileKind, Listing, Place, SearchHit, Transfer, TransferRequest, Watched } from './types';
 
@@ -16,19 +16,19 @@ interface Node {
   target?: string;
 }
 
-/** Wohin ein Ort in der Vorschau führt: welcher Baum, unter welchem Namen, als welcher Benutzer. */
+/** Where a location leads in the preview: which tree, under which name, as which user. */
 export interface Resolved {
   key: string;
   label: string;
   user: string;
-  /** Ein FTP-Server: ein Webspace statt eines ganzen Linux, ohne Rechte und Besitzer. */
+  /** An FTP server: web space instead of a whole Linux, without permissions and owners. */
   ftp?: boolean;
-  /** Noch nicht verbunden: Erst die Rückfragen (Zertifikat, unverschlüsselt). */
+  /** Not connected yet: the prompts first (certificate, unencrypted). */
   locked?: boolean;
 }
 
 let resolve: (place: Place) => Resolved | null = () => null;
-/** backend-fake.ts sagt hier, welcher Host hinter einem Ort steckt. */
+/** backend-fake.ts tells here which host is behind a location. */
 export const registerPlaces = (resolver: (place: Place) => Resolved | null) => void (resolve = resolver);
 
 const fail = (code: string, reason?: string): never => {
@@ -180,7 +180,7 @@ const LOGO = `data:image/svg+xml;utf8,${encodeURIComponent(
 
 type Extra = Partial<Pick<Node, 'mode' | 'owner' | 'group' | 'modified' | 'target'>>;
 let stamp = 0;
-/** Jede Datei bekommt eine eigene, feste Zeit, damit die Liste nach etwas aussieht. */
+/** Every file gets a fixed time of its own, so the list looks like something. */
 const age = () => now - ((++stamp * 37) % 400) * HOUR - stamp * 3 * MIN;
 
 function dir(name: string, children: Node[], extra: Extra = {}): Node {
@@ -190,7 +190,7 @@ function file(name: string, content: number | string, extra: Extra = {}): Node {
   const text = typeof content === 'string' ? content : undefined;
   return { name, kind: 'file', size: text === undefined ? (content as number) : new TextEncoder().encode(text).length, modified: age(), mode: 0o644, owner: 'root', group: 'root', text, ...extra };
 }
-/** Gibt einem Teilbaum einen Besitzer. */
+/** Gives a subtree an owner. */
 function owned(node: Node, owner: string, group = owner): Node {
   node.owner = owner;
   node.group = group;
@@ -199,7 +199,7 @@ function owned(node: Node, owner: string, group = owner): Node {
 }
 
 function appTree(): Node[] {
-  // Lokal und am Server derselbe Stand: Die Zeiten beginnen jedes Mal an derselben Stelle.
+  // Local and on the server the same state: the times start at the same point every time.
   stamp = 200;
   return [
     dir('public', [file('index.html', 2 * KB + 310), file('style.css', 14 * KB), file('logo.png', 48 * KB), file('favicon.ico', 15 * KB)]),
@@ -239,7 +239,7 @@ function remoteTree(user: string): Node {
   ]);
 }
 
-/** Ein Webspace, wie ein Hoster ihn über FTP zeigt. */
+/** Web space as a hoster shows it over FTP. */
 function ftpTree(user: string): Node {
   return owned(
     dir('', [
@@ -261,7 +261,7 @@ function ftpTree(user: string): Node {
 
 function localTree(): Node {
   const mine = appTree().filter((n) => !['.env', 'storage', 'releases', 'current'].includes(n.name));
-  // Für den Abgleich: lokal eine neuere Einstellungsdatei, eine ältere app.js und eine Datei, die es am Server nicht gibt.
+  // For syncing: locally a newer settings file, an older app.js and a file that does not exist on the server.
   const config = mine.find((n) => n.name === 'config.yaml')!;
   config.text = CONFIG.replace('workers: 4', 'workers: 8').replace('level: info', 'level: debug');
   config.size = config.text.length;
@@ -299,7 +299,7 @@ function treeOf(place: Place): { root: Node; local: boolean; where: Resolved } {
 const parts = (path: string, local: boolean) => path.split(local ? /[\\/]+/ : /\/+/).filter(Boolean);
 const join = (names: string[], local: boolean) => (local ? (names.length === 1 ? `${names[0]}\\` : names.join('\\')) : `/${names.join('/')}`);
 
-/** Geht einen Pfad entlang. Liefert die Knoten vom ersten Stück bis zum Ziel. */
+/** Walks along a path. Returns the nodes from the first piece to the target. */
 function walk(root: Node, path: string, local: boolean): Node[] {
   const trail: Node[] = [];
   let at = root;
@@ -318,7 +318,7 @@ function walk(root: Node, path: string, local: boolean): Node[] {
 }
 const nodeAt = (root: Node, path: string, local: boolean) => walk(root, path, local).at(-1) ?? root;
 
-/** Darf dieser Benutzer hier schreiben? Grob: sein eigener Besitz, /tmp, und root überall. */
+/** May this user write here? Roughly: their own property, /tmp, and root everywhere. */
 function writable(trail: Node[], where: Resolved, local: boolean): boolean {
   if (local) return trail.length > 0;
   if (where.user === 'root') return true;
@@ -352,7 +352,7 @@ const homeOf = (place: Place) => {
   return local ? 'C:\\Users\\ich' : where.ftp ? '/' : where.user === 'root' ? '/root' : `/home/${where.user}`;
 };
 
-/** Der Ordner eines Pfads und der Name darin. */
+/** A path's folder and the name in it. */
 function parentOf(place: Place, path: string) {
   const { root, local, where } = treeOf(place);
   const trail = walk(root, path, local);
@@ -374,9 +374,9 @@ function sample(node: Node): string {
 // ---------- Transfers ----------
 
 interface Job extends Transfer {
-  /** Was nach dem Ende im Zielbaum erscheint. */
+  /** What appears in the target tree after the end. */
   land: () => void;
-  /** Bytes je Sekunde, mit denen die Vorschau diesen Transfer laufen lässt. */
+  /** Bytes per second at which the preview runs this transfer. */
   pace: number;
 }
 
@@ -420,7 +420,7 @@ function tick() {
 const wake = () => void (timer ??= setInterval(tick, TICK));
 
 function startTransfer(given: TransferRequest): number[] {
-  // Ohne Zielordner landen Downloads im Download-Ordner.
+  // Without a destination folder, downloads land in the downloads folder.
   const request = given.to.kind === 'local' && !given.dest ? { ...given, dest: 'C:\Users\ich\Downloads' } : given;
   const from = treeOf(request.from);
   const to = treeOf(request.to);
@@ -434,7 +434,7 @@ function startTransfer(given: TransferRequest): number[] {
     try {
       node = nodeAt(from.root, path, from.local);
     } catch {
-      // In der Vorschau abgelegte Dateien gibt es im Beispielbaum nicht; sie bekommen eine erfundene Größe.
+      // Files dropped in the preview do not exist in the sample tree; they get a made-up size.
       const name = parts(path, true).at(-1) ?? 'datei';
       node = file(name, 200 * KB + ((name.length * 7919) % (6 * MB)), { owner: 'ich', modified: Date.now() });
     }
@@ -444,7 +444,7 @@ function startTransfer(given: TransferRequest): number[] {
       id: ++jobSeq,
       name: node.name,
       direction,
-      // Bei diesem PC genügt der Pfad; bei einem Server steht sein Name davor.
+      // For this PC the path is enough; for a server its name comes before it.
       source: `${from.local ? '' : `${from.where.label}:`}${path}`,
       dest: `${to.local ? '' : `${to.where.label}:`}${request.dest}${request.dest.endsWith(sep(to.local)) ? '' : sep(to.local)}${node.name}`,
       bytes,
@@ -467,14 +467,14 @@ function startTransfer(given: TransferRequest): number[] {
   return ids;
 }
 
-// ---------- Dateien, die in einem anderen Programm offen sind ----------
+// ---------- Files open in another program ----------
 
 let watched: Watched[] = [];
 let emitWatched: (list: Watched[]) => void = () => {};
 
-// ---------- Shell der Ersatz-Sitzungen ----------
+// ---------- Shell of the stand-in sessions ----------
 
-/** `cd` der Ersatz-Shell: liefert den neuen Ordner oder eine Fehlermeldung. */
+/** `cd` of the stand-in shell: returns the new folder or an error message. */
 export function shellCd(place: Place, cwd: string, arg: string): { cwd: string } | { error: string } {
   try {
     const target = !arg || arg === '~' ? homeOf(place) : arg.startsWith('/') ? arg : `${cwd}/${arg}`;
@@ -561,7 +561,7 @@ export const fakeFiles = {
       node.size = new TextEncoder().encode(text).length;
       node.modified = Date.now();
     }, 320),
-  /** Sucht unterhalb eines Ordners nach Namen oder im Inhalt und meldet jeden Treffer einzeln. */
+  /** Searches below a folder by name or in content and reports every hit individually. */
   search: async (place: Place, dirPath: string, query: string, content: boolean, onHit: (hit: SearchHit) => void): Promise<void> => {
     const { root, local } = treeOf(place);
     const start = walk(root, dirPath, local);
@@ -583,7 +583,7 @@ export const fakeFiles = {
       onHit(hit);
     }
   },
-  /** Vergleicht zwei Ordner samt Unterordnern nach Größe und Änderungszeit. */
+  /** Compares two folders including subfolders by size and modification time. */
   compare: (a: Place, pathA: string, b: Place, pathB: string): Promise<DiffEntry[]> =>
     later(() => {
       const left = treeOf(a);
@@ -627,7 +627,7 @@ export const fakeFiles = {
       return ids;
     }, 60),
   transferList: () => Promise.resolve(transfers()),
-  /** Hält an, setzt fort, bricht ab oder versucht es erneut; ohne Nummern gilt es für alle. */
+  /** Pauses, resumes, cancels or retries; without numbers it applies to all. */
   transferControl: (ids: number[] | null, action: 'pause' | 'resume' | 'cancel' | 'retry') =>
     Promise.resolve().then(() => {
       for (const job of jobs) {
@@ -640,7 +640,7 @@ export const fakeFiles = {
       wake();
       publish();
     }),
-  /** Räumt alles Fertige, Abgebrochene und Gescheiterte aus der Liste. */
+  /** Clears everything finished, cancelled and failed from the list. */
   transferClear: () => Promise.resolve().then(() => ((jobs = jobs.filter((j) => j.state === 'running' || j.state === 'queued' || j.state === 'paused')), publish())),
   onTransfers: (handler: (list: Transfer[]) => void) => ((emitTransfers = handler), () => {}),
 

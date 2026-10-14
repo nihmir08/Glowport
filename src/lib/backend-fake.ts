@@ -1,6 +1,6 @@
-// Ersatz für den Kern, wenn die Oberfläche im Browser läuft (Entwicklung und Vorschau).
-// NICHT verschlüsselt und nicht Teil des Programms: Im Programmfenster wird diese Datei nie benutzt.
-// Die Regeln hier sind nur so genau, wie es zum Ausprobieren der Oberfläche nötig ist; maßgeblich ist crates/core.
+// Stand-in for the core when the interface runs in the browser (development and preview).
+// NOT encrypted and not part of the program: this file is never used in the program window.
+// The rules here are only as precise as needed to try out the interface; what counts is crates/core.
 
 import { FAKE_PORTS, FAKE_SHELLS, startDevice, type Device, type DeviceKind } from './backend-fake-extras';
 import { registerPlaces, shellCd, shellHome, shellLs } from './backend-fake-files';
@@ -70,8 +70,8 @@ interface Stored {
 
 const LS_KEY = 'glowport.fakevault';
 let store: Stored | null = JSON.parse(localStorage.getItem(LS_KEY) ?? 'null');
-// Wie im Kern: Ist das Entsperren beim Start eingeschaltet, ist der Tresor nach dem Laden offen.
-// Ein Tab in eigenem Fenster gehört zum selben Programm; dort ist der Tresor so offen wie im Hauptfenster.
+// As in the core: if unlock on start is switched on, the vault is open after loading.
+// A tab in a window of its own belongs to the same program; there the vault is as open as in the main window.
 let open = !!store?.startUnlock || new URLSearchParams(location.search).has('detached');
 let seq = Date.now();
 
@@ -99,7 +99,7 @@ function snapshot(): Snapshot {
   };
 }
 
-/** Der Tresor für einen neuen Eintrag. Der persönliche wird nicht eigens vermerkt. */
+/** The vault for a new entry. The personal one is not noted separately. */
 const placed = (vault: string | undefined) => (vault && vault !== PERSONAL ? { vault } : {});
 
 const status = (): Status => {

@@ -4,15 +4,15 @@ import { mergeTab, movePane, moveTab, paneToTab, sendToWindow, swapPanes, tabByK
 import { errorText } from './data.svelte';
 import { toast } from './state.svelte';
 
-/** Ziehen von Tabs und Bereichen mit der Maus: umordnen, nebeneinander legen, als eigenen Tab oder eigenes Fenster herauslösen. */
+/** Dragging tabs and panes with the mouse: reorder, place side by side, detach as a tab or window of its own. */
 
 export type Dragged = { kind: 'pane'; key: string } | { kind: 'tab'; key: string };
 export type Drop =
-  /** An die Seite eines Bereichs legen oder (nur Bereiche desselben Tabs) mit ihm tauschen. */
+  /** Place at the side of a pane or (only panes of the same tab) swap with it. */
   | { kind: 'pane'; pane: string; side: Side | 'swap' }
-  /** In die Tab-Leiste, vor den Tab mit dieser Nummer. */
+  /** Into the tab bar, before the tab with this number. */
   | { kind: 'tabbar'; index: number }
-  /** Außerhalb des Fensters: eigenes Fenster. */
+  /** Outside the window: a window of its own. */
   | { kind: 'outside' };
 
 export const drag = $state({
@@ -24,9 +24,9 @@ export const drag = $state({
   drop: null as Drop | null,
 });
 
-/** Ab dieser Strecke in Pixeln gilt eine gedrückte Maus als Ziehen und nicht mehr als Klick. */
+/** From this distance in pixels a pressed mouse counts as dragging and no longer as a click. */
 const THRESHOLD = 6;
-/** Bleibt die Maus beim Ziehen so lange über einem anderen Tab, kommt er nach vorn. */
+/** If the mouse stays over another tab this long while dragging, it comes to the front. */
 const HOVER_MS = 550;
 
 let hoverTab: string | null = null;
@@ -45,7 +45,7 @@ function dropAt(item: Dragged, x: number, y: number): Drop | null {
   if (bar) {
     const pills = [...bar.querySelectorAll<HTMLElement>('[data-tab]')];
     const over = pills.find((el) => under.includes(el))?.dataset.tab ?? null;
-    // Über einem fremden Tab verweilen holt ihn nach vorn, damit man in seine Bereiche ablegen kann.
+    // Lingering over another tab brings it to the front, so you can drop into its panes.
     if (over !== hoverTab) {
       clearHover();
       if (over && over !== view.active && !(item.kind === 'tab' && item.key === over)) {
@@ -66,7 +66,7 @@ function dropAt(item: Dragged, x: number, y: number): Drop | null {
   const pane = target.dataset.pane!;
   const tab = tabOf(pane);
   if (!tab) return null;
-  // Ein Bereich lässt sich nicht an sich selbst legen, ein Tab nicht in sich selbst.
+  // A pane cannot be placed next to itself, a tab not into itself.
   if (item.kind === 'pane' && item.key === pane) return null;
   if (item.kind === 'tab' && item.key === tab.key) return null;
 
@@ -85,8 +85,8 @@ function dropAt(item: Dragged, x: number, y: number): Drop | null {
 }
 
 /**
- * Verlegt einen Tab oder einen einzelnen Bereich in ein anderes Fenster. Ohne Ziel entsteht ein neues;
- * `atCursor` nimmt das Glowport-Fenster unter dem Mauszeiger, falls dort eines liegt.
+ * Moves a tab or a single pane into another window. Without a destination a new one is created;
+ * `atCursor` takes the Glowport window under the mouse pointer, if there is one.
  */
 export async function detachToWindow(item: Dragged, target: { to?: string; atCursor?: boolean } = {}) {
   try {
@@ -102,7 +102,7 @@ function perform(item: Dragged, drop: Drop) {
     if (item.kind === 'tab') return moveTab(item.key, drop.index);
     const from = tabOf(item.key);
     if (!from) return;
-    // Der einzige Bereich eines Tabs ist der Tab selbst.
+    // A tab's only pane is the tab itself.
     return leaves(from.layout).length > 1 ? paneToTab(item.key, drop.index) : moveTab(from.key, drop.index);
   }
   if (item.kind === 'tab') return drop.side === 'swap' ? undefined : mergeTab(item.key, drop.pane, drop.side);
@@ -111,8 +111,8 @@ function perform(item: Dragged, drop: Drop) {
 }
 
 /**
- * Beginnt bei gedrückter linker Maustaste. Wird die Maus weit genug bewegt, ist es ein Ziehen;
- * sonst bleibt es ein Klick, und das Element behandelt ihn wie gewohnt.
+ * Starts with the left mouse button pressed. If the mouse moves far enough, it is a drag;
+ * otherwise it stays a click, and the element handles it as usual.
  */
 export function startDrag(event: PointerEvent, item: Dragged, label: string, color: string) {
   if (event.button !== 0 || (event.target as Element).closest('button, input')) return;
@@ -125,7 +125,7 @@ export function startDrag(event: PointerEvent, item: Dragged, label: string, col
     if (!active) {
       if (Math.hypot(e.clientX - origin.x, e.clientY - origin.y) < THRESHOLD) return;
       active = true;
-      // Mit eingefangener Maus kommen die Bewegungen auch von außerhalb des Fensters an.
+      // With the mouse captured, movements arrive from outside the window too.
       source.setPointerCapture(pointer);
       Object.assign(drag, { item, label, color });
     }
@@ -142,7 +142,7 @@ export function startDrag(event: PointerEvent, item: Dragged, label: string, col
     if (!active) return;
     const drop = e.type === 'pointerup' ? drag.drop : null;
     Object.assign(drag, { item: null, drop: null });
-    // Der Klick, der auf das Loslassen folgt, soll nichts auslösen. Bleibt er aus, wird der Fänger gleich wieder entfernt.
+    // The click that follows the release should trigger nothing. If it does not come, the catcher is removed right away.
     const swallow = (click: Event) => click.stopPropagation();
     addEventListener('click', swallow, { capture: true, once: true });
     setTimeout(() => removeEventListener('click', swallow, true), 0);
@@ -159,5 +159,5 @@ export function startDrag(event: PointerEvent, item: Dragged, label: string, col
   addEventListener('keydown', escape, true);
 }
 
-/** Stelle der Einfügemarke in der Tab-Leiste, solange dorthin gezogen wird; sonst -1. */
+/** Position of the insertion mark in the tab bar while dragging there; otherwise -1. */
 export const tabbarIndex = () => (drag.item && drag.drop?.kind === 'tabbar' ? drag.drop.index : -1);

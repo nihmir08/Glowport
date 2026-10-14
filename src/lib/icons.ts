@@ -1,4 +1,4 @@
-// Liniensymbole im 24er-Raster. Gezeichnet wird in Icon.svelte.
+// Line icons on a 24 grid. Drawn in Icon.svelte.
 export const ICONS = {
   server:
     '<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>',

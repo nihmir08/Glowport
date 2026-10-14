@@ -12,7 +12,7 @@
   import Icon from '../ui/Icon.svelte';
   import Segmented from '../ui/Segmented.svelte';
 
-  /** Ordner abgleichen: zeigt, was sich zwischen links und rechts unterscheidet, und überträgt nur das. Gelöscht wird nichts. */
+  /** Folder sync: shows what differs between left and right, and transfers only that. Nothing is deleted. */
   const { left, right } = fileUi.compare!;
   const leftPath = left.path!;
   const rightPath = right.path!;
@@ -21,7 +21,7 @@
   let diff = $state<DiffEntry[] | null>(null);
   let direction = $state<Direction>('right');
   let showSame = $state(false);
-  /** Was der Nutzer von Hand an- oder abgewählt hat; für alles andere gilt die Vorgabe. */
+  /** What the user ticked or unticked by hand; the default applies to everything else. */
   let chosen = $state<Record<string, boolean>>({});
   let busy = $state(false);
 
@@ -36,20 +36,20 @@
 
   const close = () => (fileUi.compare = null);
 
-  /** Wohin eine Zeile bei der gewählten Richtung übertragen würde; null = gar nicht. */
+  /** Where a row would be transferred in the chosen direction; null = not at all. */
   function flow(entry: DiffEntry): 'right' | 'left' | null {
     const toRight = entry.state === 'left' || entry.state === 'newerLeft';
     if (entry.state === 'same') return null;
     if (direction === 'both') return toRight ? 'right' : 'left';
-    // In eine Richtung angleichen heißt: Die Quelle gewinnt, auch wenn das Ziel neuer ist. Was nur am Ziel liegt, bleibt dort.
+    // Mirroring in one direction means: the source wins, even if the destination is newer. What only exists at the destination stays there.
     if (direction === 'right') return entry.left ? 'right' : null;
     return entry.right ? 'left' : null;
   }
 
-  /** Das Ziel ist neuer als die Quelle: Übertragen hieße, Neueres mit Älterem zu überschreiben. Solche Zeilen sind nicht vorgewählt. */
+  /** The destination is newer than the source: transferring would overwrite newer with older. Such rows are not preselected. */
   const risky = (entry: DiffEntry) => (direction === 'right' && entry.state === 'newerRight') || (direction === 'left' && entry.state === 'newerLeft');
   const isOn = (entry: DiffEntry) => !!flow(entry) && (chosen[entry.rel] ?? !risky(entry));
-  // Mit der Richtung ändert sich, was eine Zeile bedeutet; die Handauswahl gilt dann nicht mehr.
+  // With the direction, what a row means changes; the manual selection then no longer applies.
   $effect(() => {
     void direction;
     chosen = {};

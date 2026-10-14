@@ -3,7 +3,7 @@
   import { t } from '../i18n.svelte';
   import Icon from '../ui/Icon.svelte';
 
-  /** Der Weg zum offenen Ordner als anklickbare Stücke; ein Klick daneben macht daraus ein Feld zum Eintippen. */
+  /** The path to the open folder as clickable pieces; a click beside them turns it into a field for typing. */
   let { browser }: { browser: Browser } = $props();
 
   let editing = $state(false);
@@ -12,7 +12,7 @@
 
   const crumbs = $derived(browser.listing?.crumbs ?? []);
 
-  // Bei langen Wegen zählt das Ende: dorthin rollen.
+  // For long paths the end matters: scroll there.
   $effect(() => {
     void crumbs.length;
     if (strip) strip.scrollLeft = strip.scrollWidth;

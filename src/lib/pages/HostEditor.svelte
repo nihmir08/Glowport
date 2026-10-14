@@ -30,14 +30,14 @@
   const NONE = 'none';
   const OTHER = 'other';
   const BAUDS = [300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600];
-  /** Auswahlfelder kennen drei Zustände: geerbt (leer), ausdrücklich nichts, oder ein bestimmter Eintrag. */
+  /** Select fields know three states: inherited (empty), explicitly nothing, or a specific entry. */
   const tri = (value: string | undefined) => (value === undefined ? '' : value === '' ? NONE : value);
   const untri = (value: string) => (value === NONE ? '' : value);
-  /** Schalter kennen ebenfalls drei Zustände: geerbt (leer), ein oder aus. */
+  /** Switches also know three states: inherited (empty), on or off. */
   const flag = (value: boolean | undefined) => (value === undefined ? '' : value ? 'on' : 'off');
   const onOff = (value: boolean) => (value ? t('edit.on') : t('edit.off'));
 
-  // Der Editor wird je Host neu erzeugt ({#key} in HostsPage); die Startwerte werden bewusst nur einmal gelesen.
+  // The editor is created anew per host ({#key} in HostsPage); the initial values are deliberately read only once.
   const start = (() => ({ host, group: host ? host.group : startGroup, line: host?.serial ?? DEFAULT_SERIAL }))();
 
   let protocol = $state<Protocol>(start.host ? protocolOf(start.host) : 'ssh');
@@ -45,8 +45,8 @@
   let address = $state(start.host?.address ?? '');
   let group = $state(start.group ?? '');
   /**
-   * Der Tresor dieses Hosts steht fest, wenn es ihn schon gibt oder ein Tresor zum Anlegen gewählt ist. Sonst
-   * folgt er der Gruppe. Davon hängt ab, in welche Gruppen er kann und worauf er verweisen darf.
+   * This host's vault is settled if the host already exists or a vault is chosen for creating. Otherwise
+   * it follows the group. That determines which groups it can go into and what it may refer to.
    */
   const fixed = start.host ? (start.host.vault ?? personalVault()?.id) : targetVault();
   const home = $derived(fixed ?? groupById(group || null)?.vault);
@@ -60,7 +60,7 @@
   let ftpSecurity = $state<FtpSettings['security']>(ftpStart.security);
   let ftpAnonymous = $state(ftpStart.anonymous);
   let ftpDir = $state(ftpStart.dir ?? '');
-  /** Bei FTP gibt es nichts zu erben: Eine Identität ist gewählt oder nicht. */
+  /** For FTP there is nothing to inherit: an identity is chosen or not. */
   let ftpIdentity = $state(start.host && protocolOf(start.host) === 'ftp' ? (start.host.own.identity ?? '') : '');
   let jump = $state(tri(start.host?.own.jump));
   let identity = $state(tri(start.host?.own.identity));
@@ -87,7 +87,7 @@
   let busy = $state(false);
   let error = $state('');
 
-  // Serielle Leitung: der Port steht im Feld „Adresse“, dazu Geschwindigkeit und Rahmen.
+  // Serial line: the port is in the “Address” field, plus speed and framing.
   let ports = $state<SerialPortInfo[]>([]);
   let otherPort = $state(false);
   let baud = $state(String(start.line.baud));
@@ -99,7 +99,7 @@
 
   const looksLikePort = (text: string) => /^(com\d+|\/dev\/\S+)$/i.test(text.trim());
 
-  /** Sieht nach, welche Ports es gerade gibt. Ist noch keiner eingetragen, wird der erste gefundene gewählt. */
+  /** Checks which ports exist right now. If none is entered yet, the first one found is chosen. */
   async function findPorts() {
     try {
       ports = await serialPorts();
@@ -110,11 +110,11 @@
     if (protocol === 'serial' && !address && ports.length) address = ports[0].name;
   }
 
-  /** Wechselt das Protokoll. Eine Adresse, die zum neuen nicht passt (IP statt COM-Port und umgekehrt), wird geleert. */
+  /** Changes the protocol. An address that does not fit the new one (IP instead of COM port and vice versa) is cleared. */
   function setProtocol(next: Protocol) {
     if (next === protocol) return;
     if ((next === 'serial') !== looksLikePort(address)) address = '';
-    // Der Port eines Hosts meint sein Protokoll: 22 passt nicht zu Telnet.
+    // A host's port means its protocol: 22 does not fit Telnet.
     port = '';
     protocol = next;
     error = '';
@@ -122,7 +122,7 @@
   }
 
   const portChoice = $derived(otherPort || (address && !ports.some((p) => p.name === address) && !start.host) ? OTHER : address);
-  /** Der gespeicherte Port eines Hosts steht in der Auswahl, auch wenn sein Adapter gerade nicht steckt. */
+  /** A host's saved port is in the choice even if its adapter is not plugged in right now. */
   const portOptions = $derived([
     ...ports.map((p) => ({ value: p.name, label: p.label ? `${p.name} · ${p.label}` : p.name })),
     ...(start.host && address && protocolOf(start.host) === 'serial' && address === start.host.address && !ports.some((p) => p.name === address) ? [{ value: address, label: `${address} · ${t('edit.serial.absent')}` }] : []),
@@ -138,14 +138,14 @@
     if (!otherBaud) baud = value;
   }
 
-  // Wechselt die Gruppe, ändern sich die geerbten Vorgaben sofort mit.
+  // If the group changes, the inherited defaults change along immediately.
   const defs = $derived(inherited(group || null));
-  /** Gilt Mosh für diesen Host, eigener Schalter oder geerbt? Nur dann zeigen sich seine Felder. */
+  /** Does Mosh apply to this host, own switch or inherited? Only then do its fields show. */
   const moshOn = $derived(mosh ? mosh === 'on' : (defs.mosh?.value ?? false));
   const predictLabel = (p: MoshPredict) => t(`edit.mosh.predict.${p}`);
   const reconnectLabel = (r: Reconnect) => (r === 'auto' ? t('edit.reconnect.auto') : t('edit.reconnect.notice'));
   const inheritedJump = $derived(defs.jump && { value: defs.jump.value ? (hostById(defs.jump.value)?.name ?? '?') : t('detail.none'), source: defs.jump.source.name });
-  // Springen lässt sich nur über SSH.
+  // Jumping only works over SSH.
   const jumpOptions = $derived([
     ...(defs.jump?.value ? [{ value: NONE, label: t('detail.none') }] : []),
     ...sshHosts()
@@ -153,7 +153,7 @@
       .filter((h) => h.id !== start.host?.id)
       .map((h) => ({ value: h.id, label: h.name })),
   ]);
-  // Was gilt, wenn Benutzer und Schlüssel hier leer bleiben: die Vorgaben der Gruppen und die hier gewählte Identität.
+  // What applies if user and key stay empty here: the groups' defaults and the identity chosen here.
   const auth = $derived(authFor(group || null, identity ? { identity: untri(identity) } : {}));
   const origin = (from: From<unknown>) => (from.identity ? { source: from.identity.name, from: t('auth.from.identity', { name: from.identity.name }) } : { source: from.group?.name ?? null });
   const inheritedIdentity = $derived(defs.identity && { value: identityById(defs.identity.value)?.name ?? t('detail.identity.none'), source: defs.identity.source.name });
@@ -169,7 +169,7 @@
     if (path) keyFile = path;
   }
 
-  /** Ein Schlüssel aus dem Tresor ersetzt die Schlüsseldatei: Das Feld für die Datei wird dabei geleert. */
+  /** A key from the vault replaces the key file: the file field is cleared in the process. */
   function useVaultKey(id: string) {
     key = id;
     keyFile = '';
@@ -177,11 +177,11 @@
 
   onMount(() => {
     if (protocol === 'serial') void findPorts();
-    // Ein Schlüssel, der ins Fenster gezogen wird, während dieser Editor offen ist, ist gleich ausgewählt.
+    // A key dragged into the window while this editor is open is selected right away.
     return takeKeys((id) => (key = id));
   });
 
-  /** Liest eine ganze Zahl aus einem Feld; null, wenn sie fehlt oder nicht im Bereich liegt. */
+  /** Reads an integer from a field; null if it is missing or out of range. */
   const whole = (text: string, min: number, max: number) => {
     const n = Number(text.trim());
     return text.trim() && Number.isInteger(n) && n >= min && n <= max ? n : null;
@@ -208,7 +208,7 @@
       if (env.trim()) own.env = env.trim();
       if (agent) own.agent = agent === 'on';
       if (agentForward) own.agentForward = agentForward === 'on';
-      // Beim Proxy heißt „Keiner“ ausdrücklich keiner; ein eingetippter Wert wird gespeichert, wie er ist.
+      // For the proxy “None” explicitly means none; a typed value is saved as it is.
       if (proxy) own.proxy = untri(proxy).trim();
       if (keepalive.trim()) {
         const n = whole(keepalive, 0, 65535);
@@ -226,7 +226,7 @@
       if (moshServer.trim()) own.moshServer = moshServer.trim();
     }
     if (protocol === 'ftp') {
-      // Zeitlimit, Terminal-Typ, Zeichensatz und Farbschema gehören zu einem Terminal; ein FTP-Host hat keines.
+      // Timeout, terminal type, character set and color scheme belong to a terminal; an FTP host has none.
     } else if (protocol !== 'serial') {
       if (timeout.trim()) {
         const n = whole(timeout, 0, 65535);
@@ -249,7 +249,7 @@
     if (!start.host) input.vault = targetVault();
     if (serial) input.serial = serial;
     if (protocol === 'ftp') {
-      // Die abbestellte Rückfrage gilt nur, solange der Host unverschlüsselt bleibt.
+      // The dismissed prompt only applies as long as the host stays unencrypted.
       const plainOk = ftpSecurity === 'none' && ftpStart.security === 'none' && ftpStart.plainOk;
       input.ftp = { security: ftpSecurity, anonymous: ftpAnonymous, ...(ftpDir.trim() ? { dir: ftpDir.trim() } : {}), ...(plainOk ? { plainOk: true } : {}) };
       if (!ftpOwn) input.password = null;
@@ -279,7 +279,7 @@
   }
 </script>
 
-<!-- Was bei jedem Protokoll gleich ist: Verhalten bei einem Abriss und das Farbschema des Terminals. -->
+<!-- What is the same for every protocol: behaviour on a dropped connection and the terminal's color scheme. -->
 {#snippet lookFields()}
   <InheritField
     label={t('detail.reconnect')}

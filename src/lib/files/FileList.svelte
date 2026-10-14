@@ -6,17 +6,17 @@
   import Icon from '../ui/Icon.svelte';
 
   /**
-   * Der Inhalt eines Ordners als Liste. `compact` ist die schmale Fassung der Dateileiste am Terminal;
-   * `other` ist die Nachbarspalte, in die sich übertragen lässt; `pane` der Terminal-Bereich, zu dem die Liste gehört.
+   * A folder's content as a list. `compact` is the narrow version of the file bar at the terminal;
+   * `other` is the neighbouring column you can transfer into; `pane` the terminal pane the list belongs to.
    */
   let { browser, compact = false, other = null, pane = null }: { browser: Browser; compact?: boolean; other?: Browser | null; pane?: string | null } = $props();
 
   const entries = $derived(browser.entries);
-  /** Über dieser Liste schwebt gerade etwas aus einer anderen Liste. */
+  /** Something from another list is hovering over this list right now. */
   const target = $derived(!!fileDrag.item && fileDrag.item.from !== browser && fileDrag.over === browser);
 
   function activate(entry: FileEntry) {
-    // Eine Verknüpfung auf eine Datei öffnet die Datei; alles andere ist ein Ordner, in den man hineingeht.
+    // A link to a file opens the file; everything else is a folder you go into.
     if (entry.kind === 'file' || (entry.kind === 'link' && entry.linksToDir === false)) openFile(browser, entry);
     else void browser.go(entry.path);
   }
@@ -100,7 +100,7 @@
   {:else}
     <div class="frows">
       {#each entries as entry (entry.path)}
-        <!-- Die Tastatur bedient die Liste als Ganzes (siehe keydown). -->
+        <!-- The keyboard operates the list as a whole (see keydown). -->
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <div
           class="frow"
@@ -114,7 +114,7 @@
           title={compact ? `${entry.name}\n${formatWhen(entry.modified, true)}${entry.mode !== null ? `\n${modeText(entry)}  ${entry.owner}:${entry.group}` : ''}` : undefined}
           onpointerdown={(e) => {
             if (e.button !== 0) return;
-            // Ein Klick in eine bestehende Mehrfachauswahl hält sie fest, damit sie sich ziehen lässt.
+            // A click into an existing multi-selection keeps it, so it can be dragged.
             if (!(browser.selected.length > 1 && browser.selected.includes(entry.path) && !e.ctrlKey && !e.shiftKey)) browser.pick(entry, e);
             startFileDrag(e, browser);
           }}

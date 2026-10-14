@@ -32,12 +32,12 @@ import {
 } from 'simple-icons';
 
 /**
- * Betriebssysteme: Name, Farbe der Kachel und das Logo als Pfad im 24er-Raster.
- * Die Kennungen (`Ub`, `De`, `Rocky` …) stehen so im Tresor und kommen so aus der Erkennung beim Verbinden
- * (`crates/net/src/os.rs`); sie dürfen sich nicht ändern. Angezeigt wird immer das Logo, nie die Kennung.
+ * Operating systems: name, tile color and the logo as a path on a 24 grid.
+ * The IDs (`Ub`, `De`, `Rocky` …) are stored like this in the vault and come like this from detection when connecting
+ * (`crates/net/src/os.rs`); they must not change. The logo is always displayed, never the ID.
  *
- * Die Logos stammen aus Simple Icons (CC0) und sind Marken ihrer Inhaber. Die Farben sind nicht die Markenfarben,
- * sondern so gewählt, dass sie im dunklen wie im hellen Modus zu erkennen sind.
+ * The logos come from Simple Icons (CC0) and are trademarks of their owners. The colors are not the brand colors
+ * but chosen so they are recognisable in dark as well as light mode.
  */
 export interface OsEntry {
   name: string;
@@ -45,7 +45,7 @@ export interface OsEntry {
   icon: string;
 }
 
-/** Vier Kacheln. Simple Icons führt das Windows-Logo nicht mehr; dies ist eine eigene, schlichte Form. */
+/** Four tiles. Simple Icons no longer carries the Windows logo; this is a plain shape of our own. */
 const WINDOWS = 'M0 0h11.4v11.4H0zM12.6 0H24v11.4H12.6zM0 12.6h11.4V24H0zM12.6 12.6H24V24H12.6z';
 const TUX = siLinux.path;
 
@@ -86,13 +86,13 @@ export const OS: Record<string, OsEntry> = {
   Li: { name: 'Linux', color: '#8B90A8', icon: TUX },
 };
 
-/** Farbe für ein System, das (noch) nicht bekannt ist. Seine Kachel zeigt ein neutrales Server-Zeichen. */
+/** Color for a system that is not known (yet). Its tile shows a neutral server symbol. */
 export const UNKNOWN_COLOR = '#8B90A8';
 
 export const osEntry = (os: string | null | undefined): OsEntry | undefined => (os ? OS[os] : undefined);
 export const osColor = (os: string | null | undefined): string => osEntry(os)?.color ?? UNKNOWN_COLOR;
 
-/** Alle Systeme nach Namen, für die Auswahl im Editor. */
+/** All systems by name, for the choice in the editor. */
 export const OS_CHOICES = Object.entries(OS)
   .map(([id, entry]) => ({ id, name: entry.name }))
   .sort((a, b) => a.name.localeCompare(b.name));

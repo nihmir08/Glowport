@@ -1,7 +1,7 @@
 import { has, t, type Key } from './i18n.svelte';
 import type { Authority, BackendError, FieldKey, Fields, Forward, Group, Host, Identity, KnownHost, Protocol, ProxmoxConnection, SerialSettings, Snapshot, Snippet, SshKey, Status, VaultInfo, VaultState, Workspace, FtpSettings } from './types';
 
-/** Zustand des Tresors und, solange er offen ist, seine Einträge. Beim Sperren wird alles verworfen. */
+/** State of the vault and, while it is open, its entries. On locking everything is discarded. */
 export const vault = $state({
   state: 'loading' as VaultState | 'loading',
   groups: [] as Group[],
@@ -13,26 +13,26 @@ export const vault = $state({
   workspaces: [] as Workspace[],
   forwards: [] as Forward[],
   snippets: [] as Snippet[],
-  /** Alle Tresore dieses Geräts, der persönliche zuerst. Ohne Abgleich gibt es nur ihn. */
+  /** All vaults of this device, the personal one first. Without syncing there is only that one. */
   vaults: [] as VaultInfo[],
   proxmox: [] as ProxmoxConnection[],
   damaged: 0,
   error: null as BackendError | null,
-  /** Öffnet sich der Tresor beim Start ohne Master-Passwort? Die Wahrheit dazu liegt im Kern, nicht in den Einstellungen. */
+  /** Does the vault open on start without a master password? The truth about that lives in the core, not in the settings. */
   startUnlock: false,
 });
 
-/** Nummer des gezeigten Stands. */
+/** Number of the state shown. */
 let shown = 0;
 
 export function applySnapshot(data: Snapshot) {
-  // Antworten auf Befehle und Ereignisse überholen einander: Ein Stand, der älter ist als der gezeigte, bleibt liegen.
-  // Sonst leert etwa die Antwort auf das Anmelden die Liste wieder, die der erste Abgleich eben gefüllt hat.
+  // Answers to commands and events overtake each other: a state older than the one shown is ignored.
+  // Otherwise the answer to signing in, for example, would empty the list the first sync just filled.
   if (data.seq !== undefined) {
     if (data.seq < shown) return;
     shown = data.seq;
   }
-  // Der Kern nennt den Tresor nicht an jedem Eintrag, sondern in einer Liste daneben.
+  // The core does not name the vault on every entry but in a list next to them.
   const homes = data.homes ?? {};
   for (const list of [data.groups, data.hosts, data.keys ?? [], data.identities ?? [], data.forwards ?? [], data.snippets ?? []]) {
     for (const entry of list) entry.vault ??= homes[entry.id];
@@ -58,7 +58,7 @@ export function applyStatus(status: Status) {
   applySnapshot(status.data ?? { groups: [], hosts: [], damaged: 0, knownHosts: [], keys: [], identities: [], authorities: [], workspaces: [], forwards: [], snippets: [] });
 }
 
-/** Meldung für den Nutzer aus einem Fehler des Kerns. Unbekanntes wird nicht verschluckt, sondern gezeigt. */
+/** Message for the user from a core error. Unknown ones are not swallowed but shown. */
 export function errorText(error: unknown): string {
   const e = error as Partial<BackendError> | null;
   const key = e?.code === 'invalid' ? `err.invalid.${e.reason}` : `err.${e?.code}`;
@@ -68,17 +68,17 @@ export function errorText(error: unknown): string {
 
 export const personalVault = () => vault.vaults.find((v) => v.kind === 'personal');
 export const sharedVaults = () => vault.vaults.filter((v) => v.kind === 'shared');
-/** Der Tresor eines Eintrags. Ohne Angabe liegt er im persönlichen. */
+/** An entry's vault. Without one it lives in the personal vault. */
 export const vaultOf = (entry: { vault?: string }) => vault.vaults.find((v) => v.id === entry.vault) ?? personalVault();
-/** Darf man diesen Eintrag ändern? In einem geteilten Tresor mit Leserecht nicht. */
+/** May this entry be changed? Not in a shared vault with read access. */
 export const canEdit = (entry: { vault?: string }) => vaultOf(entry)?.role !== 'read';
 
 /**
- * Darf ein Eintrag im Tresor `home` auf `entry` verweisen? Der persönliche Tresor (`home` leer) darf auf alles
- * verweisen, ein geteilter nur auf Einträge in sich selbst: Die anderen Mitglieder hätten sie sonst nicht.
+ * May an entry in vault `home` refer to `entry`? The personal vault (`home` empty) may refer to anything,
+ * a shared one only to entries within itself: otherwise the other members would not have them.
  */
 export const reachable = (home: string | undefined, entry: { vault?: string }) => !home || home === personalVault()?.id || entry.vault === home;
-/** Liegen zwei Einträge im selben Tresor? Für Gruppen: Ein Eintrag liegt immer im Tresor seiner Gruppe. */
+/** Are two entries in the same vault? For groups: an entry is always in its group's vault. */
 export const sameVault = (home: string | undefined, entry: { vault?: string }) => (entry.vault ?? personalVault()?.id) === (home ?? personalVault()?.id);
 
 export const groupById = (id: string | null) => (id ? vault.groups.find((g) => g.id === id) : undefined);
@@ -91,7 +91,7 @@ export const forwardsOf = (host: string) => vault.forwards.filter((f) => f.host 
 export const childGroups = (parent: string | null) => vault.groups.filter((g) => g.parent === parent);
 export const hostsIn = (group: string | null) => vault.hosts.filter((h) => h.group === group);
 
-/** Gruppen von der Wurzel bis `id`. Bricht bei einem Kreis in beschädigten Daten ab. */
+/** Groups from the root to `id`. Stops at a cycle in damaged data. */
 export function groupPath(id: string | null): Group[] {
   const path: Group[] = [];
   for (let g = groupById(id); g && !path.includes(g); g = groupById(g.parent)) path.unshift(g);
@@ -103,7 +103,7 @@ export const pathLabel = (id: string | null) =>
     .map((g) => g.name)
     .join(' › ');
 
-/** Alle Gruppen unterhalb von `id`, einschließlich `id` selbst. */
+/** All groups below `id`, including `id` itself. */
 export function descendants(id: string): string[] {
   const found = [id];
   for (let i = 0; i < found.length; i++) for (const g of vault.groups) if (g.parent === found[i] && !found.includes(g.id)) found.push(g.id);
@@ -117,27 +117,27 @@ export const hostCount = (group: string): number => {
 
 export interface Inherited<T> {
   value: T;
-  /** Gruppe, die den Wert festlegt. */
+  /** Group that sets the value. */
   source: Group;
 }
 
-/** Vorgaben entlang des Gruppenpfads: tiefere Gruppen überschreiben höhere. */
+/** Defaults along the group path: deeper groups override higher ones. */
 export function inherited(group: string | null): { [K in FieldKey]?: Inherited<NonNullable<Fields[K]>> } {
   const out: Record<string, Inherited<unknown>> = {};
   for (const g of groupPath(group)) for (const [k, v] of Object.entries(g.defs)) if (v !== undefined) out[k] = { value: v, source: g };
   return out as ReturnType<typeof inherited>;
 }
 
-/** Läuft das Terminal dieses Hosts über Mosh? Eigener Schalter, sonst der der nächsten Gruppe. Nur bei SSH. */
+/** Does this host's terminal run over Mosh? Its own switch, otherwise that of the nearest group. Only for SSH. */
 export const usesMosh = (host: Host): boolean => protocolOf(host) === 'ssh' && (host.own.mosh ?? inherited(host.group).mosh?.value ?? false);
 
-/** UDP-Port oder Bereich für `mosh-server`: `60001` oder `60001:60010`. */
+/** UDP port or range for `mosh-server`: `60001` or `60001:60010`. */
 export const MOSH_PORT = /^\d{1,5}(:\d{1,5})?$/;
 
 export const DEFAULT_USER = 'root';
 export const DEFAULT_PORT = 22;
 
-/** Farbe eines Hosts: eigene, sonst die der nächsten Gruppe mit Farbe. */
+/** A host's color: its own, otherwise that of the nearest group with a color. */
 export function colorOf(host: Host): string | null {
   if (host.color) return host.color;
   return (
@@ -152,11 +152,11 @@ export const groupColor = (group: Group): string | null =>
     .reverse()
     .find((g) => g.color)?.color ?? null;
 
-/** Ein wirksamer Wert der Anmeldung und woher er kommt. `group` null = am Host selbst eingetragen. */
+/** An effective sign-in value and where it comes from. `group` null = entered on the host itself. */
 export interface From<T> {
   value: T;
   group: Group | null;
-  /** Gesetzt, wenn der Wert nicht einzeln eingetragen ist, sondern aus dieser Identität stammt. */
+  /** Set if the value is not entered individually but comes from this identity. */
   identity?: Identity;
 }
 
@@ -165,27 +165,27 @@ export interface Auth {
   user?: From<string>;
   key?: From<SshKey>;
   keyFile?: From<string>;
-  /** Bringt die Identität ein Passwort mit? Das eigene Passwort eines Hosts geht vor. */
+  /** Does the identity bring a password? A host's own password comes first. */
   identityPassword: boolean;
 }
 
 /**
- * Anmeldung für einen Host mit den eigenen Werten `own` in der Gruppe `group`.
- * Was näher am Host steht, gewinnt. Auf derselben Ebene gewinnt das einzeln eingetragene Feld über die Identität.
- * Gegenstück im Kern: crates/core/src/directory.rs.
+ * Sign-in for a host with its own values `own` in the group `group`.
+ * What is closer to the host wins. On the same level the individually entered field wins over the identity.
+ * Counterpart in the core: crates/core/src/directory.rs.
  */
 export function authFor(group: string | null, own: Fields = {}): Auth {
   const levels: { fields: Fields; group: Group | null }[] = [...groupPath(group).map((g) => ({ fields: g.defs, group: g })), { fields: own, group: null }];
-  /** Tiefste Ebene, auf der `read` etwas findet, oder -1. */
+  /** Deepest level at which `read` finds something, or -1. */
   function deepest(read: (f: Fields) => unknown): number {
     for (let i = levels.length - 1; i >= 0; i--) if (read(levels[i].fields) !== undefined) return i;
     return -1;
   }
-  // Die tiefste Ebene, die eine Identität festlegt (auch „keine“), bestimmt sie.
+  // The deepest level that sets an identity (also “none”) determines it.
   const at = deepest((f) => f.identity);
   const chosen = at >= 0 ? identityById(levels[at].fields.identity) : undefined;
   const identity = chosen && { value: chosen, group: levels[at].group };
-  // Ein einzeln eingetragener Wert zählt nur, wenn er nicht oberhalb der Identität steht.
+  // An individually entered value only counts if it is not above the identity.
   function pick<T>(read: (f: Fields) => T | undefined): From<T> | undefined {
     const i = deepest(read);
     return i >= 0 && (!chosen || i >= at) ? { value: read(levels[i].fields)!, group: levels[i].group } : undefined;
@@ -201,7 +201,7 @@ export function authFor(group: string | null, own: Fields = {}): Auth {
   };
 }
 
-/** Hosts, die sich mit diesem Schlüssel anmelden, direkt oder über Gruppe und Identität. */
+/** Hosts that sign in with this key, directly or through group and identity. */
 export const hostsUsingKey = (key: string) => vault.hosts.filter((h) => authFor(h.group, h.own).key?.value.id === key);
 export const hostsUsingIdentity = (identity: string) => vault.hosts.filter((h) => authFor(h.group, h.own).identity?.value.id === identity);
 
@@ -212,46 +212,46 @@ export function userOf(host: Host): string {
 export const DEFAULT_TELNET_PORT = 23;
 export const DEFAULT_SERIAL: SerialSettings = { baud: 9600, dataBits: 8, parity: 'none', stopBits: 1, flow: 'none' };
 
-/** Das Protokoll eines Hosts. Unbekanntes aus einer neueren Fassung gilt als SSH. */
+/** A host's protocol. Unknown ones from a newer version count as SSH. */
 export const protocolOf = (host: Host): Protocol => (host.protocol === 'telnet' || host.protocol === 'serial' || host.protocol === 'ftp' ? host.protocol : 'ssh');
 export const isSsh = (host: Host) => protocolOf(host) === 'ssh';
-/** Hosts, über die SSH läuft: Nur sie taugen als Sprung-Server, für Port-Regeln, Dateien und das Ausführen von Snippets. */
+/** Hosts reached over SSH: only they serve as jump hosts, for port rules, files and running snippets. */
 export const sshHosts = () => vault.hosts.filter(isSsh);
 
 export const DEFAULT_FTP_PORT = 21;
-/** FTPS von Anfang an hat seinen eigenen Port. */
+/** Implicit FTPS has its own port. */
 export const DEFAULT_FTPS_PORT = 990;
 export const DEFAULT_FTP: FtpSettings = { security: 'explicit', anonymous: false };
 export const isFtp = (host: Host | undefined) => !!host && protocolOf(host) === 'ftp';
 export const ftpOf = (host: Host): FtpSettings => host.ftp ?? DEFAULT_FTP;
-/** Läuft dieser FTP-Host unverschlüsselt? Dann sind Passwort und Dateien auf dem Weg lesbar. */
+/** Does this FTP host run unencrypted? Then password and files are readable on the way. */
 export const ftpOpen = (host: Host | undefined) => isFtp(host) && ftpOf(host!).security === 'none';
 export const ftpPort = (settings: FtpSettings) => (settings.security === 'implicit' ? DEFAULT_FTPS_PORT : DEFAULT_FTP_PORT);
-/** Hosts mit Dateien: über SFTP (SSH) oder FTP. */
+/** Hosts with files: over SFTP (SSH) or FTP. */
 export const fileHosts = () => vault.hosts.filter((host) => isSsh(host) || isFtp(host));
 
-/** Die Kurzform einer seriellen Leitung: „9600 8N1“. */
+/** A serial line's short form: “9600 8N1”. */
 export const serialLabel = (s: SerialSettings) => `${s.baud} ${s.dataBits}${s.parity === 'none' ? 'N' : s.parity === 'odd' ? 'O' : 'E'}${s.stopBits}`;
 
-/** Der Port eines Hosts. Vererbt wird er nur bei SSH; die Vorgabe einer Gruppe meint den SSH-Port. */
+/** A host's port. It is only inherited for SSH; a group's default means the SSH port. */
 export function portOf(host: Host): number {
   if (protocolOf(host) === 'telnet') return host.own.port ?? DEFAULT_TELNET_PORT;
   if (protocolOf(host) === 'ftp') return host.own.port ?? ftpPort(ftpOf(host));
   return host.own.port ?? inherited(host.group).port?.value ?? DEFAULT_PORT;
 }
 
-/** Kennung des Farbschemas, das für einen Host eingetragen ist: am Host selbst, sonst an der nächsten Gruppe. */
+/** ID of the color scheme set for a host: on the host itself, otherwise on the nearest group. */
 export function schemeOf(host: Host): string | undefined {
   return host.own.scheme ?? inherited(host.group).scheme?.value;
 }
 
-/** Wirksamer Sprung-Server oder undefined. */
+/** Effective jump host or undefined. */
 export function jumpOf(host: Host): Host | undefined {
   const id = host.own.jump ?? inherited(host.group).jump?.value;
   return id ? hostById(id) : undefined;
 }
 
-/** Wohin ein Host führt, zum Anzeigen: `benutzer@adresse`, bei Telnet die Adresse, bei einer seriellen Leitung Port und Einstellungen. */
+/** Where a host leads, for display: `user@address`, for Telnet the address, for a serial line port and settings. */
 export function addressOf(host: Host): string {
   const port = portOf(host);
   switch (protocolOf(host)) {

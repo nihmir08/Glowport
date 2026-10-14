@@ -1,4 +1,4 @@
-// Beispieldaten für die Proxmox-Anbindung, nur für die Vorschau im Browser.
+// Sample data for the Proxmox integration, only for the browser preview.
 import type { Changed, HostInput, ProxmoxConnection, ProxmoxGuest, ProxmoxInput, ProxmoxLink, ProxmoxOverview, ProxmoxProbe } from './types';
 
 const fail = (code: string, message = ''): never => {
@@ -9,7 +9,7 @@ const later = <T>(work: () => T | Promise<T>, ms = 180): Promise<T> => new Promi
 const GIB = 1024 ** 3;
 const FINGERPRINT = '5F:1A:9C:42:D7:0B:E3:68:AA:14:7C:90:3D:E2:56:B1:08:F4:6D:2A:C9:71:35:EE:80:4B:1D:97:A6:53:CF:02';
 
-/** Was die Vorschau vom übrigen Ersatz-Kern braucht. */
+/** What the preview needs from the rest of the stand-in core. */
 interface World {
   hosts: () => { id: string; name: string }[];
   keyNamed: (name: string) => string | undefined;
@@ -21,7 +21,7 @@ let world: World | null = null;
 export const registerProxmox = (w: World) => (world = w);
 
 let connections: (ProxmoxConnection & { secret: string })[] = [];
-/** Verknüpfte Hosts: Kennung des Hosts → Maschine. */
+/** Linked hosts: host ID → machine. */
 const links = new Map<string, ProxmoxLink>();
 let seeded = false;
 
@@ -39,7 +39,7 @@ const GUESTS: Guest[] = [
 ];
 const guests = structuredClone(GUESTS);
 
-/** Beim ersten Blick in den Tresor: So sieht ein Gerät aus, das Proxmox schon benutzt. */
+/** On the first look into the vault: this is what a device that already uses Proxmox looks like. */
 function seed() {
   if (seeded || !world) return;
   seeded = true;
@@ -54,10 +54,10 @@ const sameGuest = (a: { node: string; vmid: number }, b: { node: string; vmid: n
 const view = ({ secret: _secret, ...connection }: (typeof connections)[number]): ProxmoxConnection => connection;
 
 export const fakeProxmox = {
-  /** Für den Stand des Tresors: die Verbindungen und, je Host, seine Maschine. */
+  /** For the vault's state: the connections and, per host, its machine. */
   connections: (): ProxmoxConnection[] => (seed(), connections.map(view)),
   linkOf: (host: string): { proxmox?: ProxmoxLink } => (seed(), links.has(host) ? { proxmox: links.get(host) } : {}),
-  /** Für die Bilder: ein Gerät, das Proxmox noch nicht kennt. */
+  /** For the images: a device that does not know Proxmox yet. */
   forget: () => {
     seeded = true;
     connections = [];
@@ -69,8 +69,8 @@ export const fakeProxmox = {
       if (!/^https:\/\/[^/\s]+$/.test(input.address.trim().replace(/\/$/, ''))) fail('address_invalid');
       if (input.address.includes('gibt-es-nicht')) fail('offline');
       if (!/^[^@\s]+@[^!\s]+![^\s]+$/.test(input.tokenId.trim())) fail('proxmox_token');
-      // Eine Adresse mit anerkanntem Zertifikat braucht keinen Fingerabdruck. Sonst nennt der erste Schritt nur
-      // den Fingerabdruck; erst mit dem bestätigten geht der Token hinaus.
+      // An address with a trusted certificate needs no fingerprint. Otherwise the first step only names
+      // the fingerprint; only with the confirmed one does the token go out.
       const trusted = input.address.includes('letsencrypt');
       if (!trusted && input.fingerprint !== FINGERPRINT) return { version: '', trusted, fingerprint: FINGERPRINT, missing: [], changed: !!input.fingerprint };
       return { version: '9.0.11', trusted, fingerprint: FINGERPRINT, missing: input.tokenId.includes('nur-lesen') ? ['power'] : [] };
@@ -114,8 +114,8 @@ export const fakeProxmox = {
       for (const pick of picks) {
         const guest = guests.find((g) => sameGuest(g, pick));
         if (!guest) continue;
-        // Ohne bekannte Adresse steht vorerst der Name der Maschine da.
-        // Wie im Kern: Cloud-Init mit einem Schlüssel aus dem Tresor gilt, sonst die Identität der Verbindung.
+        // Without a known address the machine's name stands there for now.
+        // As in the core: Cloud-Init with a key from the vault applies, otherwise the connection's identity.
         const key = guest.keyName ? world!.keyNamed(guest.keyName) : undefined;
         const identity = connections.find((c) => c.id === id)?.identity;
         const own = key ? { user: guest.user, key } : identity ? { identity } : { user: guest.user };

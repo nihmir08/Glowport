@@ -14,18 +14,18 @@
   import Icon from '../ui/Icon.svelte';
   import SnippetEditor from './SnippetEditor.svelte';
 
-  /** Snippets und Makros, nach Paketen geordnet. Ein Klick öffnet rechts den Editor. */
+  /** Snippets and macros, ordered by package. A click opens the editor on the right. */
   let panel = $state<{ id: string | null } | null>(null);
   let query = $state('');
   let removing = $state<Snippet | null>(null);
 
-  // Verschwindet das gezeigte Snippet (gelöscht, Tresor neu geladen), schließt sich der Editor.
+  // If the snippet shown disappears (deleted, vault reloaded), the editor closes.
   $effect(() => {
     if (panel?.id && !snippetById(panel.id)) panel = null;
   });
 
   const needle = $derived(query.trim().toLowerCase());
-  // Gezeigt wird, was im gewählten Tresor liegt; die Suche findet alles.
+  // What is in the chosen vault is shown; the search finds everything.
   const shown = $derived(vault.snippets.filter((s) => (needle ? [s.name, s.package, s.command].some((text) => text.toLowerCase().includes(needle)) : inScope(s))));
   const groups = $derived(packages(shown));
   const empty = $derived(!vault.snippets.length);

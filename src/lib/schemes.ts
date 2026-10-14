@@ -1,19 +1,19 @@
-// Farbschemata des Terminals: die mitgelieferten und das Einlesen fremder (Windows Terminal, iTerm2).
+// The terminal's color schemes: the bundled ones and importing foreign ones (Windows Terminal, iTerm2).
 
-/** `ansi` sind die 16 Grundfarben in der üblichen Reihenfolge: schwarz, rot, grün, gelb, blau, magenta, cyan, weiß, danach dieselben hell. */
+/** `ansi` are the 16 base colors in the usual order: black, red, green, yellow, blue, magenta, cyan, white, then the same bright. */
 export interface Scheme {
   id: string;
   name: string;
   dark: boolean;
   background: string;
   foreground: string;
-  /** Fehlt = Akzentfarbe von Glowport. */
+  /** Missing = Glowport's accent color. */
   cursor?: string;
   selection?: string;
   ansi: string[];
 }
 
-/** Folgt dem Farbmodus: „Glowport Dunkel“ oder „Glowport Hell“. */
+/** Follows the color mode: “Glowport Dark” or “Glowport Light”. */
 export const AUTO = 'auto';
 
 const scheme = (id: string, name: string, dark: boolean, background: string, foreground: string, ansi: string, extra: Partial<Scheme> = {}): Scheme => ({
@@ -47,7 +47,7 @@ export const SCHEMES: Scheme[] = [
 const HEX = /^#[0-9a-f]{6}([0-9a-f]{2})?$/i;
 const ANSI_NAMES = ['black', 'red', 'green', 'yellow', 'blue', 'purple', 'cyan', 'white', 'brightBlack', 'brightRed', 'brightGreen', 'brightYellow', 'brightBlue', 'brightPurple', 'brightCyan', 'brightWhite'];
 
-/** Helligkeit einer Farbe, 0 bis 1. Entscheidet, ob ein eingelesenes Schema als dunkel gilt. */
+/** Brightness of a color, 0 to 1. Decides whether an imported scheme counts as dark. */
 function brightness(hex: string): number {
   const n = parseInt(hex.slice(1, 7), 16);
   return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
@@ -59,7 +59,7 @@ const slug = (name: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')}`;
 
-/** Prüft, ob ein Wert aus den Einstellungen ein vollständiges Schema ist. */
+/** Checks whether a value from the settings is a complete scheme. */
 export function isScheme(value: unknown): value is Scheme {
   const s = value as Partial<Scheme> | null;
   return (
@@ -77,7 +77,7 @@ export function isScheme(value: unknown): value is Scheme {
   );
 }
 
-/** Ein Schema im Format von Windows Terminal: ein Objekt mit `name`, `background`, `black` … `brightWhite`. */
+/** A scheme in Windows Terminal format: an object with `name`, `background`, `black` … `brightWhite`. */
 function fromWindowsTerminal(entry: Record<string, unknown>): Scheme | null {
   const color = (key: string) => (typeof entry[key] === 'string' && HEX.test(entry[key] as string) ? (entry[key] as string) : null);
   const ansi = ANSI_NAMES.map(color);
@@ -88,7 +88,7 @@ function fromWindowsTerminal(entry: Record<string, unknown>): Scheme | null {
   return { id: slug(name), name, dark: brightness(background) < 0.5, background, foreground, ansi: ansi as string[], cursor: color('cursorColor') ?? undefined, selection: color('selectionBackground') ?? undefined };
 }
 
-/** Ein Schema im Format von iTerm2 (`.itermcolors`): eine Eigenschaftsliste mit Einträgen wie „Ansi 0 Color“. */
+/** A scheme in iTerm2 format (`.itermcolors`): a property list with entries like “Ansi 0 Color”. */
 function fromIterm(text: string, name: string): Scheme | null {
   const doc = new DOMParser().parseFromString(text, 'application/xml');
   const root = doc.querySelector('plist > dict');
@@ -114,8 +114,8 @@ function fromIterm(text: string, name: string): Scheme | null {
 }
 
 /**
- * Liest Schemata aus dem Inhalt einer Datei: ein einzelnes Schema von Windows Terminal, dessen ganze `settings.json`
- * (Liste `schemes`) oder eine `.itermcolors`-Datei. Leere Liste, wenn nichts Brauchbares darin steht.
+ * Reads schemes from a file's content: a single Windows Terminal scheme, its whole `settings.json`
+ * (list `schemes`) or an `.itermcolors` file. Empty list if nothing usable is in it.
  */
 export function parseSchemes(text: string, fileName: string): Scheme[] {
   const trimmed = text.trim();
@@ -124,7 +124,7 @@ export function parseSchemes(text: string, fileName: string): Scheme[] {
     return found ? [found] : [];
   }
   try {
-    // Die Einstellungsdatei von Windows Terminal darf Kommentare enthalten.
+    // Windows Terminal's settings file may contain comments.
     const data: unknown = JSON.parse(trimmed.replace(/^\s*\/\/.*$/gm, ''));
     const list = Array.isArray(data) ? data : Array.isArray((data as { schemes?: unknown })?.schemes) ? (data as { schemes: unknown[] }).schemes : [data];
     return list.map((entry) => (entry && typeof entry === 'object' ? fromWindowsTerminal(entry as Record<string, unknown>) : null)).filter((s): s is Scheme => !!s);
@@ -133,5 +133,5 @@ export function parseSchemes(text: string, fileName: string): Scheme[] {
   }
 }
 
-/** Mischt die Deckkraft in eine Farbe: `#rrggbb` wird zu `#rrggbbaa`. */
+/** Mixes the opacity into a color: `#rrggbb` becomes `#rrggbbaa`. */
 export const withAlpha = (hex: string, alpha: number) => `${hex.slice(0, 7)}${Math.round(Math.min(1, Math.max(0, alpha)) * 255).toString(16).padStart(2, '0')}`;

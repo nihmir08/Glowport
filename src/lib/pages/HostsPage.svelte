@@ -29,7 +29,7 @@
   type Panel = { kind: 'detail'; id: string } | { kind: 'host'; id: string | null } | { kind: 'group'; id: string | null } | { kind: 'workspace'; id: string } | null;
 
   let group = $state<string | null>(null);
-  // Der Zustand verknüpfter Maschinen wird nachgelesen, solange diese Seite offen ist und es Verbindungen gibt.
+  // The state of linked machines is re-read as long as this page is open and there are connections.
   $effect(() => {
     if (vault.proxmox.length) return watchPve();
   });
@@ -37,11 +37,11 @@
   let query = $state('');
   let panel = $state<Panel>(null);
   let deleteHost = $state<Host | null>(null);
-  /** Der Host, der gerade in einen anderen Tresor verschoben wird. */
+  /** The host currently being moved into another vault. */
   let moving = $state<Host | null>(null);
   let moveTo = $state('');
   let moveCarry = $state(true);
-  /** Wohin sich ein Host verschieben lässt: jeder andere Tresor, in dem man schreiben darf. */
+  /** Where a host can be moved: every other vault you may write in. */
   const moveTargets = (h: Host) => vault.vaults.filter((v) => v.id !== vaultOf(h)?.id && v.role !== 'read');
   function startMove(h: Host) {
     moving = h;
@@ -56,11 +56,11 @@
     const id = await run(() => hostMove(host.id, moveTo, moveCarry), t('move.done', { vault: vaultLabel(target) }));
     if (id) panel = { kind: 'detail', id };
   }
-  /** Rückfrage vor dem Herunterfahren, Stoppen oder Neustarten der Maschine eines Hosts. */
+  /** Prompt before shutting down, stopping or restarting a host's machine. */
   let pveAsk = $state<{ host: Host; action: Exclude<Power, 'start'> } | null>(null);
   let unlinking = $state<Host | null>(null);
 
-  /** Schaltet die Maschine, zu der ein Host gehört. */
+  /** Switches the machine a host belongs to. */
   function powerHost(host: Host, action: Power) {
     const guest = guestOf(host);
     if (host.proxmox && guest) void powerGuest(host.proxmox.connection, guest, action);
@@ -80,7 +80,7 @@
   let deleteWorkspace = $state<Workspace | null>(null);
   let workspaceName = $state('');
 
-  // Verschwindet die offene Gruppe oder der gezeigte Host (gelöscht, Tresor neu geladen), zurück auf festen Boden.
+  // If the open group or the host shown disappears (deleted, vault reloaded), back to solid ground.
   $effect(() => {
     if (group && !groupById(group)) group = null;
     if (panel?.kind === 'detail' && !hostById(panel.id)) panel = null;
@@ -89,30 +89,30 @@
 
   const current = $derived(groupById(group));
   const path = $derived(groupPath(group));
-  // Gezeigt wird, was im gewählten Tresor liegt; „Alle“ zeigt alles.
+  // What is in the chosen vault is shown; “All” shows everything.
   const subgroups = $derived(childGroups(group).filter(inScope));
   const hosts = $derived(hostsIn(group).filter(inScope));
   const defs = $derived(inherited(group));
   const needle = $derived(query.trim().toLowerCase());
   const results = $derived(
-    // Die Suche findet immer alles, in welchem Tresor es auch liegt.
+    // The search always finds everything, whichever vault it is in.
     needle ? vault.hosts.filter((h) => [h.name, h.address, h.own.user ?? '', h.protocol, pathLabel(h.group), vaultLabel(vaultOf(h))].some((text) => text.toLowerCase().includes(needle))) : null,
   );
   const shownVault = $derived(vault.vaults.find((v) => v.id === scope.vault));
-  /** Im gezeigten Tresor darf man nur lesen: Dort lässt sich nichts anlegen. */
+  /** The vault shown is read-only: nothing can be created there. */
   const readOnly = $derived(shownVault?.role === 'read');
-  /** Arbeitsbereiche liegen immer im persönlichen Tresor. */
+  /** Workspaces always live in the personal vault. */
   const personalShown = $derived(!shownVault || shownVault.kind === 'personal');
   const selected = $derived(panel?.kind === 'detail' ? hostById(panel.id) : undefined);
   const workspaceById = (id: string) => vault.workspaces.find((w) => w.id === id);
   const workspace = $derived(panel?.kind === 'workspace' ? workspaceById(panel.id) : undefined);
-  /** Die Hosts eines Arbeitsbereichs in der Reihenfolge ihrer Bereiche. */
+  /** A workspace's hosts in the order of their panes. */
   const workspaceHosts = (w: Workspace) =>
     leaves(w.layout as Layout<Target>)
       .map((target) => (target.kind === 'host' ? hostById(target.id) : undefined))
       .filter((h): h is Host => !!h);
 
-  /** Ein Arbeitsbereich kann neben Hosts auch lokale Terminals enthalten. */
+  /** Besides hosts, a workspace can also contain local terminals. */
   const paneCount = (w: Workspace) => leaves(w.layout as Layout<Target>).length;
 
   function showWorkspace(w: Workspace) {
@@ -162,12 +162,12 @@
     }
   }
 
-  /** Ein Host, der gerade mit der Maus gezogen wird. `over`: die Gruppe unter dem Zeiger, null = oberste Ebene, undefined = kein Ziel. */
+  /** A host currently being dragged with the mouse. `over`: the group under the pointer, null = top level, undefined = no target. */
   let carried = $state<{ host: Host; x: number; y: number; over: string | null | undefined } | null>(null);
 
   /**
-   * Verschieben per Ziehen: einen Host auf eine Gruppe oder auf einen Eintrag der Brotkrumen legen.
-   * Wird die Maus kaum bewegt, bleibt es ein Klick.
+   * Moving by dragging: drop a host onto a group or onto a breadcrumb entry.
+   * If the mouse barely moves, it stays a click.
    */
   function grabHost(event: PointerEvent, host: Host) {
     if (event.button !== 0) return;
@@ -186,7 +186,7 @@
         source.setPointerCapture(pointer);
       }
       const over = groupAt(e.clientX, e.clientY);
-      // Die eigene Gruppe ist kein Ziel.
+      // Its own group is not a target.
       carried = { host, x: e.clientX, y: e.clientY, over: over === host.group ? undefined : over };
     };
     const finish = (e: PointerEvent) => {
@@ -196,7 +196,7 @@
       if (!active) return;
       const over = e.type === 'pointerup' ? carried?.over : undefined;
       carried = null;
-      // Der Klick, der auf das Loslassen folgt, soll den Host nicht auswählen.
+      // The click that follows the release should not select the host.
       const swallow = (click: Event) => click.stopPropagation();
       addEventListener('click', swallow, { capture: true, once: true });
       setTimeout(() => removeEventListener('click', swallow, true), 0);
@@ -462,7 +462,7 @@
       <div style="flex:1;display:grid">
         <Button variant="primary" icon={proto === 'ftp' ? 'folder' : 'play'} onclick={() => openTab({ kind: 'host', id: h.id })}>{t(proto === 'ftp' ? 'ftp.open' : 'detail.connect')}</Button>
       </div>
-      <!-- In einem Tresor mit Leserecht lässt sich verbinden, aber nichts ändern. -->
+      <!-- In a read-only vault you can connect but not change anything. -->
       {#if canEdit(h)}
         <Button icon="edit" title={t('common.edit')} onclick={() => (panel = { kind: 'host', id: h.id })} />
         <Button icon="copy" title={t('detail.duplicate')} onclick={() => duplicate(h)} />
@@ -512,7 +512,7 @@
     {#snippet origin(own: unknown, source: Group | undefined)}
       {#if own === undefined}<span class="inh">{source ? t('hosts.from', { src: source.name }) : t('detail.default')}</span>{/if}
     {/snippet}
-    <!-- Herkunft eines Werts der Anmeldung: am Host selbst eingetragen (nichts), aus einer Identität, von einer Gruppe oder die feste Vorgabe. -->
+    <!-- Origin of a sign-in value: entered on the host itself (nothing), from an identity, from a group or the fixed default. -->
     {#snippet via(from: From<unknown> | undefined)}
       {#if !from}
         <span class="inh">{t('detail.default')}</span>

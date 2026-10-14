@@ -7,7 +7,7 @@
   import { settings, toast } from '../state.svelte';
   import Icon from '../ui/Icon.svelte';
 
-  /** Menü eines Eintrags einer Dateiliste (Rechtsklick) oder ihrer leeren Fläche. */
+  /** Menu of a file list's entry (right-click) or of its empty area. */
   const menu = $derived(fileUi.menu!);
   const browser = $derived(menu.browser);
   const entry = $derived(menu.entry);
@@ -29,7 +29,7 @@
     action();
     close();
   }
-  /** Ein Pfad als ein Wort für die Shell. */
+  /** A path as one word for the shell. */
   const quoted = (path: string) => `'${path.replaceAll("'", `'\\''`)}'`;
 </script>
 

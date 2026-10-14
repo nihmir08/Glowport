@@ -6,12 +6,12 @@ import { settings, toast } from './state.svelte';
 import type { KeyFile } from './types';
 
 /**
- * Anlegen und Importieren an Ort und Stelle: Wo man etwas aus dem Tresor auswählt (Schlüssel, Identität, Gruppe,
- * Sprung-Server, Farbschema), lässt es sich dort auch neu anlegen. Das Neue ist danach gleich ausgewählt.
- * Die kleinen Dialoge dafür liegen übereinander; sie zeichnet `QuickCreate.svelte`.
+ * Creating and importing in place: wherever you choose something from the vault (key, identity, group,
+ * jump host, color scheme), it can also be created there. The new item is then selected right away.
+ * The small dialogs for that lie on top of each other; `QuickCreate.svelte` draws them.
  */
 export type Quick =
-  /** `file`: schon gewählte Schlüsseldatei, etwa ins Fenster gezogen. */
+  /** `file`: key file already chosen, e.g. dragged into the window. */
   | { kind: 'key'; mode: 'generate' | 'import'; file?: KeyFile | null; done: (id: string) => void; closed?: () => void }
   | { kind: 'identity'; done: (id: string) => void; closed?: () => void }
   | { kind: 'group'; parent: string | null; done: (id: string) => void; closed?: () => void }
@@ -24,7 +24,7 @@ export function openQuick(request: Quick) {
   quick.stack.push({ ...request, n: ++seq });
 }
 
-/** Schließt einen Dialog; mit Kennung wurde etwas angelegt und der Aufrufer bekommt es. */
+/** Closes a dialog; with an ID something was created and the caller gets it. */
 export function closeQuick(n: number, id?: string) {
   const index = quick.stack.findIndex((request) => request.n === n);
   if (index < 0) return;
@@ -33,7 +33,7 @@ export function closeQuick(n: number, id?: string) {
   request.closed?.();
 }
 
-/** Ein Eintrag „Neu …“ am Ende einer Auswahl. */
+/** A “New …” entry at the end of a selection. */
 export interface Action {
   label: string;
   run: () => void;
@@ -57,8 +57,8 @@ export const schemeActions = (set: (id: string) => void): Action[] => [
 ];
 
 /**
- * Liest Farbschemata aus einer Datei von Windows Terminal oder iTerm2 und legt sie zu den eigenen.
- * Gleichnamige eigene werden ersetzt. Liefert die neu eingelesenen.
+ * Reads color schemes from a Windows Terminal or iTerm2 file and adds them to the custom ones.
+ * Custom ones with the same name are replaced. Returns the newly imported ones.
  */
 export async function importSchemes(): Promise<Scheme[]> {
   try {
@@ -79,8 +79,8 @@ export async function importSchemes(): Promise<Scheme[]> {
 }
 
 /**
- * Holt die Datei aus dem Feld „Schlüsseldatei“ in den Tresor: Der Import-Dialog öffnet sich mit ihr; ohne Pfad wählt
- * man die Datei dort. `set` bekommt den neuen Schlüssel.
+ * Takes the file from the “Key file” field into the vault: the import dialog opens with it; without a path you choose
+ * the file there. `set` gets the new key.
  */
 export async function importKeyFile(path: string, set: (id: string) => void) {
   let file: KeyFile | null = null;
@@ -94,7 +94,7 @@ export async function importKeyFile(path: string, set: (id: string) => void) {
   openQuick({ kind: 'key', mode: 'import', file, done: set });
 }
 
-/** Editoren mit einem Feld „Schlüssel“ melden sich hier an; der zuletzt geöffnete bekommt hineingezogene Schlüssel. */
+/** Editors with a “Key” field register here; the one opened last gets keys dragged in. */
 const takers: ((id: string) => void)[] = [];
 export function takeKeys(handler: (id: string) => void): () => void {
   takers.push(handler);
@@ -104,9 +104,9 @@ export function takeKeys(handler: (id: string) => void): () => void {
 const baseName = (path: string) => path.split(/[\\/]/).pop() || path;
 
 /**
- * Importiert Schlüsseldateien, die ins Fenster gezogen wurden, auch mehrere auf einmal. Was keine Passphrase
- * braucht, landet sofort im Tresor; für verschlüsselte Dateien öffnet sich nacheinander der Import-Dialog.
- * Ist gerade ein Editor mit einem Feld „Schlüssel“ offen, wählt er den zuletzt importierten aus.
+ * Imports key files dragged into the window, several at once too. What needs no passphrase
+ * lands in the vault right away; for encrypted files the import dialog opens one after another.
+ * If an editor with a “Key” field is open, it selects the one imported last.
  */
 export async function importDroppedKeys(files: KeyFile[]) {
   const imported: string[] = [];

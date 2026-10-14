@@ -10,7 +10,7 @@
   import Icon from '../ui/Icon.svelte';
   import Segmented from '../ui/Segmented.svelte';
 
-  /** Suche am Server unterhalb des offenen Ordners: nach Namen oder im Inhalt der Dateien. */
+  /** Search on the server below the open folder: by name or in the files' content. */
   const { browser } = fileUi.search!;
   const start = browser.path ?? '/';
 
@@ -19,7 +19,7 @@
   let hits = $state<SearchHit[]>([]);
   let busy = $state(false);
   let done = $state(false);
-  /** Nur die Treffer der jüngsten Suche zählen. */
+  /** Only the hits of the latest search count. */
   let run = 0;
 
   const close = () => (run++, (fileUi.search = null));
@@ -40,7 +40,7 @@
     }
   }
 
-  /** Geht in den Ordner des Treffers und wählt ihn dort aus. */
+  /** Goes into the hit's folder and selects it there. */
   async function reveal(hit: SearchHit) {
     close();
     if (await browser.go(hit.dir)) browser.selected = [hit.path];
@@ -69,7 +69,7 @@
       <Icon name="search" size={14} />
       <input type="text" placeholder={mode === 'name' ? t('search.name.ph') : t('search.content.ph')} aria-label={t('search.title')} bind:value={query} spellcheck="false" use:focus />
     </label>
-    <!-- FTP kann nicht im Inhalt suchen: Dafür müsste jede Datei erst heruntergeladen werden. -->
+    <!-- FTP cannot search in content: every file would have to be downloaded first. -->
     {#if !browser.listing?.ftp}<Segmented label={t('search.mode')} bind:value={mode} options={[{ value: 'name', label: t('search.name') }, { value: 'content', label: t('search.content') }]} />{/if}
     {#if busy}
       <Button icon="x" onclick={() => (run++, (busy = false), (done = true))}>{t('search.stop')}</Button>

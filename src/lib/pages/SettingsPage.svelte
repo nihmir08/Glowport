@@ -22,7 +22,7 @@
   import WipeDialog from '../WipeDialog.svelte';
 
   let info = $state<AppInfo | null>(null);
-  /** Schriften aus der Auswahl, die auf diesem Rechner installiert sind. */
+  /** Fonts from the selection that are installed on this computer. */
   let fonts = $state<string[]>([]);
   onMount(() => {
     void appInfo().then((i) => (info = i));
@@ -40,7 +40,7 @@
     if (!otherFont) settings.termFont = value;
   }
 
-  /** Ein einzelnes eingelesenes Schema wird gleich zur Vorgabe; bei mehreren wählt man selbst. */
+  /** A single imported scheme becomes the default right away; with several you choose yourself. */
   async function importSchemes() {
     const found = await readSchemes();
     if (found.length === 1) settings.termScheme = found[0].id;
@@ -98,7 +98,7 @@
   let exporting = $state(false);
   let wiping = $state(false);
 
-  /** Das Passwort beim Start wieder zu verlangen ist immer unbedenklich; es abzuschalten braucht eine Rückfrage. */
+  /** Requiring the password on start again is always harmless; switching it off needs a prompt. */
   async function setStartUnlock(enabled: boolean) {
     confirmStart = false;
     try {
@@ -411,7 +411,7 @@
     </div>
   </div>
 
-  <!-- Hilfen für den Bau zeigt nur die Entwicklungsversion (und die Vorschau im Browser), nie die Fassung für Nutzer. -->
+  <!-- Build helpers are only shown by the development version (and the browser preview), never by the release for users. -->
   {#if !inApp || info?.name.endsWith('Dev')}
     <div class="sec">{t('set.dev')}</div>
     <div class="rows">
@@ -460,7 +460,7 @@
   <p>{t('set.startpw.off.text1')}</p>
   <div class="warnbox"><span>{t('set.startpw.off.text2')}</span></div>
   {#snippet actions()}
-    <!-- Der hervorgehobene Knopf war hier „Abbrechen“; wer ausschalten wollte, griff leicht daneben. -->
+    <!-- The highlighted button here used to be “Cancel”; whoever wanted to switch off easily hit the wrong one. -->
     <Button onclick={() => (confirmStart = false)}>{t('common.cancel')}</Button>
     <Button variant="danger" onclick={() => setStartUnlock(true)}>{t('set.startpw.off.confirm')}</Button>
   {/snippet}

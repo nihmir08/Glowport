@@ -12,7 +12,7 @@
 
   let { key, onclose, ondeploy, ondelete }: { key: SshKey; onclose: () => void; ondeploy: () => void; ondelete: () => void } = $props();
 
-  // Das Panel wird je Schlüssel neu erzeugt ({#key} in KeysPage); der Startwert wird bewusst nur einmal gelesen.
+  // The panel is created anew per key ({#key} in KeysPage); the initial value is deliberately read only once.
   const start = (() => key)();
 
   let name = $state(start.name);
@@ -57,7 +57,7 @@
     if (file) certificateText = file.text;
   }
 
-  /** Hinterlegt das eingefügte Zertifikat; ohne Text wird das vorhandene entfernt. */
+  /** Stores the pasted certificate; without text the existing one is removed. */
   async function setCertificate(text: string | null) {
     certificateError = '';
     try {

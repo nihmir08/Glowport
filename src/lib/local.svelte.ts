@@ -5,8 +5,8 @@ import { settings } from './state.svelte';
 import type { LocalShell } from './types';
 
 /**
- * Lokales Terminal: die Shells dieses PCs (PowerShell, Eingabeaufforderung, Git Bash, WSL). Welche es gibt, sieht der
- * Kern beim Start einmal nach; gespeichert wird davon nichts.
+ * Local terminal: this PC's shells (PowerShell, Command Prompt, Git Bash, WSL). Which ones exist the
+ * core checks once on start; none of it is saved.
  */
 export const local = $state({ shells: [] as LocalShell[], loaded: false });
 
@@ -21,13 +21,13 @@ export async function loadShells() {
 
 export const shellById = (id: string) => local.shells.find((shell) => shell.id === id);
 
-/** Wie eine Shell heißt. Die Eingabeaufforderung trägt in jeder Sprache ihren eigenen Namen; die anderen sind Eigennamen. */
+/** What a shell is called. Command Prompt carries its own name in every language; the others are proper names. */
 export const shellName = (shell: LocalShell) => (shell.kind === 'cmd' ? t('local.cmd') : shell.name);
 
-/** Die Shell, die ohne weitere Wahl aufgeht: die eingestellte, sonst die erste gefundene. */
+/** The shell that opens without further choice: the configured one, otherwise the first one found. */
 export const defaultShell = (): LocalShell | undefined => shellById(settings.localShell) ?? local.shells[0];
 
-/** Zeichen und Farbe einer Shell. `path` ist ein gefülltes Logo im 24er-Raster, `line` ein Liniensymbol. */
+/** A shell's symbol and color. `path` is a filled logo on a 24 grid, `line` a line icon. */
 export interface ShellLook {
   color: string;
   path?: string;
@@ -36,7 +36,7 @@ export interface ShellLook {
 
 const PROMPT = '<path d="M5 7l6 5-6 5"/><path d="M13 17h6"/>';
 
-/** WSL-Distributionen bekommen ihr eigenes Logo; der Name kommt von Windows („Ubuntu-24.04“, „kali-linux“). */
+/** WSL distributions get their own logo; the name comes from Windows (“Ubuntu-24.04”, “kali-linux”). */
 const DISTROS: [RegExp, ShellLook][] = [
   [/ubuntu/i, { color: '#E9622E', path: siUbuntu.path }],
   [/debian/i, { color: '#D6336C', path: siDebian.path }],

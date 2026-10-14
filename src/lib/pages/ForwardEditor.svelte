@@ -15,10 +15,10 @@
   import Switch from '../ui/Switch.svelte';
   import TextField from '../ui/TextField.svelte';
 
-  /** Anlegen und Bearbeiten einer Port-Regel. Für eine gespeicherte Regel steht oben, ob sie läuft. */
+  /** Creating and editing a port rule. For a saved rule the top shows whether it is running. */
   let { rule, onclose, onsaved, ondelete }: { rule: Forward | null; onclose: () => void; onsaved: (id: string) => void; ondelete: (rule: Forward) => void } = $props();
 
-  // Der Editor wird je Regel neu erzeugt ({#key}); die Startwerte werden bewusst nur einmal gelesen.
+  // The editor is created anew per rule ({#key}); the initial values are deliberately read only once.
   const start = (() => rule)();
   const LOOPBACK = ['', '127.0.0.1', 'localhost'];
 
@@ -28,16 +28,16 @@
   let bindPort = $state(start ? String(start.bindPort) : '');
   let destHost = $state(start?.destHost || '127.0.0.1');
   let destPort = $state(start?.destPort ? String(start.destPort) : '');
-  /** Auch für andere Rechner erreichbar: Gelauscht wird an allen Adressen statt nur an der eigenen. */
+  /** Reachable for other computers too: listening on all addresses instead of only our own. */
   let open = $state(start ? !LOOPBACK.includes(start.bindAddress) : false);
   let busy = $state(false);
   let error = $state('');
 
-  /** Stand der Regel, solange sie eingeschaltet ist. */
+  /** The rule's state while it is switched on. */
   const live = $derived(start ? stateOf(start.id) : undefined);
   const hostName = $derived(hostById(host)?.name ?? t('fwd.route.host'));
   const hosts = $derived([...sshHosts()].sort((a, b) => a.name.localeCompare(b.name)).map((h) => ({ value: h.id, label: h.group ? `${h.name} · ${pathLabel(h.group)}` : h.name })));
-  /** Die Uhr läuft nur mit, solange die Regel läuft und ihre Laufzeit zu sehen ist. */
+  /** The clock only ticks while the rule runs and its run time is visible. */
   let clock = $state(Date.now());
   $effect(() => {
     if (!live?.since) return;
@@ -46,7 +46,7 @@
   });
   const seconds = $derived(live?.since ? Math.max(0, Math.round((clock - live.since) / 1000)) : 0);
 
-  /** Wie lange die Regel schon läuft, in der größten passenden Einheit. */
+  /** How long the rule has been running, in the largest fitting unit. */
   function since(total: number): string {
     if (total < 60) return t('fwd.since.seconds', { n: total });
     if (total < 3600) return t('fwd.since.minutes', { n: Math.floor(total / 60) });
@@ -67,14 +67,14 @@
       name,
       kind,
       host,
-      // Eine eigens eingetragene Adresse bleibt stehen, solange der Schalter sie nicht ändert.
+      // A custom address stays as long as the switch does not change it.
       bindAddress: open ? (start && !LOOPBACK.includes(start.bindAddress) ? start.bindAddress : '0.0.0.0') : '127.0.0.1',
       bindPort: port(bindPort),
       destHost: kind === 'dynamic' ? '' : destHost,
       destPort: kind === 'dynamic' ? 0 : port(destPort),
     };
     if (!host) return void (error = t('err.invalid.host_missing'));
-    // Eine neue Regel kommt in den gezeigten Tresor, wenn auch ihr Host dort liegt; sonst bleibt sie persönlich.
+    // A new rule goes into the vault shown if its host is there too; otherwise it stays personal.
     if (!start && targetVault() && hostById(host)?.vault === targetVault()) input.vault = targetVault();
     if (Number.isNaN(input.bindPort) || Number.isNaN(input.destPort)) return void (error = t('err.invalid.port_invalid'));
     busy = true;
@@ -147,7 +147,7 @@
       <ActionSelect bind:value={host} options={[{ value: '', label: t('fwd.host.choose') }, ...hosts]} actions={hostActions((id) => (host = id))} />
     </label>
 
-    <!-- Der Weg einer Verbindung: wer lauscht, über wen es geht, wo es ankommt. -->
+    <!-- A connection's route: who listens, what it goes through, where it arrives. -->
     <div class="route" aria-hidden="true">
       {#if kind === 'remote'}
         <div class="route-n"><Icon name="server" size={14} /><b>{hostName}</b><span class="mono">:{bindPort || '…'}</span></div>

@@ -32,7 +32,7 @@
       .catch((e) => console.error('Agenten nicht lesbar', e));
   });
 
-  // Verschwindet der gezeigte Eintrag (gelöscht, Tresor neu geladen), schließt sich das Panel.
+  // If the entry shown disappears (deleted, vault reloaded), the panel closes.
   $effect(() => {
     if (panel?.kind === 'key' && !keyById(panel.id)) panel = null;
     if (panel?.kind === 'identity' && panel.id && !identityById(panel.id)) panel = null;
@@ -40,7 +40,7 @@
 
   const needle = $derived(query.trim().toLowerCase());
   const matches = (...texts: string[]) => !needle || texts.some((text) => text.toLowerCase().includes(needle));
-  // Gezeigt wird, was im gewählten Tresor liegt; die Suche findet alles.
+  // What is in the chosen vault is shown; the search finds everything.
   const keys = $derived(vault.keys.filter((k) => (needle || inScope(k)) && matches(k.name, k.fingerprint, keyLabel(k))));
   const identities = $derived(vault.identities.filter((i) => (needle || inScope(i)) && matches(i.name, i.user, keyById(i.key)?.name ?? '')));
   const empty = $derived(!vault.keys.length && !vault.identities.length);

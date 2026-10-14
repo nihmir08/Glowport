@@ -9,7 +9,7 @@
   import FileList from './FileList.svelte';
   import FilePath from './FilePath.svelte';
 
-  /** Dateileiste neben dem Terminal: die Dateien des Servers, an dem der Bereich mit der Tastatur hängt. */
+  /** File bar next to the terminal: the files of the server the pane with the keyboard is connected to. */
   let { pane }: { pane: Pane } = $props();
 
   const browser = $derived(barFor(pane.key));
@@ -17,7 +17,7 @@
   const chosen = $derived(browser.chosen);
   const running = $derived(activeTransfers().length);
 
-  // Die Leiste hängt an der Verbindung des Bereichs: Steht sie, öffnet sich der Ordner des Terminals; endet sie, ist die Leiste leer.
+  // The bar depends on the pane's connection: once it is up, the terminal's folder opens; when it ends, the bar is empty.
   $effect(() => {
     const session = connected ? pane.sessionId : null;
     const current = untrack(() => browser.place);
@@ -25,7 +25,7 @@
     if (current?.kind !== 'session' || current.id !== session) void untrack(() => browser.open({ kind: 'session', id: session }, pane.cwd ?? undefined));
   });
 
-  // „Dem Terminal folgen“: Wechselt die Shell den Ordner, geht die Leiste mit.
+  // “Follow the terminal”: when the shell changes folder, the bar goes along.
   $effect(() => {
     const cwd = pane.cwd;
     if (!settings.fileFollow || !cwd || !connected) return;
@@ -34,7 +34,7 @@
 
   $effect(() => pruneBars(panes.map((p) => p.key)));
 
-  /** Zieht die Breite der Leiste an ihrem rechten Rand. */
+  /** Drags the bar's width at its right edge. */
   function resize(event: PointerEvent) {
     if (event.button !== 0) return;
     event.preventDefault();

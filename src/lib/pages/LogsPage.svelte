@@ -9,7 +9,7 @@
   import Dialog from '../ui/Dialog.svelte';
   import Icon from '../ui/Icon.svelte';
 
-  /** Mitschnitte: die Liste nach Tagen und rechts der Text des gewählten zum Nachlesen und Durchsuchen. */
+  /** Recordings: the list by day and on the right the chosen one's text for reading and searching. */
   let list = $state<Recording[]>([]);
   let loaded = $state(false);
   let query = $state('');
@@ -17,7 +17,7 @@
   let text = $state<string | null>(null);
   let find = $state('');
   let removing = $state<Recording | null>(null);
-  /** Der Name des geöffneten Mitschnitts wird gerade bearbeitet. */
+  /** The open recording's name is being edited right now. */
   let renaming = $state(false);
   let renameText = $state('');
 
@@ -27,7 +27,7 @@
   const shown = $derived(needle ? list.filter((r) => `${r.title ?? ''} ${r.name} ${r.address}`.toLowerCase().includes(needle)) : list);
   const current = $derived(list.find((r) => r.id === selected));
 
-  /** Mitschnitte nach Tagen, der jüngste Tag zuerst. */
+  /** Recordings by day, the most recent day first. */
   const days = $derived.by(() => {
     const groups: { label: string; items: Recording[] }[] = [];
     const startOfDay = (ms: number) => new Date(ms).setHours(0, 0, 0, 0);
@@ -47,7 +47,7 @@
   const size = (bytes: number) => (bytes >= 1_048_576 ? `${(bytes / 1_048_576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
   const span = (r: Recording) => (r.endedAt ? t('logs.span', { from: clock(r.startedAt), to: clock(r.endedAt), n: minutes(r) }) : t('logs.since', { from: clock(r.startedAt) }));
 
-  /** Zeilen des gewählten Mitschnitts; mit Suchwort nur die passenden, samt Zeilennummer. */
+  /** Lines of the chosen recording; with a search word only the matching ones, with line number. */
   const lines = $derived.by(() => {
     const all = (text ?? '').split('\n').map((line, i) => ({ n: i + 1, line }));
     const word = find.trim().toLowerCase();
@@ -94,7 +94,7 @@
 
   const copy = () => text && void clipboardWrite(text).then(() => toast(t('logs.copied'), 'ok'));
 
-  /** Umbenennen an Ort und Stelle. Solange ein Mitschnitt läuft, wird seine Datei beschrieben; dann geht es noch nicht. */
+  /** Renaming in place. While a recording runs, its file is being written; then it is not possible yet. */
   function startRename(r: Recording) {
     if (!r.endedAt) return void toast(t('err.log_running'), 'err');
     renameText = r.title ?? '';
@@ -108,7 +108,7 @@
     const title = renameText.trim();
     if (title === (entry.title ?? '')) return;
     try {
-      // Mit dem Namen ändert sich die Datei und damit die Kennung; der geöffnete Text bleibt derselbe.
+      // With the name the file changes and thus the ID; the open text stays the same.
       const done = await logRename(entry.id, title);
       list = done.list;
       selected = done.id;

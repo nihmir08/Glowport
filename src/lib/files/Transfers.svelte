@@ -9,7 +9,7 @@
   import Button from '../ui/Button.svelte';
   import Icon from '../ui/Icon.svelte';
 
-  /** Die Warteschlange der Transfers. `dock` ist die Fassung unten auf der Seite „Dateien“, sonst schwebt sie über der Statusleiste. */
+  /** The transfer queue. `dock` is the version at the bottom of the Files page, otherwise it floats above the status bar. */
   let { dock = false }: { dock?: boolean } = $props();
 
   const list = $derived(transfers.list);

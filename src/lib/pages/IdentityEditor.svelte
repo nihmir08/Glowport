@@ -15,7 +15,7 @@
 
   let { identity, onclose, onsaved, ondelete }: { identity: Identity | null; onclose: () => void; onsaved: (id: string) => void; ondelete: (identity: Identity) => void } = $props();
 
-  // Der Editor wird je Identität neu erzeugt ({#key} in KeysPage); die Startwerte werden bewusst nur einmal gelesen.
+  // The editor is created anew per identity ({#key} in KeysPage); the initial values are deliberately read only once.
   const start = (() => identity)();
 
   let name = $state(start?.name ?? '');
@@ -28,7 +28,7 @@
 
   const hosts = $derived(start ? hostsUsingIdentity(start.id) : []);
 
-  // Ein Schlüssel, der ins Fenster gezogen wird, während dieser Editor offen ist, ist gleich ausgewählt.
+  // A key dragged into the window while this editor is open is selected right away.
   onMount(() => takeKeys((id) => (key = id)));
 
   async function save(event: SubmitEvent) {

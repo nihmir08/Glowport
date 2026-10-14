@@ -1,5 +1,5 @@
-// Ersatz für den Import in der Vorschau im Browser: erfundene Quellen und Einträge, damit sich der Ablauf ansehen lässt.
-// Gelesen wird hier nichts, weder Dateien noch die Registry.
+// Stand-in for the import in the browser preview: made-up sources and entries, so the flow can be looked at.
+// Nothing is read here, neither files nor the registry.
 
 import type { DraftForward, DraftGroup, DraftHost, DraftKey, DraftKnownHost, DraftSnippet, ImportDraft, ImportFound, ImportNote, ImportSource, Snapshot } from './types';
 
@@ -15,7 +15,7 @@ export const sampleFound = (): ImportFound[] => [
 
 type HostSeed = Partial<DraftHost> & { name: string; address: string };
 
-/** Baut einen Entwurf; `existing` ergibt sich aus dem, was im Ersatz-Tresor schon liegt. */
+/** Builds a draft; `existing` follows from what is already in the stand-in vault. */
 function draft(
   source: ImportSource,
   origin: string,
@@ -49,7 +49,7 @@ function draft(
 
 const note = (code: string, detail?: string): ImportNote => ({ code, detail });
 
-/** Was die Quelle in der Vorschau hergibt. */
+/** What the source provides in the preview. */
 export function sampleDraft(source: ImportSource, vault: Snapshot): Omit<ImportDraft, 'token'> {
   switch (source) {
     case 'sshconfig':

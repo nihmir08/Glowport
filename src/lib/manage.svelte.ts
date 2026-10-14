@@ -5,13 +5,13 @@ import { pasteTerminal } from './sessions.svelte';
 import { toast } from './state.svelte';
 import type { DockerContainer, Listed, ManageAbilities, ManageDone, ProcessSample, ServiceUnit } from './types';
 
-/** Was es auf dem Server einer Sitzung zu verwalten gibt. Einmal je Sitzung nachgesehen. */
+/** What there is to manage on a session's server. Checked once per session. */
 const found = $state<Record<number, ManageAbilities>>({});
 const asked = new Set<number>();
 
 export const abilitiesOf = (session: number | null): ManageAbilities | undefined => (session === null ? undefined : found[session]);
 
-/** Sieht nach, sobald die Verbindung steht. Scheitert das, gibt es die Reiter eben nicht. */
+/** Checks as soon as the connection is up. If that fails, there simply are no tabs. */
 export function probe(session: number) {
   if (asked.has(session)) return;
   asked.add(session);
@@ -22,13 +22,13 @@ export function probe(session: number) {
 
 export interface Feed<T> {
   value?: T;
-  /** Meldung, wenn das Lesen scheiterte. */
+  /** Message if reading failed. */
   error: string;
 }
 
 /**
- * Eine Liste, die nachgeladen wird, solange jemand zusieht (wie die Auslastung in `stats.svelte.ts`).
- * `merge` bekommt den vorigen Stand, etwa um aus zwei Messungen eine Auslastung zu rechnen.
+ * A list that is reloaded as long as someone is watching (like the load in `stats.svelte.ts`).
+ * `merge` gets the previous state, e.g. to compute a load from two measurements.
  */
 function feed<Raw, T>(load: (session: number) => Promise<Raw>, interval: number, merge: (next: Raw, before: T | undefined) => T) {
   const states = $state<Record<number, Feed<T>>>({});
@@ -47,7 +47,7 @@ function feed<Raw, T>(load: (session: number) => Promise<Raw>, interval: number,
     }
   }
 
-  /** Lädt nach, solange jemand zusieht. Liefert eine Funktion, die das Zusehen beendet. */
+  /** Reloads as long as someone is watching. Returns a function that ends watching. */
   function watch(session: number): () => void {
     states[session] ??= { error: '' };
     const watcher = watchers.get(session);
@@ -72,11 +72,11 @@ export const services = feed<Listed<ServiceUnit[]>, Listed<ServiceUnit[]>>(servi
 
 export interface ProcessView {
   sample: ProcessSample;
-  /** Auslastung je Prozess in Prozent eines Kerns, aus dieser und der vorigen Messung. Fehlt bei der ersten. */
+  /** Load per process in percent of one core, from this and the previous measurement. Missing for the first. */
   cpu: Record<number, number>;
 }
 
-/** `null`: Der Server gibt die Liste nicht her. */
+/** `null`: the server does not provide the list. */
 export const processes = feed<ProcessSample | null, ProcessView | null>(processList, 5000, (next, before) => {
   if (!next) return null;
   const cpu: Record<number, number> = {};
@@ -86,17 +86,17 @@ export const processes = feed<ProcessSample | null, ProcessView | null>(processL
     const earlier = new Map(old.processes.map((p) => [p.pid, p]));
     for (const p of next.processes) {
       const was = earlier.get(p.pid);
-      // Dieselbe Nummer mit kürzerer Laufzeit ist ein neuer Prozess.
+      // The same number with a shorter run time is a new process.
       if (was && p.elapsed >= was.elapsed && p.ticks >= was.ticks) cpu[p.pid] = ((p.ticks - was.ticks) / next.ticksPerSecond / seconds) * 100;
     }
   }
-  // Solange es nur eine Messung gibt, bleiben die Zahlen der vorigen stehen (beim ersten Mal: keine).
+  // As long as there is only one measurement, the numbers of the previous one stay (the first time: none).
   return { sample: next, cpu: old && seconds > 0 ? cpu : (before?.cpu ?? {}) };
 });
 
 /**
- * Führt eine Aktion aus und sagt, wie sie ausging. Verlangt `sudo` ein Passwort, kommt der Befehl ins Terminal
- * des Bereichs, ohne abgeschickt zu werden: Der Nutzer drückt selbst die Eingabetaste und tippt das Passwort dort.
+ * Runs an action and says how it went. If `sudo` asks for a password, the command goes into the pane's terminal
+ * without being sent: the user presses Enter themselves and types the password there.
  */
 export async function act(pane: string, work: () => Promise<ManageDone>, done: string): Promise<boolean> {
   try {
@@ -114,7 +114,7 @@ export async function act(pane: string, work: () => Promise<ManageDone>, done: s
   }
 }
 
-/** Dauer in den zwei größten Einheiten, kurz: „3 T 14 Std“, „5 Std 2 Min“, „6 Std“, „40 s“. */
+/** Duration in the two largest units, short: “3 d 14 h”, “5 h 2 min”, “6 h”, “40 s”. */
 export function span(seconds: number): string {
   const days = Math.floor(seconds / 86_400);
   const hours = Math.floor((seconds % 86_400) / 3600);

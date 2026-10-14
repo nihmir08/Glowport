@@ -20,7 +20,7 @@
   let notices = $state<SyncNotice[]>([]);
   let busy = $state(false);
 
-  // Geräte und Hinweise kommen vom Server und aus dem Tresor; nach jeder Runde können sie anders aussehen.
+  // Devices and notices come from the server and the vault; after every round they can look different.
   $effect(() => {
     void sync.syncedAt;
     void sync.notices;
@@ -33,7 +33,7 @@
       .catch(() => {});
   });
 
-  /** Führt etwas aus, das sich am Server ändert, und sagt bei einem Fehler, woran es lag. */
+  /** Runs something that changes on the server and, on an error, says what caused it. */
   async function run<T>(work: () => Promise<T>, done?: string): Promise<T | undefined> {
     busy = true;
     try {
@@ -73,7 +73,7 @@
     selected = id;
   }
 
-  /** Die Einladung, deren Sicherheitscode gerade aufgeklappt ist. */
+  /** The invitation whose safety code is currently expanded. */
   let checking = $state<string | null>(null);
   const accept = (invitation: SyncInvitation) => run(() => invitationAccept(invitation.vault), t('sync.invitation.accepted', { name: invitation.name ?? '' })).then(() => (selected = invitation.vault));
   const decline = (invitation: SyncInvitation) => run(async () => applySync(await invitationDecline(invitation.vault)));

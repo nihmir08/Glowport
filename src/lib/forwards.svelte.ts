@@ -6,20 +6,20 @@ import { toast } from './state.svelte';
 import type { Answer, Forward, ForwardState, Prompt } from './types';
 
 /**
- * Port-Regeln im Betrieb. Die Regeln selbst liegen im Tresor (`vault.forwards`); hier steht, welche eingeschaltet
- * sind und wie es ihnen geht. Sie gehören dem Programm und laufen weiter, wenn kein Terminal offen ist.
+ * Port rules in operation. The rules themselves are in the vault (`vault.forwards`); here is which ones are switched on
+ * and how they are doing. They belong to the program and keep running when no terminal is open.
  */
 export const forwards = $state({
   states: [] as ForwardState[],
-  /** Die Regel, deren Verbindungsaufbau gerade auf eine Antwort wartet (Schlüssel des Servers, Passwort). */
+  /** The rule whose connection setup is currently waiting for an answer (server key, password). */
   asking: null as { rule: string; connection: number; prompt: Prompt } | null,
 });
 
-/** Verbindungen, deren Rückfragen dieses Fenster beantwortet: Regel → Nummer und Abmeldung. */
+/** Connections whose prompts this window answers: rule → number and unsubscribe. */
 const links = new Map<string, { connection: number; release: () => void }>();
 
 export const stateOf = (id: string) => forwards.states.find((state) => state.id === id);
-/** Regeln, die laufen oder gerade verbinden. Gescheiterte zählen nicht. */
+/** Rules that are running or connecting right now. Failed ones do not count. */
 export const activeForwards = () => forwards.states.filter((state) => state.phase !== 'failed');
 
 function unlink(id: string) {
@@ -30,7 +30,7 @@ function unlink(id: string) {
   if (forwards.asking?.rule === id) forwards.asking = null;
 }
 
-/** Schaltet eine Regel ein. Braucht die Anmeldung eine Rückfrage, erscheint sie wie bei einem Terminal. */
+/** Switches a rule on. If signing in needs a prompt, it appears as for a terminal. */
 export async function startForward(id: string) {
   unlink(id);
   let connection: number;
@@ -58,7 +58,7 @@ export async function stopForward(id: string) {
 
 export const toggleForward = (id: string, on: boolean) => (on ? startForward(id) : stopForward(id));
 
-/** Beantwortet die Rückfrage der Regel, die gerade verbindet. */
+/** Answers the prompt of the rule currently connecting. */
 export function answerForward(reply: Answer) {
   const asking = forwards.asking;
   if (!asking) return;
@@ -66,7 +66,7 @@ export function answerForward(reply: Answer) {
   void sessionAnswer(asking.connection, reply);
 }
 
-/** Was im Feld der Regel steht, wenn sie gescheitert ist oder neu verbindet. */
+/** What is in the rule's field when it failed or is reconnecting. */
 export function forwardError(state: ForwardState): string {
   const key = `fwd.err.${state.error}`;
   if (state.error && has(key)) return t(key as Key, { message: state.message ?? '' });
@@ -75,7 +75,7 @@ export function forwardError(state: ForwardState): string {
   return state.message || state.error || t('fwd.err.unknown');
 }
 
-/** Eine Regel in einer Zeile: „lokal 3000 → web-01 → 127.0.0.1:3000“. */
+/** A rule in one line: “local 3000 → web-01 → 127.0.0.1:3000”. */
 export function forwardRoute(rule: Pick<Forward, 'kind' | 'host' | 'bindAddress' | 'bindPort' | 'destHost' | 'destPort'>): string {
   const host = hostById(rule.host)?.name ?? '?';
   const bind = rule.bindAddress && rule.bindAddress !== '127.0.0.1' && rule.bindAddress !== 'localhost' ? `${rule.bindAddress}:${rule.bindPort}` : String(rule.bindPort);
@@ -84,7 +84,7 @@ export function forwardRoute(rule: Pick<Forward, 'kind' | 'host' | 'bindAddress'
   return `${t('fwd.kind.local.short')} ${bind} → ${host} → ${rule.destHost}:${rule.destPort}`;
 }
 
-/** Die Adresse, unter der eine laufende Regel auf diesem PC zu erreichen ist; bei `remote` die am Server. */
+/** The address at which a running rule can be reached on this PC; for `remote` the one on the server. */
 export function forwardEndpoint(rule: Forward): string {
   const address = !rule.bindAddress || rule.bindAddress === '0.0.0.0' ? '127.0.0.1' : rule.bindAddress;
   return rule.kind === 'remote' ? `${hostById(rule.host)?.address ?? '?'}:${rule.bindPort}` : `${address}:${rule.bindPort}`;
@@ -92,14 +92,14 @@ export function forwardEndpoint(rule: Forward): string {
 
 export const forwardName = (id: string) => forwardById(id)?.name ?? '';
 
-/** Holt den Stand und meldet sich für Änderungen an. Einmal beim Start aufrufen. */
+/** Fetches the state and subscribes to changes. Call once on start. */
 export function initForwards(): () => void {
   forwardList()
     .then((list) => (forwards.states = list))
     .catch((e) => console.error('Port-Regeln nicht lesbar', e));
   return onForwards((list) => {
     forwards.states = list;
-    // Eine Regel, die nicht mehr eingeschaltet ist, wartet auch auf keine Antwort mehr.
+    // A rule that is no longer switched on is not waiting for an answer any more either.
     for (const id of [...links.keys()]) if (!list.some((state) => state.id === id)) unlink(id);
   });
 }

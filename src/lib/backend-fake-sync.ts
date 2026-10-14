@@ -1,6 +1,6 @@
-// Ersatz für den Abgleich, wenn die Oberfläche im Browser läuft (Entwicklung und Vorschau).
-// Es gibt hier keinen Server und keine Verschlüsselung; die Datei zeigt nur, wie sich die Bildschirme verhalten.
-// Maßgeblich sind crates/sync und docs/sync.md.
+// Stand-in for syncing when the interface runs in the browser (development and preview).
+// There is no server and no encryption here; the file only shows how the screens behave.
+// What counts are crates/sync and docs/sync.md.
 
 import type {
   BackendError,
@@ -32,13 +32,13 @@ interface Stored {
   accounts: SyncAccount[];
 }
 
-/** Was der Ersatz-Tresor für den Abgleich bereitstellt. */
+/** What the stand-in vault provides for syncing. */
 interface World {
-  /** Legt Beispiel-Hosts in einem geteilten Tresor an. */
+  /** Creates sample hosts in a shared vault. */
   addHosts: (vault: string, hosts: [name: string, address: string, os: string][]) => void;
-  /** Entfernt alle Einträge eines Tresors. */
+  /** Removes all entries of a vault. */
   dropVault: (vault: string) => void;
-  /** Meldet der Oberfläche den geänderten Tresor. */
+  /** Reports the changed vault to the interface. */
   changed: () => void;
   password: () => string | null;
 }
@@ -73,7 +73,7 @@ const later = <T>(work: () => T, ms = 260): Promise<T> =>
 const need = () => stored ?? fail('not_linked');
 const newId = () => (++seq).toString(16).padStart(32, '0');
 
-// Sechs Wörter je Konto. Im Programm entstehen sie aus einem Prüfwert der Schlüssel; hier sind sie ausgedacht.
+// Six words per account. In the program they come from a checksum of the keys; here they are made up.
 const CODES: Record<string, string> = {
   ich: 'falke · mond · ziegel · hafen · birke · nebel',
   sam: 'kupfer · welle · adler · saite · moos · fackel',
@@ -101,7 +101,7 @@ function state(): SyncState {
   };
 }
 
-/** Speichert, meldet den Stand und liefert ihn. */
+/** Saves, reports the state and returns it. */
 function done(): SyncState {
   persist();
   const now = state();
@@ -109,7 +109,7 @@ function done(): SyncState {
   return now;
 }
 
-/** Wie `done`, wenn sich auch der Inhalt des Tresors geändert hat. */
+/** Like `done`, if the vault's content changed too. */
 function changed(): SyncState {
   const now = done();
   world?.changed();
@@ -123,7 +123,7 @@ function address(server: string): string {
   return /^https?:\/\//i.test(text) ? text : `https://${text}`;
 }
 
-/** Was nach dem Einrichten da ist, damit jeder Bildschirm etwas zeigt. */
+/** What is there after setup, so every screen shows something. */
 function demo(server: string, username: string, admin: boolean, device: string): Stored {
   const now = Date.now();
   const team = newId();
@@ -172,13 +172,13 @@ const owned = (id: string) => {
 const role = (text: VaultRole) => (text === 'write' || text === 'read' ? text : fail('invalid'));
 
 export const fakeSync = {
-  /** Die Tresore für die Übersicht des Ersatz-Tresors: der persönliche und alle geteilten. */
+  /** The vaults for the stand-in vault's overview: the personal one and all shared ones. */
   vaults: (): VaultInfo[] => [{ id: PERSONAL, kind: 'personal', name: '', role: 'owner', members: [] }, ...(stored?.shared ?? [])],
   onState: (handler: (state: SyncState) => void) => ((emit = handler), () => {}),
-  /** Beim Löschen des Ersatz-Tresors geht auch die Anmeldung. */
+  /** When the stand-in vault is deleted, the sign-in goes too. */
   reset: () => ((stored = null), persist()),
 
-  /** Für „Mit Konto anmelden“ beim ersten Start: Der Ersatz-Tresor ist eben entstanden und wird gleich verbunden. */
+  /** For “Sign in with account” on first start: the stand-in vault has just been created and is linked right away. */
   link: (server: string, username: string, device: string) => {
     stored = demo(address(server), username, false, device.trim() || 'PC');
     phase = 'synced';
@@ -202,13 +202,13 @@ export const fakeSync = {
       phase = 'synced';
       return changed();
     }, 900),
-  /** Auf einem Gerät mit Tresor: mit einem bestehenden Konto verbinden. */
+  /** On a device with a vault: link to an existing account. */
   connect: (request: SyncLogin) =>
     later(() => {
       if (stored) fail('already_linked');
       const server = address(request.server);
       checkAccount(request.username, request.password);
-      // Der Ersatz-Tresor gehört nie zu einem Konto: Erst die Wahl, was mit seinen Einträgen geschieht, verbindet.
+      // The stand-in vault never belongs to an account: only the choice of what happens to its entries links it.
       if (!request.local) fail('other_account');
       stored = demo(server, request.username, false, request.device.trim() || 'PC');
       phase = 'synced';
@@ -234,7 +234,7 @@ export const fakeSync = {
       if (found) found.rolledBack = false;
       return changed();
     }, 800),
-  /** Nur für die Vorschau: stellt einen Zustand nach, den es sonst nur mit einem echten Server gibt. */
+  /** Only for the preview: simulates a state that otherwise only exists with a real server. */
   pretend: (what: SyncState['phase'] | 'rolledBack') =>
     later(() => {
       const s = need();

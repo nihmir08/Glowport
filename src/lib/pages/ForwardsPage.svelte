@@ -14,20 +14,20 @@
   import Switch from '../ui/Switch.svelte';
   import ForwardEditor from './ForwardEditor.svelte';
 
-  /** Port-Regeln: gespeicherte Weiterleitungen, jede mit einem Schalter. Sie laufen, auch wenn kein Terminal offen ist. */
+  /** Port rules: saved forwards, each with a switch. They run even when no terminal is open. */
   let panel = $state<{ id: string | null } | null>(null);
   let query = $state('');
   let removing = $state<Forward | null>(null);
-  /** Zählt mit jedem Speichern hoch, damit der Editor danach mit den gespeicherten Werten neu beginnt. */
+  /** Counts up with every save, so the editor then starts over with the saved values. */
   let version = $state(0);
 
-  // Verschwindet die gezeigte Regel (gelöscht, Tresor neu geladen), schließt sich der Editor.
+  // If the rule shown disappears (deleted, vault reloaded), the editor closes.
   $effect(() => {
     if (panel?.id && !forwardById(panel.id)) panel = null;
   });
 
   const needle = $derived(query.trim().toLowerCase());
-  // Gezeigt wird, was im gewählten Tresor liegt; die Suche findet alles.
+  // What is in the chosen vault is shown; the search finds everything.
   const shown = $derived(vault.forwards.filter((rule) => (needle ? [rule.name, hostById(rule.host)?.name ?? '', forwardRoute(rule)].some((text) => text.toLowerCase().includes(needle)) : inScope(rule))));
   const empty = $derived(!vault.forwards.length);
 
@@ -91,7 +91,7 @@
           {/if}
           {#if scope.vault === 'all' || needle}<VaultBadge entry={rule} />{/if}
           <i class="chip">{t(`fwd.kind.${rule.kind}` as Key)}</i>
-          <!-- Der Schalter gehört nicht zur Zeile: Ein Klick darauf öffnet den Editor nicht. -->
+          <!-- The switch does not belong to the row: a click on it does not open the editor. -->
           <span role="presentation" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
             <Switch label={t('fwd.switch')} bind:checked={() => !!live, (on) => void toggleForward(rule.id, on)} />
           </span>

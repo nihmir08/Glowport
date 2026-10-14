@@ -8,68 +8,68 @@ import { settings, toast } from './state.svelte';
 import type { Answer, MoshFallback, Moving, Prompt, Reconnect, SavedLayout, SavedPane, SavedTab, SessionEnd, SessionEvent, SessionPhase, Target } from './types';
 
 /**
- * Art einer Sitzung. Dateileiste, Server-Info und Vorschläge beim Tippen gibt es nur bei SSH; ein lokales Terminal
- * „startet“ und „läuft“, statt zu verbinden.
+ * Kind of a session. File bar, server info and suggestions while typing only exist for SSH; a local terminal
+ * “starts” and “runs” instead of connecting.
  */
 export type PaneKind = 'ssh' | 'telnet' | 'serial' | 'local';
 
-/** Ein Terminal-Bereich. Er überlebt seine Verbindung: Der Inhalt bleibt, „Neu verbinden“ hängt eine neue an. */
+/** A terminal pane. It outlives its connection: the content stays, “Reconnect” attaches a new one. */
 export interface Pane {
   key: string;
   target: Target;
-  /** Wie zuletzt bekannt; bleibt stehen, wenn der Tresor gesperrt ist. */
+  /** As last known; stays when the vault is locked. */
   kind: PaneKind;
-  /** Nummer der Sitzung im Kern, solange eine Verbindung besteht oder aufgebaut wird. */
+  /** The session's number in the core, as long as a connection exists or is being set up. */
   sessionId: number | null;
   phase: SessionPhase | 'idle' | 'ended';
   end: SessionEnd | null;
-  /** Die Rückfrage, auf die die Sitzung gerade wartet. */
+  /** The prompt the session is currently waiting for. */
   prompt: Prompt | null;
-  /** Sekunden bis zum nächsten automatischen Versuch, sonst null. */
+  /** Seconds until the next automatic attempt, otherwise null. */
   retryIn: number | null;
   attempts: number;
-  /** Wird die Ausgabe in eine Datei mitgeschnitten? */
+  /** Is the output being recorded into a file? */
   recording: boolean;
-  /** Name und Adresse, wie sie zuletzt bekannt waren. Sie bleiben lesbar, wenn der Tresor gesperrt ist. */
+  /** Name and address as last known. They stay readable when the vault is locked. */
   name: string;
   address: string;
-  /** Eine laufende Sitzung aus einem anderen Fenster, die dieser Bereich übernimmt, statt neu zu verbinden. */
+  /** A running session from another window that this pane takes over instead of connecting anew. */
   adopt: Moving | null;
-  /** Ordner, in dem die Shell zuletzt stand, soweit der Kern ihn kennt. Ihm folgt die Dateileiste. */
+  /** Folder the shell was last in, as far as the core knows it. The file bar follows it. */
   cwd: string | null;
-  /** Eine Zeile, die einmal getippt wird, sobald die Verbindung steht (Logs eines Containers, Journal eines Dienstes). */
+  /** A line typed once as soon as the connection is up (a container's logs, a service's journal). */
   run?: string;
-  /** Läuft das Terminal über Mosh? `silent`: Sekunden ohne Nachricht vom Server, sonst null; `side`: steht die
-   *  SSH-Verbindung daneben (Seitenleiste, Dateien)? */
+  /** Does the terminal run over Mosh? `silent`: seconds without a message from the server, otherwise null; `side`: is the
+   * SSH connection next to it up (sidebar, files)? */
   mosh: { silent: number | null; side: boolean } | null;
-  /** Mosh war gewünscht, die Sitzung läuft aber per SSH; die Leiste im Bereich nennt den Grund. */
+  /** Mosh was wanted, but the session runs over SSH; the bar in the pane names the reason. */
   moshFallback: { reason: MoshFallback; detail?: string } | null;
 }
 
-/** Ein Tab: ein oder mehrere Bereiche in freier Anordnung. */
+/** A tab: one or more panes in a free layout. */
 export interface Tab {
   key: string;
-  /** Eigener Name; null = Name des Hosts. */
+  /** Custom name; null = the host's name. */
   name: string | null;
-  /** Eigene Farbe; null = Farbe des Hosts. */
+  /** Custom color; null = the host's color. */
   color: string | null;
   layout: Layout;
-  /** Bereich, der die Tastatur hat. */
+  /** Pane that has the keyboard. */
   focus: string;
-  /** Multi-Exec: Eingaben gehen an alle Bereiche des Tabs. */
+  /** Multi-exec: input goes to all panes of the tab. */
   multi: boolean;
 }
 
-/** Was ein Terminal dem Rest der Oberfläche anbietet. */
+/** What a terminal offers the rest of the interface. */
 export interface TerminalHooks {
   write(bytes: Uint8Array, done: () => void): void;
-  /** Schreibt eine Zeile der Oberfläche selbst in das Terminal, abgesetzt von der Ausgabe des Servers. */
+  /** Writes a line from the interface itself into the terminal, set apart from the server's output. */
   note(text: string): void;
   size(): { columns: number; rows: number };
   focus(): void;
-  /** Der Inhalt des Terminals samt Verlauf als Folge von Steuerzeichen, die ihn anderswo wieder aufbaut. */
+  /** The terminal's content including scrollback as a sequence of control characters that rebuilds it elsewhere. */
   snapshot(): Promise<string>;
-  /** Fügt Text ein, als käme er aus der Zwischenablage: Mehrere Zeilen laufen nicht von selbst los, wenn die Shell das unterstützt. */
+  /** Pastes text as if it came from the clipboard: several lines do not run on their own if the shell supports that. */
   paste(text: string): void;
 }
 
@@ -79,12 +79,12 @@ export const view = $state({ active: 'home' });
 
 const terminals = new Map<string, TerminalHooks>();
 const paneOfSession = new Map<number, string>();
-/** Ereignisse, die eintreffen, bevor die Nummer ihrer Sitzung bekannt ist. */
+/** Events that arrive before their session's number is known. */
 const early = new Map<number, SessionEvent[]>();
 const timers = new Map<string, ReturnType<typeof setInterval>>();
 let seq = 0;
 
-/** Wartezeiten vor den automatischen Versuchen, in Sekunden. Danach bleibt es bei der letzten. */
+/** Waiting times before the automatic attempts, in seconds. After that the last one stays. */
 const BACKOFF = [2, 5, 10, 20, 30];
 
 export const paneByKey = (key: string | null | undefined) => (key ? panes.find((pane) => pane.key === key) : undefined);
@@ -96,7 +96,7 @@ export const panesOf = (tab: Tab) =>
     .filter((pane): pane is Pane => !!pane);
 export const activeTab = () => tabByKey(view.active);
 
-/** Wie ein Ziel heißt; undefined, wenn es ein Host ist, den der (gesperrte) Tresor gerade nicht nennt. */
+/** What a destination is called; undefined if it is a host the (locked) vault does not name right now. */
 export function titleOf(target: Target): string | undefined {
   switch (target.kind) {
     case 'direct':
@@ -127,12 +127,12 @@ function addressFor(target: Target): string | undefined {
   }
 }
 
-/** Die Art eines Ziels; undefined, wenn es ein Host ist, den der Tresor gerade nicht nennt. */
+/** A destination's kind; undefined if it is a host the vault does not name right now. */
 function kindOf(target: Target): PaneKind | undefined {
   if (target.kind === 'local' || target.kind === 'telnet') return target.kind;
   if (target.kind === 'direct') return 'ssh';
   const host = hostById(target.id);
-  // Ein FTP-Host hat kein Terminal; ein Bereich, der noch auf ihn zeigt, bleibt, was er war.
+  // An FTP host has no terminal; a pane still pointing to it stays what it was.
   const protocol = host && protocolOf(host);
   return protocol === 'ftp' ? undefined : protocol;
 }

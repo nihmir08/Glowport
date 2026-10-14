@@ -1,12 +1,12 @@
-// Anordnung geteilter Bereiche: ein Baum, dessen Blätter Bereiche sind und dessen Knoten ihre Fläche in zwei Teile schneiden.
-// Reine Funktionen ohne Zustand; jede Änderung liefert einen neuen Baum.
+// Layout of split panes: a tree whose leaves are panes and whose nodes cut their area in two parts.
+// Pure functions without state; every change returns a new tree.
 
 export type Side = 'left' | 'right' | 'top' | 'bottom';
 
-/** `row` legt `a` links neben `b`, `col` legt `a` über `b`. `ratio` ist der Anteil von `a`. */
+/** `row` puts `a` left of `b`, `col` puts `a` above `b`. `ratio` is the share of `a`. */
 export type Layout<L = string> = { pane: L } | { dir: 'row' | 'col'; ratio: number; a: Layout<L>; b: Layout<L> };
 
-/** Rechteck in Anteilen der Gesamtfläche, 0 bis 1. */
+/** Rectangle in fractions of the total area, 0 to 1. */
 export interface Rect {
   x: number;
   y: number;
@@ -14,11 +14,11 @@ export interface Rect {
   h: number;
 }
 
-/** Trennlinie zwischen zwei Teilen. `path` nennt den Knoten (Folge aus `a` und `b` ab der Wurzel). */
+/** Divider between two parts. `path` names the node (sequence of `a` and `b` from the root). */
 export interface Divider {
   path: string;
   dir: 'row' | 'col';
-  /** Fläche des Knotens, den die Linie teilt. */
+  /** Area of the node the divider splits. */
   area: Rect;
   ratio: number;
 }
@@ -67,7 +67,7 @@ export function setRatio<L>(layout: Layout<L>, path: string, ratio: number): Lay
   return path[0] === 'a' ? { ...layout, a: setRatio(layout.a, path.slice(1), ratio) } : { ...layout, b: setRatio(layout.b, path.slice(1), ratio) };
 }
 
-/** Setzt `added` an die Seite `side` des Bereichs `target`; beide teilen sich dessen Fläche je zur Hälfte. */
+/** Puts `added` at the side `side` of the pane `target`; both share its area half and half. */
 export function insert<L>(layout: Layout<L>, target: L, added: Layout<L>, side: Side): Layout<L> {
   if ('pane' in layout) {
     if (layout.pane !== target) return layout;
@@ -77,7 +77,7 @@ export function insert<L>(layout: Layout<L>, target: L, added: Layout<L>, side: 
   return { ...layout, a: insert(layout.a, target, added, side), b: insert(layout.b, target, added, side) };
 }
 
-/** Entfernt einen Bereich; sein Nachbar übernimmt die Fläche. `null`, wenn nichts übrig bleibt. */
+/** Removes a pane; its neighbour takes over the area. `null` if nothing is left. */
 export function remove<L>(layout: Layout<L>, pane: L): Layout<L> | null {
   if ('pane' in layout) return layout.pane === pane ? null : layout;
   const a = remove(layout.a, pane);
@@ -85,7 +85,7 @@ export function remove<L>(layout: Layout<L>, pane: L): Layout<L> | null {
   return a && b ? { ...layout, a, b } : (a ?? b);
 }
 
-/** Baut den Baum mit anderen Blättern nach. Blätter, für die `to` nichts liefert, fallen weg. */
+/** Rebuilds the tree with other leaves. Leaves for which `to` returns nothing are dropped. */
 export function mapLeaves<L, M>(layout: Layout<L>, to: (leaf: L) => M | null | undefined): Layout<M> | null {
   if ('pane' in layout) {
     const leaf = to(layout.pane);
@@ -101,7 +101,7 @@ export function swap(layout: Layout, one: string, other: string): Layout {
   return mapLeaves(layout, (leaf) => (leaf === one ? other : leaf === other ? one : leaf))!;
 }
 
-/** Jedes Blatt mit seinem Platz, in der Reihenfolge des Baums. */
+/** Every leaf with its place, in tree order. */
 export function places<L>(layout: Layout<L>, area: Rect = FULL): { leaf: L; rect: Rect }[] {
   if ('pane' in layout) return [{ leaf: layout.pane, rect: area }];
   const [a, b] = cut(area, layout.dir, layout.ratio);

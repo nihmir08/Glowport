@@ -5,10 +5,10 @@ import { openTab } from './sessions.svelte';
 import { toast } from './state.svelte';
 import type { Host, ProxmoxConnection, ProxmoxGuest, ProxmoxOverview } from './types';
 
-/** Stand einer Verbindung zu Proxmox, wie er zuletzt gelesen wurde. */
+/** State of a connection to Proxmox, as it was last read. */
 export interface PveState {
   overview?: ProxmoxOverview;
-  /** Meldung, wenn das Lesen scheiterte. */
+  /** Message if reading failed. */
   error: string;
   /** Wann zuletzt gelesen wurde. */
   at: number;
@@ -18,12 +18,12 @@ const states = $state<Record<string, PveState>>({});
 let watchers = 0;
 let timer: ReturnType<typeof setInterval> | undefined;
 
-/** Wie oft nachgelesen wird, solange eine Seite zusieht. */
+/** How often it is re-read while a page is watching. */
 const INTERVAL = 10_000;
 
 export const pveOf = (connection: string): PveState | undefined => states[connection];
 
-/** Liest eine Verbindung nach. `fresh`: auch das neu fragen, was der Kern sich über die Maschinen eine Weile merkt. */
+/** Re-reads a connection. `fresh`: also ask anew what the core remembers about the machines for a while. */
 export async function refreshPve(connection: string, fresh = false) {
   const state = (states[connection] ??= { error: '', at: 0 });
   try {
@@ -38,8 +38,8 @@ export async function refreshPve(connection: string, fresh = false) {
 const refreshAll = () => Promise.all(vault.proxmox.map((connection) => refreshPve(connection.id)));
 
 /**
- * Liest alle Verbindungen nach, solange jemand zusieht (die Seite „Proxmox“ oder die Host-Übersicht).
- * Liefert eine Funktion, die das Zusehen beendet. Im Hintergrund wird nichts abgefragt.
+ * Re-reads all connections as long as someone is watching (the Proxmox page or the hosts overview).
+ * Returns a function that ends watching. Nothing is queried in the background.
  */
 export function watchPve(): () => void {
   if (++watchers === 1) {
@@ -53,30 +53,30 @@ export function watchPve(): () => void {
   };
 }
 
-/** Die Maschine, zu der ein Host gehört, soweit ihr Stand bekannt ist. */
+/** The machine a host belongs to, as far as its state is known. */
 export function guestOf(host: Host): ProxmoxGuest | undefined {
   const link = host.proxmox;
   return link ? states[link.connection]?.overview?.guests.find((guest) => guest.node === link.node && guest.vmid === link.vmid) : undefined;
 }
 
-/** Der Host ist verknüpft, die Maschine gibt es in Proxmox aber nicht mehr. */
+/** The host is linked, but the machine no longer exists in Proxmox. */
 export const guestGone = (host: Host): boolean => !!host.proxmox && !!states[host.proxmox.connection]?.overview && !guestOf(host);
 
-/** Womit sich Glowport an einer Maschine anmeldet: Benutzer, dazu ein Schlüssel oder eine Identität aus dem Tresor. */
+/** What Glowport signs in to a machine with: user, plus a key or an identity from the vault. */
 export interface GuestLogin {
   user?: string;
-  /** Kennung und Name des Schlüssels, den Cloud-Init für die Maschine hinterlegt hat. */
+  /** ID and name of the key Cloud-Init stored for the machine. */
   key?: string;
   keyName?: string;
-  /** Kennung und Name der Identität, die die Verbindung für ihre Maschinen vorgibt. */
+  /** ID and name of the identity the connection sets for its machines. */
   identity?: string;
   identityName?: string;
 }
 
 /**
- * Nennt Cloud-Init einen Schlüssel aus dem Tresor, gilt Cloud-Init (Benutzer und Schlüssel). Sonst gilt die
- * Identität der Verbindung als Ganzes, und ohne sie nur der Benutzer, den Proxmox nennt. Dieselbe Regel wendet
- * der Kern beim Anlegen von Hosts an (`add_proxmox_hosts`).
+ * If Cloud-Init names a key from the vault, Cloud-Init applies (user and key). Otherwise the
+ * connection's identity applies as a whole, and without it only the user Proxmox names. The core applies
+ * the same rule when creating hosts (`add_proxmox_hosts`).
  */
 export function loginOf(connection: ProxmoxConnection, guest: ProxmoxGuest): GuestLogin {
   if (guest.key) return { user: guest.user, key: guest.key, keyName: guest.keyName };
@@ -86,11 +86,11 @@ export function loginOf(connection: ProxmoxConnection, guest: ProxmoxGuest): Gue
 
 export type Power = 'start' | 'shutdown' | 'stop' | 'reboot';
 
-/** Maschinen, die gerade geschaltet werden, als `Verbindung/Nummer`. Die Seite „Proxmox“ und die Hosts sehen denselben Stand. */
+/** Machines currently being switched, as `connection/number`. The Proxmox page and the hosts see the same state. */
 const switching = $state<Record<string, boolean>>({});
 export const isSwitching = (connection: string, vmid: number): boolean => !!switching[`${connection}/${vmid}`];
 
-/** Schaltet eine Maschine und sagt, wie es ausging. Kehrt zurück, wenn Proxmox den Auftrag ausgeführt hat. */
+/** Switches a machine and says how it went. Returns when Proxmox has carried out the task. */
 export async function powerGuest(connection: string, guest: Pick<ProxmoxGuest, 'node' | 'vmid' | 'kind' | 'name'>, action: Power): Promise<boolean> {
   const key = `${connection}/${guest.vmid}`;
   switching[key] = true;
@@ -107,18 +107,18 @@ export async function powerGuest(connection: string, guest: Pick<ProxmoxGuest, '
   return done;
 }
 
-/** Hosts, die auf ihre eben gestartete Maschine warten. */
+/** Hosts waiting for their machine that was just started. */
 const waiting = $state<Record<string, boolean>>({});
 export const isWaiting = (host: string): boolean => !!waiting[host];
-/** Bricht das Warten ab; die Maschine läuft weiter. */
+/** Cancels waiting; the machine keeps running. */
 export const stopWaiting = (host: string) => void delete waiting[host];
 
-/** So lange wartet „Starten und verbinden“ darauf, dass die Maschine Verbindungen annimmt. */
+/** This long “Start and connect” waits for the machine to accept connections. */
 const BOOT_PATIENCE = 120_000;
 
 /**
- * Startet die Maschine eines Hosts und verbindet, sobald sie Verbindungen annimmt. Beim Warten wird nachgelesen;
- * so bekommt ein Host ohne feste Adresse die, die seine Maschine nach dem Start meldet.
+ * Starts a host's machine and connects as soon as it accepts connections. While waiting it re-reads;
+ * that way a host without a fixed address gets the one its machine reports after starting.
  */
 export async function startAndConnect(host: Host) {
   const link = host.proxmox;
@@ -132,7 +132,7 @@ export async function startAndConnect(host: Host) {
     if (await proxmoxReachable(host.id).catch(() => false)) break;
     await new Promise((ok) => setTimeout(ok, 2000));
   }
-  // Abgebrochen: nicht verbinden. Nach Ablauf der Zeit schon; der Tab sagt dann, woran es liegt.
+  // Cancelled: do not connect. After the time runs out, yes; the tab then says what the cause is.
   if (!waiting[host.id]) return;
   delete waiting[host.id];
   if (hostById(host.id)) openTab({ kind: 'host', id: host.id });

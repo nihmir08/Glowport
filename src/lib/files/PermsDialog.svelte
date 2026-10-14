@@ -8,7 +8,7 @@
   import Dialog from '../ui/Dialog.svelte';
   import TextField from '../ui/TextField.svelte';
 
-  /** Rechte und Besitzer eines oder mehrerer Einträge ändern, auf Wunsch samt allem darunter. */
+  /** Change permissions and owner of one or more entries, on request including everything below. */
   const request = fileUi.perms!;
   const { browser, entries } = request;
   const first = entries[0];

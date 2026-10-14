@@ -10,7 +10,7 @@
   import Icon from '../ui/Icon.svelte';
   import TextField from '../ui/TextField.svelte';
 
-  /** Anlegen und Bearbeiten eines Snippets. Ein Makro lässt sich umbenennen, einordnen und mit einem Kürzel versehen; seine Tasten bleiben, wie sie aufgezeichnet wurden. */
+  /** Creating and editing a snippet. A macro can be renamed, filed and given a shortcut; its keys stay as they were recorded. */
   let {
     snippet,
     onclose,
@@ -19,7 +19,7 @@
     onrun,
   }: { snippet: Snippet | null; onclose: () => void; onsaved: (id: string) => void; ondelete?: (snippet: Snippet) => void; onrun?: (snippet: Snippet) => void } = $props();
 
-  // Der Editor wird je Snippet neu erzeugt ({#key}); die Startwerte werden bewusst nur einmal gelesen.
+  // The editor is created anew per snippet ({#key}); the initial values are deliberately read only once.
   const start = (() => snippet)();
   const macro = start?.kind === 'macro';
 
@@ -27,7 +27,7 @@
   let pack = $state(start?.package ?? '');
   let command = $state(start?.command ?? '');
   let hotkey = $state(start?.hotkey ?? '');
-  /** Wartet das Feld „Tastenkürzel“ gerade auf einen Tastendruck? */
+  /** Is the “Shortcut” field currently waiting for a key press? */
   let listening = $state(false);
   let hotkeyNote = $state('');
   let busy = $state(false);
@@ -37,13 +37,13 @@
   const packs = $derived([...new Set(vault.snippets.map((s) => s.package).filter(Boolean))].sort((a, b) => a.localeCompare(b)));
   const changed = $derived(name !== (start?.name ?? '') || pack !== (start?.package ?? '') || command !== (start?.command ?? '') || hotkey !== (start?.hotkey ?? ''));
 
-  /** Nimmt den nächsten Tastendruck als Kürzel. Esc bricht ab, ohne etwas zu ändern. */
+  /** Takes the next key press as the shortcut. Esc cancels without changing anything. */
   function capture(event: KeyboardEvent) {
     if (!listening) return;
     event.preventDefault();
     event.stopPropagation();
     if (event.key === 'Escape') return void (listening = false);
-    // Strg, Alt und Umschalt allein sind noch kein Kürzel.
+    // Ctrl, Alt and Shift alone are not a shortcut yet.
     if (['Control', 'Alt', 'Shift', 'Meta', 'AltGraph'].includes(event.key)) return;
     const pressed = hotkeyOf(event);
     const problem = pressed ? hotkeyProblem(pressed) : 'invalid';

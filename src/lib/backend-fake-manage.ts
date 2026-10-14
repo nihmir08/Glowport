@@ -1,4 +1,4 @@
-// Beispieldaten für die Verwaltung in der Seitenleiste (Docker, Dienste, Prozesse), nur für die Vorschau im Browser.
+// Sample data for management in the sidebar (Docker, services, processes), only for the browser preview.
 import type { DockerContainer, Listed, ManageAbilities, ManageDone, ProcessInfo, ProcessSample, ServiceUnit } from './types';
 
 const fail = (code: string, message = ''): never => {
@@ -9,7 +9,7 @@ const id = (seed: string) => seed.repeat(64).slice(0, 64);
 const MIB = 1024 * 1024;
 const GIB = 1024 * MIB;
 
-/** Je Sitzung ein eigener Stand, damit Starten und Stoppen in der Vorschau etwas bewirken. */
+/** A state of its own per session, so starting and stopping have an effect in the preview. */
 const containers = new Map<number, DockerContainer[]>();
 const started = Date.now();
 
@@ -87,7 +87,7 @@ function sample(): ProcessSample {
     command,
     memory: memory * MIB,
     elapsed: Math.round(elapsed + seconds),
-    // Verbrauchte Rechenzeit: eine Grundlast mit etwas Bewegung, damit die Anzeige lebt.
+    // CPU time used: a base load with some movement, so the display looks alive.
     ticks: Math.round((elapsed + seconds) * load * (1 + Math.sin(seconds / 4 + pid) * 0.15)),
     kernel: command.startsWith('['),
   }));
@@ -110,7 +110,7 @@ export const fakeManage = {
   serviceList: async (session: number): Promise<Listed<ServiceUnit[]>> => ({ state: 'ok', items: structuredClone(servicesOf(session)), sudo: false }),
   serviceAction: async (session: number, unit: string, action: 'start' | 'stop' | 'restart' | 'enable' | 'disable'): Promise<ManageDone> => {
     const entry = servicesOf(session).find((s) => s.unit === unit) ?? fail('manage_failed', `Failed to ${action} ${unit}: Unit ${unit} not found.`);
-    // Ohne root und ohne sudo ohne Passwort: Der Befehl geht ins Terminal.
+    // Without root and without passwordless sudo: the command goes to the terminal.
     if (session % 2 === 0) return { outcome: 'password', command: `sudo systemctl ${action} '${unit}'` };
     if (action === 'enable') entry.enabled = 'enabled';
     else if (action === 'disable') entry.enabled = 'disabled';

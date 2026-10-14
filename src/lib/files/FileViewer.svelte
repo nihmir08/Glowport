@@ -12,7 +12,7 @@
   import Icon from '../ui/Icon.svelte';
   import { createEditor, languageName, type EditorHandle } from './editor';
 
-  /** Eine Datei ansehen oder bearbeiten: Text im eingebauten Editor, Bilder als Bild. Gespeichert wird zurück an den Ort, von dem sie kam. */
+  /** View or edit a file: text in the built-in editor, images as images. Saved back to the location it came from. */
   const { place, entry, browser } = fileUi.viewer!;
   let edit = $state(fileUi.viewer!.edit);
 
@@ -27,7 +27,7 @@
 
   const where = $derived(place.kind === 'session' ? (panes.find((p) => p.sessionId === place.id) ? paneTitle(panes.find((p) => p.sessionId === place.id)!) : '') : placeName(place));
   const language = languageName(entry.name, entry.path);
-  /** Speichern würde die Datei beschädigen: nur der Anfang geladen oder kein UTF-8. Dann bleibt es beim Ansehen. */
+  /** Saving would damage the file: only the beginning loaded or not UTF-8. Then it stays read-only. */
   const locked = $derived(content?.kind === 'text' && !content.editable);
 
   async function load() {
@@ -46,7 +46,7 @@
     };
   });
 
-  // Der Editor entsteht, sobald Text da ist, und neu, wenn zwischen Ansehen und Bearbeiten gewechselt wird.
+  // The editor is created as soon as text is there, and anew when switching between viewing and editing.
   $effect(() => {
     const text = content?.kind === 'text' ? content.text : null;
     const readOnly = !edit || locked;
@@ -92,7 +92,7 @@
 
   function keydown(event: KeyboardEvent) {
     if (event.key !== 'Escape' || leaving) return;
-    // Esc schließt zuerst die Suche des Editors; erst ohne sie das Fenster.
+    // Esc first closes the editor's search; only without it the window.
     if ((event.target as HTMLElement).closest?.('.cm-search')) return;
     event.preventDefault();
     close();

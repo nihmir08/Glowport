@@ -16,25 +16,25 @@
 
   const key = (guest: { node: string; vmid: number }) => `${guest.node}/${guest.vmid}`;
 
-  // Nachgelesen wird nur, solange diese Seite offen ist.
+  // Re-read only while this page is open.
   $effect(() => watchPve());
 
-  // ── Verbindung anlegen und bearbeiten ────────────────────────────────────────────────────────────────
+  // ── Create and edit a connection ────────────────────────────────────────────────────────────────
   let editing = $state<{ id?: string } | null>(null);
   let name = $state('');
   let address = $state('');
   let tokenId = $state('');
   let secret = $state('');
-  /** Kennung der Identität für die Maschinen dieser Verbindung; leer = keine. */
+  /** ID of the identity for this connection's machines; empty = none. */
   let identity = $state('');
   let probe = $state<ProxmoxProbe | null>(null);
-  /** Den Fingerabdruck eines selbst erstellten Zertifikats bestätigt der Nutzer ausdrücklich. */
+  /** The user explicitly confirms a self-signed certificate's fingerprint. */
   let confirmed = $state(false);
   let probing = $state(false);
   let saving = $state(false);
   let error = $state('');
   let removing = $state<ProxmoxConnection | null>(null);
-  /** Der Fingerabdruck, den die bearbeitete Verbindung schon kennt: Zeigt der Server noch dasselbe Zertifikat, fragt Glowport nicht erneut. */
+  /** The fingerprint the edited connection already knows: if the server still shows the same certificate, Glowport does not ask again. */
   let known = $state<{ address: string; fingerprint?: string; tokenId: string } | null>(null);
   const tidy = (text: string) => text.trim().replace(/\/+$/, '');
 
@@ -50,21 +50,21 @@
     confirmed = false;
     error = '';
   }
-  // Andere Angaben sind eine andere Verbindung: Was die Prüfung ergab, gilt nicht mehr.
+  // Other details are another connection: what the check found no longer applies.
   $effect(() => {
     void [address, tokenId, secret];
     probe = null;
     confirmed = false;
   });
-  /** Der Fingerabdruck, mit dem geprüft und gespeichert wird: der eben bestätigte, sonst der schon bekannte. */
+  /** The fingerprint used for checking and saving: the one just confirmed, otherwise the one already known. */
   const pinned = () => (probe ? (probe.trusted ? undefined : confirmed ? probe.fingerprint : undefined) : known?.address === tidy(address) ? known.fingerprint : undefined);
   const input = () => ({ id: editing?.id, name, address, tokenId, secret: secret || undefined, fingerprint: pinned(), identity: identity || undefined });
   const filled = $derived(name.trim() !== '' && address.trim() !== '' && tokenId.trim() !== '' && (secret !== '' || !!editing?.id));
-  /** Geprüft ist erst, wenn Proxmox mit dem Token geantwortet hat. Davor steht bei einem selbst erstellten Zertifikat nur der Fingerabdruck da. */
+  /** Checked only once Proxmox has answered with the token. Before that, with a self-signed certificate only the fingerprint is shown. */
   const proven = $derived(!!probe?.version);
-  /** Das Zertifikat ist das, das für diese Verbindung schon bestätigt ist: kein Grund, noch einmal danach zu fragen. */
+  /** The certificate is the one already confirmed for this connection: no reason to ask about it again. */
   const settled = $derived(proven && !!probe && probe.fingerprint === known?.fingerprint && known?.address === tidy(address));
-  /** An Adresse und Token der bearbeiteten Verbindung ist nichts geändert: Name und Identität lassen sich ohne neue Prüfung speichern. */
+  /** Nothing changed about the edited connection's address and token: name and identity can be saved without a new check. */
   const untouched = $derived(!!editing?.id && !!known && known.address === tidy(address) && known.tokenId === tokenId.trim() && secret === '');
   const ready = $derived(filled && (proven || untouched) && !saving);
 
@@ -74,7 +74,7 @@
     try {
       const found = await proxmoxProbe(input());
       probe = found;
-      // Mit dem bestätigten Fingerabdruck geprüft: Der Haken bleibt, damit genau dieser gespeichert wird.
+      // Checked with the confirmed fingerprint: the tick stays, so exactly this one is saved.
       confirmed = !found.trusted && !!found.version;
     } catch (e) {
       error = errorText(e);
@@ -122,7 +122,7 @@
     if (pending) await power(pending.connection, pending.guest, pending.action);
   }
 
-  /** Verbindet zum Host der Maschine; ohne Host direkt zu ihrer Adresse, mit dem Schlüssel aus Cloud-Init oder der Identität der Verbindung. */
+  /** Connects to the machine's host; without a host directly to its address, with the key from Cloud-Init or the connection's identity. */
   function connect(connection: ProxmoxConnection, guest: ProxmoxGuest) {
     if (guest.host && hostById(guest.host)) return openTab({ kind: 'host', id: guest.host });
     if (!guest.address) return;
@@ -130,12 +130,12 @@
     openTab({ kind: 'direct', user: login.user ?? 'root', host: guest.address, port: 22, identity: login.identity, key: login.key });
   }
 
-  // ── Als Hosts anlegen ────────────────────────────────────────────────────────────────────────────────
+  // ── Create as hosts ────────────────────────────────────────────────────────────────────────────────
   let importing = $state<ProxmoxConnection | null>(null);
   let picked = $state<Record<string, boolean>>({});
   let group = $state('');
   const candidates = $derived(importing ? (pveOf(importing.id)?.overview?.guests ?? []).filter((guest) => !guest.host) : []);
-  /** Die Hosts liegen im persönlichen Tresor, wie die Verbindung; also auch ihre Gruppe. */
+  /** The hosts live in the personal vault, like the connection; so does their group. */
   const groups = $derived(vault.groups.filter((g) => sameVault(personalVault()?.id, g)));
   const chosen = $derived(candidates.filter((guest) => picked[key(guest)]));
   const fresh = (connection: ProxmoxConnection) => (pveOf(connection.id)?.overview?.guests ?? []).filter((guest) => !guest.host && !guest.template).length;
@@ -143,14 +143,14 @@
   function startImport(connection: ProxmoxConnection) {
     importing = connection;
     group = '';
-    // Vorlagen und Maschinen ohne Adresse sind nicht vorausgewählt.
+    // Templates and machines without an address are not preselected.
     picked = Object.fromEntries((pveOf(connection.id)?.overview?.guests ?? []).filter((guest) => !guest.host).map((guest) => [key(guest), !guest.template && !!guest.address]));
   }
 
   async function runImport() {
     const connection = importing;
     if (!connection || !chosen.length) return;
-    // Erst festhalten, dann den Dialog schließen: Mit ihm verschwindet die Auswahl.
+    // Record first, then close the dialog: the selection disappears with it.
     const picks = chosen.map((guest) => ({ node: guest.node, vmid: guest.vmid, kind: guest.kind }));
     const count = picks.length;
     importing = null;
@@ -229,7 +229,7 @@
             {#each overview.guests.filter((guest) => guest.node === node.node) as guest (guest.vmid)}
               {@const host = guest.host ? hostById(guest.host) : undefined}
               {@const login = loginOf(connection, guest)}
-              <!-- Gehört die Maschine zu einem Host, verbindet „Verbinden“ über ihn: Dann zählt seine Anmeldung. -->
+              <!-- If the machine belongs to a host, “Connect” connects through it: then its sign-in counts. -->
               {@const user = host ? (authFor(host.group, host.own).user?.value ?? DEFAULT_USER) : login.user}
               <div class="pve-row" class:muted={guest.status !== 'running'}>
                 <OsIcon os={guest.os ?? null} size="sm" protocol="ssh" />
@@ -301,7 +301,7 @@
       {#if !probe.trusted && !settled}
         <div class="warnbox"><Icon name="shield" size={16} /><span>{probe.changed ? t('pve.cert.changed') : t('pve.cert.text')}</span></div>
         <p class="pve-finger mono selectable">{probe.fingerprint}</p>
-        <!-- Nach der Prüfung mit dem Token steht der Haken fest: Gespeichert wird genau dieser Fingerabdruck. -->
+        <!-- After checking with the token the tick is fixed: exactly this fingerprint is saved. -->
         <label class="check"><input type="checkbox" bind:checked={confirmed} disabled={proven} />{t('pve.cert.confirm')}</label>
       {/if}
     {/if}
@@ -310,7 +310,7 @@
   {#snippet actions()}
     <Button onclick={() => (editing = null)}>{t('common.cancel')}</Button>
     {#if !proven}
-      <!-- Zweiter Schritt: Erst mit dem bestätigten Fingerabdruck geht der Token an den Server. -->
+      <!-- Second step: only with the confirmed fingerprint does the token go to the server. -->
       <Button variant={untouched ? 'default' : 'primary'} icon="refresh" disabled={!filled || probing || (!!probe && !confirmed)} onclick={check}>{probing ? t('sync.setup.probing') : probe ? t('pve.probe.token') : t('pve.probe')}</Button>
     {/if}
     {#if proven || untouched}

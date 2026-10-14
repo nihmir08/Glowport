@@ -1,9 +1,9 @@
-// Der eingebaute Editor: CodeMirror 6, in den Farben der Oberfläche. Wird erst geladen, wenn eine Datei geöffnet wird.
+// The built-in editor: CodeMirror 6, in the interface's colors. Only loaded when a file is opened.
 import type { Extension } from '@codemirror/state';
 
 export interface EditorHandle {
   text(): string;
-  /** Ersetzt den Inhalt, etwa nach „Neu laden“. */
+  /** Replaces the content, e.g. after “Reload”. */
   load(text: string): void;
   focus(): void;
   destroy(): void;
@@ -11,9 +11,9 @@ export interface EditorHandle {
 
 export interface EditorOptions {
   text: string;
-  /** Dateiname; nach ihm richtet sich die Sprache. */
+  /** File name; the language depends on it. */
   name: string;
-  /** Pfad der Datei, falls der Name allein nichts verrät (etwa `.conf` unter `/etc/nginx`). */
+  /** Path of the file, in case the name alone reveals nothing (e.g. `.conf` under `/etc/nginx`). */
   path: string;
   readOnly: boolean;
   onChange: () => void;
@@ -21,7 +21,7 @@ export interface EditorOptions {
   onCursor: (line: number, column: number) => void;
 }
 
-/** Sprache einer Datei für die Anzeige in der Fußzeile; `null` = reiner Text. */
+/** A file's language for display in the footer; `null` = plain text. */
 export function languageName(name: string, path: string): string | null {
   return pick(name, path)?.[0] ?? null;
 }
@@ -101,7 +101,7 @@ export async function createEditor(parent: HTMLElement, options: EditorOptions):
   ]);
   const { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection } = view;
 
-  // Die Farben stehen als Variablen in app.css, damit sie dunkel und hell folgen.
+  // The colors are variables in app.css, so they follow dark and light.
   const colors = language.HighlightStyle.define([
     { tag: [tags.comment, tags.meta], color: 'var(--code-comment)', fontStyle: 'italic' },
     { tag: [tags.keyword, tags.operatorKeyword, tags.modifier, tags.controlKeyword], color: 'var(--code-keyword)' },
@@ -122,7 +122,7 @@ export async function createEditor(parent: HTMLElement, options: EditorOptions):
     state: EditorState.create({
       doc: options.text,
       extensions: [
-        // Zeilenenden bleiben, wie die Datei sie hat: Eine Windows-Datei wird nicht still auf Unix-Enden umgeschrieben.
+        // Line ends stay as the file has them: a Windows file is not silently rewritten to Unix line ends.
         EditorState.lineSeparator.of(options.text.includes('\r\n') ? '\r\n' : '\n'),
         lineNumbers(),
         highlightActiveLineGutter(),
@@ -149,7 +149,7 @@ export async function createEditor(parent: HTMLElement, options: EditorOptions):
     }),
   });
 
-  // Die Sprache kommt nach; bis dahin steht der Text schon da.
+  // The language comes later; until then the text is already there.
   const found = pick(options.name, options.path);
   if (found)
     void found[1]()

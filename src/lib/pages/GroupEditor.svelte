@@ -25,14 +25,14 @@
 
   const COLORS = ['', '#FF5D6C', '#F59E0B', '#22C3A6', '#5B9DFF', '#8B5CF6'];
   const NONE = 'none';
-  /** Auswahlfelder kennen drei Zustände: geerbt (leer), ausdrücklich nichts, oder ein bestimmter Eintrag. */
+  /** Select fields know three states: inherited (empty), explicitly nothing, or a specific entry. */
   const tri = (value: string | undefined) => (value === undefined ? '' : value === '' ? NONE : value);
   const untri = (value: string) => (value === NONE ? '' : value);
-  /** Schalter kennen ebenfalls drei Zustände: geerbt (leer), ein oder aus. */
+  /** Switches also know three states: inherited (empty), on or off. */
   const flag = (value: boolean | undefined) => (value === undefined ? '' : value ? 'on' : 'off');
   const onOff = (value: boolean) => (value ? t('edit.on') : t('edit.off'));
 
-  // Der Editor wird je Gruppe neu erzeugt ({#key} in HostsPage); die Startwerte werden bewusst nur einmal gelesen.
+  // The editor is created anew per group ({#key} in HostsPage); the initial values are deliberately read only once.
   const start = (() => ({ group, parent: group ? group.parent : startParent }))();
 
   let name = $state(start.group?.name ?? '');
@@ -65,18 +65,18 @@
   let busy = $state(false);
   let error = $state('');
 
-  // Eine Gruppe kann nicht in sich selbst oder eine ihrer Untergruppen wandern; diese Ziele werden gar nicht angeboten.
+  // A group cannot move into itself or one of its subgroups; these destinations are not offered at all.
   const blocked = start.group ? descendants(start.group.id) : [];
-  // Der Tresor der Gruppe: wo sie liegt, sonst der zum Anlegen gewählte, sonst der ihrer Elterngruppe.
+  // The group's vault: where it is, otherwise the one chosen for creating, otherwise that of its parent group.
   const fixed = start.group ? (start.group.vault ?? personalVault()?.id) : targetVault();
   const home = $derived(fixed ?? groupById(parent || null)?.vault);
   const parents = $derived(vault.groups.filter((g) => !blocked.includes(g.id) && (!fixed || sameVault(fixed, g))));
-  // Was von weiter oben kommt, falls diese Gruppe selbst nichts vorgibt.
+  // What comes from further up, in case this group itself sets nothing.
   const above = $derived(inherited(parent || null));
   const moshOn = $derived(mosh ? mosh === 'on' : (above.mosh?.value ?? false));
   const predictLabel = (p: MoshPredict) => t(`edit.mosh.predict.${p}`);
   const reconnectLabel = (r: Reconnect) => (r === 'auto' ? t('edit.reconnect.auto') : t('edit.reconnect.notice'));
-  // Was gilt, wenn Benutzer und Schlüssel hier leer bleiben: die Vorgaben von weiter oben und die hier gewählte Identität.
+  // What applies if user and key stay empty here: the defaults from further up and the identity chosen here.
   const auth = $derived(authFor(parent || null, identity ? { identity: untri(identity) } : {}));
   const origin = (from: From<unknown>) => (from.identity ? { source: from.identity.name, from: t('auth.from.identity', { name: from.identity.name }) } : { source: from.group?.name ?? null });
   const aboveIdentity = $derived(above.identity && { value: identityById(above.identity.value)?.name ?? t('detail.identity.none'), source: above.identity.source.name });
@@ -93,13 +93,13 @@
     if (path) keyFile = path;
   }
 
-  /** Ein Schlüssel aus dem Tresor ersetzt die Schlüsseldatei: Das Feld für die Datei wird dabei geleert. */
+  /** A key from the vault replaces the key file: the file field is cleared in the process. */
   function useVaultKey(id: string) {
     key = id;
     keyFile = '';
   }
 
-  // Ein Schlüssel, der ins Fenster gezogen wird, während dieser Editor offen ist, ist gleich ausgewählt.
+  // A key dragged into the window while this editor is open is selected right away.
   onMount(() => takeKeys((id) => (key = id)));
 
   async function save(event: SubmitEvent) {
@@ -119,7 +119,7 @@
     if (env.trim()) defs.env = env.trim();
     if (agent) defs.agent = agent === 'on';
     if (agentForward) defs.agentForward = agentForward === 'on';
-    // Beim Proxy heißt „Keiner“ ausdrücklich keiner; ein eingetippter Wert wird gespeichert, wie er ist.
+    // For the proxy “None” explicitly means none; a typed value is saved as it is.
     if (proxy) defs.proxy = untri(proxy).trim();
     for (const [text, set] of [
       [keepalive, (n: number) => (defs.keepalive = n)],

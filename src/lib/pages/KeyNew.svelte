@@ -11,12 +11,12 @@
   import Segmented from '../ui/Segmented.svelte';
   import TextField from '../ui/TextField.svelte';
 
-  /** `file`: eine schon gewählte Schlüsseldatei, etwa ins Fenster gezogen oder aus dem Feld „Schlüsseldatei“. */
+  /** `file`: a key file already chosen, e.g. dragged into the window or from the “Key file” field. */
   let { mode: startMode, file = null, onclose, onsaved }: { mode: 'generate' | 'import'; file?: KeyFile | null; onclose: () => void; onsaved: (id: string) => void } = $props();
 
   const FORMATS = { openssh: 'OpenSSH', pem: 'PEM', ppk: 'PuTTY' };
 
-  // Der Startwert wird bewusst nur einmal gelesen; danach schaltet der Nutzer selbst um.
+  // The initial value is deliberately read only once; after that the user switches themselves.
   const start = (() => ({ mode: startMode, file }))();
   const baseName = (path: string) => path.split(/[\\/]/).pop() ?? '';
 
@@ -35,7 +35,7 @@
   const text = $derived((picked?.text ?? pasted).trim());
   const typeHint = $derived(t(kind === 'ed25519' ? 'keys.new.type.ed25519' : kind === 'ecdsa' ? 'keys.new.type.ecdsa' : 'keys.new.type.rsa'));
 
-  // Sagt schon vor dem Importieren, was in der Datei steckt und ob sie eine Passphrase braucht.
+  // Says even before importing what is in the file and whether it needs a passphrase.
   $effect(() => {
     const current = text;
     info = null;
