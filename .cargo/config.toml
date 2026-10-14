@@ -1,4 +1,4 @@
-# Die C-Laufzeit fest einbauen: Sonst braucht Glowport das „Visual C++ Redistributable“ (VCRUNTIME140.dll),
-# das auf einem frischen Windows fehlen kann. Dann startet das Programm gar nicht erst.
+# Link the C runtime statically: otherwise Glowport needs the "Visual C++ Redistributable" (VCRUNTIME140.dll),
+# which can be missing on a fresh Windows. The program would then not even start.
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]

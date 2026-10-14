@@ -1,8 +1,8 @@
-//! Inhalt der Datensätze: Hosts, Gruppen, bekannte Hosts, Schlüssel, Identitäten und Arbeitsbereiche. Aufbau siehe `docs/tresor.md`,
-//! Abschnitt „Datensätze“.
+//! Content of the records: hosts, groups, known hosts, keys, identities and workspaces. Structure see `docs/vault.md`,
+//! section “Records”.
 //!
-//! Regel für alle Arten: Unbekannte Felder bleiben erhalten (`extra`), damit eine ältere Programmversion
-//! nichts wegwirft, was eine neuere gespeichert hat.
+//! Rule for all kinds: unknown fields are kept (`extra`), so an older version of the program
+//! throws away nothing a newer one saved.
 
 use std::fmt;
 
@@ -10,7 +10,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::{Map, Value};
 use zeroize::Zeroize;
 
-/// Geheimnis, das nie in Protokollen landet und beim Freigeben überschrieben wird.
+/// Secret that never ends up in logs and is overwritten when dropped.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Secret(String);
@@ -43,7 +43,7 @@ pub enum Reconnect {
     Auto,
 }
 
-/// Vererbbare Werte. `None` heißt: hier nicht festgelegt, der Wert kommt von weiter oben.
+/// Inheritable values. `None` means: not set here, the value comes from further up.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Fields {
@@ -51,72 +51,72 @@ pub struct Fields {
     pub user: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
-    /// Kennung des Sprung-Servers. Leer bedeutet „ausdrücklich keiner“ und überschreibt eine geerbte Vorgabe.
+    /// ID of the jump host. Empty means “explicitly none” and overrides an inherited default.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub jump: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub startcmd: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reconnect: Option<Reconnect>,
-    /// Pfad einer Schlüsseldatei auf diesem Rechner, für Schlüssel, die nicht im Tresor liegen sollen.
+    /// Path of a key file on this machine, for keys that should not live in the vault.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key_file: Option<String>,
-    /// Kennung einer Identität. Leer bedeutet „ausdrücklich keine“.
+    /// ID of an identity. Empty means “explicitly none”.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity: Option<String>,
-    /// Kennung eines Schlüssels im Tresor. Leer bedeutet „ausdrücklich keiner“.
+    /// ID of a key in the vault. Empty means “explicitly none”.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
-    /// Umgebungsvariablen für die Shell in der Schreibweise von `SetEnv`: `NAME=wert`, mehrere durch Leerzeichen
-    /// getrennt, Werte mit Leerzeichen in Anführungszeichen. Siehe [`parse_env`].
+    /// Environment variables for the shell in `SetEnv` notation: `NAME=value`, several separated by spaces,
+    /// values with spaces in quotes. See [`parse_env`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub env: Option<String>,
-    /// Schlüssel aus einem SSH-Agenten dieses Rechners für die Anmeldung anbieten.
+    /// Offer keys from an SSH agent on this machine for signing in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<bool>,
-    /// Den Agenten an den Server weiterreichen. Wirkt nur zusammen mit `agent`.
+    /// Forward the agent to the server. Only has an effect together with `agent`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_forward: Option<bool>,
-    /// Proxy als `http://adresse:port` oder `socks5://adresse:port`, wahlweise mit `benutzer@` davor. Leer bedeutet
-    /// „ausdrücklich keiner“. Das Passwort dazu steht nicht hier, sondern als Geheimnis am Host oder an der Gruppe.
+    /// Proxy as `http://address:port` or `socks5://address:port`, optionally with `user@` in front. Empty means
+    /// “explicitly none”. The password for it is not here but stored as a secret on the host or group.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy: Option<String>,
-    /// Abstand der Lebenszeichen in Sekunden; 0 schaltet sie ab.
+    /// Keepalive interval in seconds; 0 switches it off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keepalive: Option<u16>,
-    /// Sekunden, die auf das Zustandekommen der Verbindung gewartet wird.
+    /// Seconds to wait for the connection to be established.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout: Option<u16>,
-    /// Terminal-Typ, den die Shell als `TERM` sieht.
+    /// Terminal type the shell sees as `TERM`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub term: Option<String>,
-    /// Zeichensatz des Servers, einer aus [`CHARSETS`].
+    /// The server's character set, one of [`CHARSETS`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub charset: Option<String>,
-    /// Auch Verfahren anbieten, die heute als schwach gelten, für alte Geräte.
+    /// Also offer algorithms considered weak today, for old devices.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub legacy: Option<bool>,
-    /// Kennung eines Farbschemas für das Terminal. Die Schemata selbst kennt nur die Oberfläche.
+    /// ID of a terminal color scheme. Only the interface knows the schemes themselves.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scheme: Option<String>,
-    /// Das Terminal über Mosh führen; angemeldet wird weiter per SSH.
+    /// Run the terminal over Mosh; signing in still happens over SSH.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mosh: Option<bool>,
-    /// Lokales Echo von Mosh, einer aus [`MOSH_PREDICT`].
+    /// Mosh's local echo, one of [`MOSH_PREDICT`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mosh_predict: Option<String>,
-    /// UDP-Port oder Bereich für `mosh-server`, siehe [`valid_mosh_port`].
+    /// UDP port or range for `mosh-server`, see [`valid_mosh_port`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mosh_port: Option<String>,
-    /// Pfad zu `mosh-server` auf dem Server, siehe [`valid_mosh_server`].
+    /// Path to `mosh-server` on the server, see [`valid_mosh_server`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mosh_server: Option<String>,
 }
 
-/// Einstellungen des lokalen Echos von Mosh; die erste ist die Vorgabe.
+/// Settings for Mosh's local echo; the first one is the default.
 pub const MOSH_PREDICT: [&str; 3] = ["adaptive", "always", "never"];
 
-/// UDP-Port oder Bereich für `mosh-server -p`: `60001` oder `60001:60010`, aufsteigend, ohne Port 0.
+/// UDP port or range for `mosh-server -p`: `60001` or `60001:60010`, ascending, without port 0.
 pub fn valid_mosh_port(text: &str) -> bool {
     let port = |part: &str| part.len() <= 5 && part.chars().all(|c| c.is_ascii_digit()) && part.parse::<u16>().is_ok_and(|p| p > 0);
     match text.split_once(':') {
@@ -125,8 +125,8 @@ pub fn valid_mosh_port(text: &str) -> bool {
     }
 }
 
-/// Pfad zu `mosh-server`. Er kommt unverändert in einen Befehl auf dem Server: keine Leerzeichen und nichts, was die
-/// Shell dort deuten würde (außer `~` für das Heimatverzeichnis).
+/// Path to `mosh-server`. It goes unchanged into a command on the server: no spaces and nothing the
+/// shell there would interpret (except `~` for the home directory).
 pub fn valid_mosh_server(text: &str) -> bool {
     !text.is_empty() && text.chars().count() <= 200 && text.chars().all(|c| !c.is_whitespace() && !c.is_control() && !r#";&|`$<>()'"\*?!{}[]#="#.contains(c))
 }
@@ -135,7 +135,7 @@ pub const DEFAULT_KEEPALIVE: u16 = 30;
 pub const DEFAULT_TIMEOUT: u16 = 15;
 pub const DEFAULT_TERM: &str = "xterm-256color";
 pub const DEFAULT_CHARSET: &str = "utf-8";
-/// Zeichensätze, die zur Wahl stehen. Der erste ist die Vorgabe und braucht keine Umwandlung.
+/// Character sets to choose from. The first is the default and needs no conversion.
 pub const CHARSETS: [&str; 12] = ["utf-8", "iso-8859-1", "iso-8859-15", "windows-1252", "windows-1250", "windows-1251", "koi8-r", "ibm866", "gbk", "big5", "shift_jis", "euc-kr"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -149,13 +149,13 @@ pub struct ProxySpec {
     pub kind: ProxyKind,
     pub host: String,
     pub port: u16,
-    /// Benutzer für die Anmeldung am Proxy.
+    /// User for signing in to the proxy.
     pub user: Option<String>,
 }
 
-/// Liest `http://adresse:port` oder `socks5://adresse:port`, wahlweise mit `benutzer@` vor der Adresse. Ohne Port
-/// gilt 8080 bzw. 1080; IPv6-Adressen stehen in eckigen Klammern. Ein Passwort in der Adresse (`benutzer:passwort@…`)
-/// wird abgelehnt: Vererbbare Werte gehen bis zur Oberfläche, Passwörter nicht.
+/// Reads `http://address:port` or `socks5://address:port`, optionally with `user@` before the address. Without a port
+/// 8080 or 1080 applies; IPv6 addresses are in square brackets. A password in the address (`user:password@…`)
+/// is rejected: inheritable values travel to the interface, passwords do not.
 pub fn parse_proxy(text: &str) -> Option<ProxySpec> {
     let (scheme, rest) = text.trim().split_once("://")?;
     let (kind, default_port) = match scheme.to_ascii_lowercase().as_str() {
@@ -189,8 +189,8 @@ pub fn parse_proxy(text: &str) -> Option<ProxySpec> {
     safe.then(|| ProxySpec { kind, host: host.to_string(), port, user: user.map(str::to_string) })
 }
 
-/// Zerlegt Umgebungsvariablen in der Schreibweise von `SetEnv`. `None`, wenn ein Teil kein `NAME=wert` ist,
-/// ein Name ungültige Zeichen hat oder ein Anführungszeichen offen bleibt.
+/// Splits environment variables in `SetEnv` notation. `None` if a part is not `NAME=value`,
+/// a name has invalid characters or a quote stays open.
 pub fn parse_env(text: &str) -> Option<Vec<(String, String)>> {
     let mut pairs = Vec::new();
     let mut rest = text.trim_start();
@@ -201,7 +201,7 @@ pub fn parse_env(text: &str) -> Option<Vec<(String, String)>> {
             return None;
         }
         let (value, tail) = match after.strip_prefix('"') {
-            // Nach dem schließenden Anführungszeichen muss ein Leerzeichen oder das Ende kommen.
+            // After the closing quote there must be a space or the end.
             Some(quoted) => quoted.split_once('"').filter(|(_, tail)| tail.is_empty() || tail.starts_with(char::is_whitespace))?,
             None => after.split_once(char::is_whitespace).unwrap_or((after, "")),
         };
@@ -222,30 +222,30 @@ fn ssh() -> String {
     "ssh".into()
 }
 
-/// Protokolle, mit denen ein Host angesprochen wird. Steht an einem Host etwas anderes, hat es eine neuere
-/// Programmversion gespeichert; dann bleibt es stehen, verbinden lässt sich damit aber nicht.
+/// Protocols a host is reached with. If a host carries something else, a newer version of the program
+/// saved it; it then stays, but cannot be connected to.
 pub const PROTOCOL_SSH: &str = "ssh";
 pub const PROTOCOL_TELNET: &str = "telnet";
 pub const PROTOCOL_SERIAL: &str = "serial";
-/// Kein Terminal: Ein FTP-Host öffnet sich im Dateimanager.
+/// No terminal: an FTP host opens in the file manager.
 pub const PROTOCOL_FTP: &str = "ftp";
 pub const PROTOCOLS: [&str; 4] = [PROTOCOL_SSH, PROTOCOL_TELNET, PROTOCOL_SERIAL, PROTOCOL_FTP];
 
 pub const DEFAULT_TELNET_PORT: u16 = 23;
 pub const DEFAULT_FTP_PORT: u16 = 21;
-/// FTPS von Anfang an hat seinen eigenen Port.
+/// Implicit FTPS has its own port.
 pub const DEFAULT_FTPS_PORT: u16 = 990;
-/// Unter diesem Verfahren steht das bestätigte Zertifikat eines Servers bei den bekannten Hosts.
+/// Under this algorithm a server's confirmed certificate is listed with the known hosts.
 pub const ALGORITHM_TLS: &str = "tls";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FtpSecurity {
-    /// Die Verbindung beginnt offen und schaltet vor der Anmeldung auf TLS um.
+    /// The connection starts in the clear and switches to TLS before signing in.
     Explicit,
-    /// TLS von Anfang an.
+    /// TLS from the start.
     Implicit,
-    /// Unverschlüsselt: Passwort und Dateien sind auf dem Weg lesbar.
+    /// Unencrypted: password and files are readable along the way.
     None,
 }
 
@@ -254,13 +254,13 @@ pub enum FtpSecurity {
 #[serde(rename_all = "camelCase")]
 pub struct Ftp {
     pub security: FtpSecurity,
-    /// Ohne Benutzer und Passwort anmelden.
+    /// Sign in without user and password.
     #[serde(default)]
     pub anonymous: bool,
-    /// Ordner, in dem der Dateimanager beginnt.
+    /// Folder the file manager starts in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dir: Option<String>,
-    /// Die Rückfrage vor einer unverschlüsselten Verbindung ist für diesen Host abbestellt.
+    /// The question before an unencrypted connection is switched off for this host.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub plain_ok: bool,
 }
@@ -283,7 +283,7 @@ pub enum Parity {
     Even,
 }
 
-/// Flusskontrolle einer seriellen Leitung: keine, XON/XOFF oder RTS/CTS.
+/// Flow control of a serial line: none, XON/XOFF or RTS/CTS.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Flow {
@@ -292,8 +292,8 @@ pub enum Flow {
     Hardware,
 }
 
-/// Einstellungen einer seriellen Leitung. Das übliche „9600 8N1“ sind 9600 Baud, 8 Datenbits, keine Parität,
-/// 1 Stoppbit.
+/// Settings of a serial line. The usual “9600 8N1” is 9600 baud, 8 data bits, no parity,
+/// 1 stop bit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Serial {
@@ -312,7 +312,7 @@ impl Serial {
         (MIN_BAUD..=MAX_BAUD).contains(&self.baud)
     }
 
-    /// Gibt es so einen Rahmen? 5 bis 8 Datenbits, 1 oder 2 Stoppbits.
+    /// Does such a frame exist? 5 to 8 data bits, 1 or 2 stop bits.
     pub fn frame_valid(&self) -> bool {
         (5..=8).contains(&self.data_bits) && (1..=2).contains(&self.stop_bits)
     }
@@ -330,7 +330,7 @@ pub struct Group {
     pub color: Option<String>,
     #[serde(default)]
     pub defs: Fields,
-    /// Passwort für den Proxy, den diese Gruppe vorgibt.
+    /// Password for the proxy this group sets.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_password: Option<Secret>,
     #[serde(flatten)]
@@ -343,57 +343,57 @@ pub struct Host {
     #[serde(default = "one")]
     pub v: u32,
     pub name: String,
-    /// Adresse des Servers; bei einer seriellen Leitung der Name des Ports (`COM3`, `/dev/ttyUSB0`).
+    /// Address of the server; for a serial line the name of the port (`COM3`, `/dev/ttyUSB0`).
     pub address: String,
     #[serde(default)]
     pub group: Option<String>,
-    /// Eines aus [`PROTOCOLS`].
+    /// One of [`PROTOCOLS`].
     #[serde(default = "ssh")]
     pub protocol: String,
-    /// Einstellungen der Leitung; nur bei [`PROTOCOL_SERIAL`].
+    /// Settings of the line; only for [`PROTOCOL_SERIAL`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub serial: Option<Serial>,
-    /// Einstellungen für FTP; nur bei [`PROTOCOL_FTP`].
+    /// FTP settings; only for [`PROTOCOL_FTP`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ftp: Option<Ftp>,
     #[serde(default)]
     pub color: Option<String>,
-    /// Kürzel des Betriebssystems für das Symbol. Ab Meilenstein 2 wird es beim Verbinden erkannt.
+    /// Short name of the operating system for the icon. It is detected when connecting.
     #[serde(default)]
     pub os: Option<String>,
-    /// Was der Host selbst festlegt. Alles andere kommt aus dem Gruppenpfad.
+    /// What the host sets itself. Everything else comes from the group path.
     #[serde(default)]
     pub own: Fields,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub password: Option<Secret>,
-    /// Passwort für den Proxy, den dieser Host selbst festlegt.
+    /// Password for the proxy this host sets itself.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy_password: Option<Secret>,
-    /// Die Maschine in Proxmox, zu der dieser Host gehört.
+    /// The Proxmox machine this host belongs to.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxmox: Option<ProxmoxLink>,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
 
-/// Arten von Maschinen in Proxmox: eine VM oder ein Container.
+/// Kinds of Proxmox machines: a VM or a container.
 pub const GUEST_QEMU: &str = "qemu";
 pub const GUEST_LXC: &str = "lxc";
 pub const GUEST_KINDS: [&str; 2] = [GUEST_QEMU, GUEST_LXC];
 
-/// Zu welcher Maschine in Proxmox ein Host gehört (`docs/verwaltung.md`, „Hosts anlegen und aktuell halten“).
+/// Which Proxmox machine a host belongs to (`docs/management.md`, “Creating hosts and keeping them up to date”).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProxmoxLink {
-    /// Kennung der Verbindung im Tresor.
+    /// ID of the connection in the vault.
     pub connection: String,
-    /// Der Knoten, auf dem die Maschine zuletzt lag. Wiedererkannt wird sie an ihrer Nummer.
+    /// The node the machine was last on. It is recognised by its number.
     pub node: String,
     pub vmid: u32,
-    /// Eines aus [`GUEST_KINDS`].
+    /// One of [`GUEST_KINDS`].
     pub kind: String,
-    /// Name und Adresse, die Glowport dem Host zuletzt selbst gegeben hat. Nur solange der Host sie noch trägt,
-    /// zieht er nach, wenn sie sich in Proxmox ändern; was der Nutzer am Host geändert hat, bleibt.
+    /// Name and address Glowport last gave the host itself. Only while the host still carries them
+    /// does it follow when they change in Proxmox; what the user changed on the host stays.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -402,7 +402,7 @@ pub struct ProxmoxLink {
     pub extra: Map<String, Value>,
 }
 
-/// Eine Verbindung zu einem Proxmox-Server über einen API-Token. Sie liegt im persönlichen Tresor.
+/// A connection to a Proxmox server via an API token. It lives in the personal vault.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Proxmox {
@@ -411,35 +411,35 @@ pub struct Proxmox {
     pub name: String,
     /// `https://pve.example.de:8006`
     pub address: String,
-    /// Kennung des Tokens: `benutzer@realm!name`.
+    /// Token ID: `user@realm!name`.
     pub token_id: String,
-    /// Geheimnis des Tokens.
+    /// The token's secret.
     pub secret: Secret,
-    /// Der bestätigte Fingerabdruck (SHA-256) eines selbst erstellten Zertifikats, wie Proxmox ihn zeigt
-    /// (`5F:1A:…`). Fehlt er, muss das Zertifikat des Servers von sich aus anerkannt sein.
+    /// The confirmed fingerprint (SHA-256) of a self-signed certificate, as Proxmox shows it
+    /// (`5F:1A:…`). If missing, the server's certificate must be trusted on its own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fingerprint: Option<String>,
-    /// Kennung der Identität, mit der sich Glowport an den Maschinen dieser Verbindung anmeldet, wenn Cloud-Init
-    /// für eine Maschine keinen Schlüssel aus dem Tresor nennt.
+    /// ID of the identity Glowport uses to sign in to this connection's machines when Cloud-Init
+    /// names no key from the vault for a machine.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity: Option<String>,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
 
-/// Ein Server-Schlüssel, dem der Nutzer vertraut hat.
+/// A server key the user has trusted.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KnownHost {
     #[serde(default = "one")]
     pub v: u32,
-    /// Adresse, wie sie beim Verbinden benutzt wurde, in Kleinbuchstaben.
+    /// Address as used when connecting, in lower case.
     pub host: String,
     pub port: u16,
     pub algorithm: String,
-    /// Fingerabdruck wie bei OpenSSH (`SHA256:…`), nur zur Anzeige.
+    /// Fingerprint as in OpenSSH (`SHA256:…`), for display only.
     pub fingerprint: String,
-    /// Öffentlicher Schlüssel im OpenSSH-Format ohne Kommentar. An ihm wird der Server wiedererkannt.
+    /// Public key in OpenSSH format without comment. The server is recognised by it.
     pub key: String,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
@@ -460,26 +460,26 @@ pub enum KeyOrigin {
     Imported,
 }
 
-/// Benutzer-Zertifikat zu einem Schlüssel: Eine Zertifizierungsstelle bestätigt, wem er gehört. Zeiten in
-/// Sekunden seit 1970. Nichts davon ist geheim.
+/// User certificate for a key: a certificate authority confirms who it belongs to. Times in
+/// seconds since 1970. None of it is secret.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KeyCertificate {
-    /// Die Zeile im OpenSSH-Format ohne Kommentar.
+    /// The line in OpenSSH format without comment.
     pub text: String,
-    /// Name, den die Zertifizierungsstelle dem Zertifikat gegeben hat.
+    /// Name the certificate authority gave the certificate.
     pub key_id: String,
-    /// Benutzernamen, für die es gilt. Leer heißt: für jeden.
+    /// User names it applies to. Empty means: for everyone.
     pub principals: Vec<String>,
     pub valid_after: u64,
-    /// Fehlt, wenn es nicht abläuft.
+    /// Missing if it does not expire.
     #[serde(default)]
     pub valid_before: Option<u64>,
-    /// Fingerabdruck der Zertifizierungsstelle.
+    /// Fingerprint of the certificate authority.
     pub authority: String,
 }
 
-/// Ein Schlüsselpaar. Der private Teil trägt keine eigene Passphrase; ihn schützt die Verschlüsselung des Tresors.
+/// A key pair. The private part carries no passphrase of its own; the vault's encryption protects it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Key {
@@ -487,16 +487,16 @@ pub struct Key {
     pub v: u32,
     pub name: String,
     pub kind: KeyKind,
-    /// Länge in Bit: Ed25519 256, ECDSA 256/384/521, RSA wie erzeugt.
+    /// Length in bits: Ed25519 256, ECDSA 256/384/521, RSA as generated.
     pub bits: u32,
-    /// Fingerabdruck wie bei OpenSSH (`SHA256:…`), nur zur Anzeige.
+    /// Fingerprint as in OpenSSH (`SHA256:…`), for display only.
     pub fingerprint: String,
-    /// Öffentlicher Schlüssel im OpenSSH-Format ohne Kommentar.
+    /// Public key in OpenSSH format without comment.
     pub public: String,
-    /// Privater Schlüssel im OpenSSH-Format, unverschlüsselt.
+    /// Private key in OpenSSH format, unencrypted.
     pub private: Secret,
     pub origin: KeyOrigin,
-    /// Zeitpunkt des Erzeugens oder Importierens in Millisekunden seit 1970.
+    /// Time of generation or import in milliseconds since 1970.
     pub added_at: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub certificate: Option<KeyCertificate>,
@@ -504,7 +504,7 @@ pub struct Key {
     pub extra: Map<String, Value>,
 }
 
-/// Benutzer samt Schlüssel und/oder Passwort, auf die Hosts und Gruppen verweisen.
+/// User together with key and/or password, referred to by hosts and groups.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Identity {
@@ -512,7 +512,7 @@ pub struct Identity {
     pub v: u32,
     pub name: String,
     pub user: String,
-    /// Kennung eines Schlüssels im Tresor.
+    /// ID of a key in the vault.
     #[serde(default)]
     pub key: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -521,26 +521,26 @@ pub struct Identity {
     pub extra: Map<String, Value>,
 }
 
-/// Eine Zertifizierungsstelle, deren Zertifikate für Server gelten, wie `@cert-authority` in `known_hosts`.
+/// A certificate authority whose certificates apply to servers, like `@cert-authority` in `known_hosts`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Authority {
     #[serde(default = "one")]
     pub v: u32,
     pub name: String,
-    /// Adressen, für die sie gilt. Siehe [`pattern_matches`].
+    /// Addresses it applies to. See [`pattern_matches`].
     pub pattern: String,
-    /// Art des Schlüssels zum Anzeigen, etwa „Ed25519“.
+    /// Kind of key for display, e.g. “Ed25519”.
     pub label: String,
     pub fingerprint: String,
-    /// Öffentlicher Schlüssel im OpenSSH-Format ohne Kommentar.
+    /// Public key in OpenSSH format without comment.
     pub public: String,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
 
-/// Passt eine Adresse auf ein Muster? `*` steht für beliebig viele Zeichen, `?` für genau eines; mehrere Muster
-/// werden durch Komma getrennt. Groß- und Kleinschreibung zählt nicht.
+/// Does an address match a pattern? `*` stands for any number of characters, `?` for exactly one; several patterns
+/// are separated by commas. Case does not matter.
 pub fn pattern_matches(pattern: &str, host: &str) -> bool {
     fn glob(pattern: &[char], text: &[char]) -> bool {
         match pattern.split_first() {
@@ -553,7 +553,7 @@ pub fn pattern_matches(pattern: &str, host: &str) -> bool {
     pattern.split(',').map(str::trim).filter(|part| !part.is_empty()).any(|part| glob(&part.to_lowercase().chars().collect::<Vec<_>>(), &host))
 }
 
-/// Richtung, in der eine Fläche geteilt ist: `Row` legt die Teile nebeneinander, `Col` übereinander.
+/// Direction in which an area is split: `Row` puts the parts side by side, `Col` on top of each other.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Split {
@@ -561,8 +561,8 @@ pub enum Split {
     Col,
 }
 
-/// Was ein Bereich eines Arbeitsbereichs zeigt: einen gespeicherten Host oder ein lokales Terminal. `shell` ist
-/// die Kennung einer Shell dieses Rechners (`pwsh`, `wsl:Ubuntu`); welche es gibt, weiß der Tresor nicht.
+/// What a workspace pane shows: a saved host or a local terminal. `shell` is
+/// the ID of a shell on this machine (`pwsh`, `wsl:Ubuntu`); the vault does not know which ones exist.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum PaneTarget {
@@ -570,17 +570,17 @@ pub enum PaneTarget {
     Local { shell: String },
 }
 
-/// Längste Kennung einer Shell, die ein Arbeitsbereich aufnimmt.
+/// Longest shell ID a workspace accepts.
 pub const MAX_SHELL_ID: usize = 80;
 
-/// Anordnung der Bereiche eines Arbeitsbereichs: ein Baum, dessen Knoten ihre Fläche in zwei Teile schneiden.
-/// Dieselbe Form benutzt die Oberfläche für offene Tabs.
+/// Layout of a workspace's panes: a tree whose nodes cut their area in two.
+/// The interface uses the same form for open tabs.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Arrangement {
     Split {
         dir: Split,
-        /// Anteil des ersten Teils, zwischen 0 und 1.
+        /// Share of the first part, between 0 and 1.
         ratio: f64,
         a: Box<Arrangement>,
         b: Box<Arrangement>,
@@ -590,11 +590,11 @@ pub enum Arrangement {
     },
 }
 
-/// Mehr Bereiche nimmt ein Arbeitsbereich nicht auf. Schützt auch vor beliebig tiefen Bäumen aus fremden Daten.
+/// A workspace takes no more panes. Also protects against arbitrarily deep trees from foreign data.
 pub const MAX_PANES: usize = 32;
 
 impl Arrangement {
-    /// Kennungen der Hosts in der Reihenfolge ihrer Bereiche.
+    /// IDs of the hosts in the order of their panes.
     pub fn hosts(&self) -> Vec<&str> {
         match self {
             Self::Pane { pane: PaneTarget::Host { id } } => vec![id.as_str()],
@@ -603,7 +603,7 @@ impl Arrangement {
         }
     }
 
-    /// Anzahl der Bereiche, lokale Terminals eingeschlossen.
+    /// Number of panes, local terminals included.
     pub fn panes(&self) -> usize {
         match self {
             Self::Pane { .. } => 1,
@@ -611,9 +611,9 @@ impl Arrangement {
         }
     }
 
-    /// Dieselbe Anordnung nur mit den Hosts, die `keep` behält; ihr Nachbar übernimmt die frei gewordene Fläche.
-    /// Lokale Terminals bleiben, solange ihre Kennung nach einer aussieht. `None`, wenn kein Bereich übrig bleibt.
-    /// Das Verhältnis wird dabei in einen brauchbaren Bereich geholt.
+    /// The same layout with only the hosts `keep` keeps; their neighbour takes over the freed area.
+    /// Local terminals stay as long as their ID looks like one. `None` if no pane is left.
+    /// The ratio is pulled into a usable range on the way.
     pub fn retain(&self, keep: &impl Fn(&str) -> bool) -> Option<Self> {
         match self {
             Self::Pane { pane: PaneTarget::Host { id } } => keep(id).then(|| self.clone()),
@@ -632,7 +632,7 @@ pub struct Workspace {
     #[serde(default = "one")]
     pub v: u32,
     pub name: String,
-    /// Multi-Exec beim Öffnen einschalten: Eingaben gehen an alle Bereiche.
+    /// Switch on multi-exec when opening: input goes to all panes.
     #[serde(default)]
     pub multi: bool,
     pub layout: Arrangement,
@@ -640,9 +640,9 @@ pub struct Workspace {
     pub extra: Map<String, Value>,
 }
 
-/// Richtung einer Port-Regel. `Local`: Ein Port dieses Rechners führt über den Server zu einem Ziel.
-/// `Remote`: Ein Port des Servers führt zurück zu einem Ziel, das dieser Rechner erreicht.
-/// `Dynamic`: ein SOCKS-Proxy auf diesem Rechner, der über den Server ins Netz geht.
+/// Direction of a port rule. `Local`: a port on this machine leads through the server to a destination.
+/// `Remote`: a port on the server leads back to a destination this machine reaches.
+/// `Dynamic`: a SOCKS proxy on this machine that goes out to the network through the server.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ForwardKind {
@@ -651,7 +651,7 @@ pub enum ForwardKind {
     Dynamic,
 }
 
-/// Eine gespeicherte Port-Regel. Ob sie gerade läuft, steht nicht im Tresor.
+/// A saved port rule. Whether it is running is not stored in the vault.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Forward {
@@ -659,12 +659,12 @@ pub struct Forward {
     pub v: u32,
     pub name: String,
     pub kind: ForwardKind,
-    /// Kennung des Hosts, über den die Regel läuft.
+    /// ID of the host the rule runs through.
     pub host: String,
-    /// Adresse, an der gelauscht wird: auf diesem Rechner (lokal, dynamisch) oder am Server (remote).
+    /// Address to listen on: on this machine (local, dynamic) or on the server (remote).
     pub bind_address: String,
     pub bind_port: u16,
-    /// Wohin die Verbindungen gehen, vom anderen Ende aus gesehen. Bei `Dynamic` leer.
+    /// Where the connections go, as seen from the other end. Empty for `Dynamic`.
     #[serde(default)]
     pub dest_host: String,
     #[serde(default)]
@@ -676,35 +676,35 @@ pub struct Forward {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SnippetKind {
-    /// Ein Befehl, auch mehrzeilig, mit Variablen wie `{{name}}`.
+    /// A command, multi-line allowed, with variables like `{{name}}`.
     Command,
-    /// Aufgezeichnete Tasten, die so wieder getippt werden.
+    /// Recorded keys that are typed again the same way.
     Macro,
 }
 
-/// Ein Schritt eines Makros: so lange warten, dann diese Tasten schicken.
+/// One step of a macro: wait this long, then send these keys.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MacroStep {
-    /// Millisekunden seit dem vorigen Schritt.
+    /// Milliseconds since the previous step.
     pub wait: u32,
     pub keys: String,
 }
 
-// Ein Makro enthält alles, was getippt wurde, womöglich ein Passwort: Die Tasten erscheinen in keiner Ausgabe.
+// A macro contains everything that was typed, possibly a password: the keys appear in no output.
 impl fmt::Debug for MacroStep {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "MacroStep {{ wait: {}, keys: <{} Zeichen> }}", self.wait, self.keys.chars().count())
     }
 }
 
-/// Ein gespeicherter Befehl oder ein aufgezeichnetes Makro.
+/// A saved command or a recorded macro.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Snippet {
     #[serde(default = "one")]
     pub v: u32,
     pub name: String,
-    /// Name des Pakets, in dem es liegt; leer = keines.
+    /// Name of the package it lives in; empty = none.
     #[serde(default)]
     pub package: String,
     pub kind: SnippetKind,
@@ -712,19 +712,19 @@ pub struct Snippet {
     pub command: String,
     #[serde(default)]
     pub steps: Vec<MacroStep>,
-    /// Tastenkürzel in fester Schreibweise, etwa „Ctrl+Alt+R“. Siehe [`valid_hotkey`].
+    /// Hotkey in fixed notation, e.g. “Ctrl+Alt+R”. See [`valid_hotkey`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hotkey: Option<String>,
     #[serde(flatten)]
     pub extra: Map<String, Value>,
 }
 
-/// Kürzel, die Glowport oder Windows selbst benutzen. Dieselbe Liste führt die Oberfläche (`snippets.ts`).
+/// Shortcuts Glowport or Windows use themselves. The interface keeps the same list (`snippets.ts`).
 const RESERVED_HOTKEYS: [&str; 9] = ["Ctrl+Shift+W", "Ctrl+Shift+D", "Ctrl+Shift+E", "Ctrl+Shift+M", "Ctrl+Shift+F", "Ctrl+Shift+C", "Ctrl+Shift+V", "Ctrl+0", "Alt+F4"];
 
-/// Ob sich ein Tastenkürzel für ein Snippet vergeben lässt. Die Schreibweise ist fest: erst `Ctrl`, `Alt`, `Shift`
-/// in dieser Reihenfolge, dann ein Buchstabe, eine Ziffer oder F1 bis F12. Erlaubt ist, was der Shell nichts
-/// wegnimmt: mit Alt, mit Strg+Umschalt, oder Strg mit Ziffer oder Funktionstaste.
+/// Whether a hotkey can be assigned to a snippet. The notation is fixed: first `Ctrl`, `Alt`, `Shift`
+/// in this order, then a letter, a digit or F1 to F12. Allowed is whatever takes nothing away from the
+/// shell: with Alt, with Ctrl+Shift, or Ctrl with a digit or function key.
 pub fn valid_hotkey(hotkey: &str) -> bool {
     let mut parts: Vec<&str> = hotkey.split('+').collect();
     let Some(key) = parts.pop() else { return false };
@@ -734,7 +734,7 @@ pub fn valid_hotkey(hotkey: &str) -> bool {
     if !(letter || digit || function) {
         return false;
     }
-    // Jeder Zusatz höchstens einmal und in der festen Reihenfolge.
+    // Every modifier at most once and in the fixed order.
     let order = ["Ctrl", "Alt", "Shift"];
     let places: Option<Vec<usize>> = parts.iter().map(|part| order.iter().position(|known| known == part)).collect();
     let Some(places) = places else { return false };
@@ -745,7 +745,7 @@ pub fn valid_hotkey(hotkey: &str) -> bool {
     (alt || (ctrl && shift) || (ctrl && !letter)) && !RESERVED_HOTKEYS.contains(&hotkey)
 }
 
-/// Der Name eines geteilten Tresors. Er steht im Tresor selbst, damit der Server ihn nicht sieht.
+/// The name of a shared vault. It is stored inside the vault itself so the server does not see it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VaultLabel {
     #[serde(default = "one")]
@@ -755,8 +755,8 @@ pub struct VaultLabel {
     pub extra: Map<String, Value>,
 }
 
-/// Klartext eines Datensatzes. Die Art steht im verschlüsselten Teil.
-// Ein Datensatz lebt nur zwischen Lesen und Einsortieren; dass ein Host mehr Platz braucht als die anderen, stört nicht.
+/// Plaintext of a record. The kind is in the encrypted part.
+// A record only lives between reading and sorting; that a host needs more space than the others does not matter.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "t", rename_all = "kebab-case")]
@@ -770,15 +770,15 @@ pub enum Payload {
     Workspace(Workspace),
     Forward(Forward),
     Snippet(Snippet),
-    /// Name eines geteilten Tresors; liegt in dem Tresor, den er benennt.
+    /// Name of a shared vault; lives in the vault it names.
     VaultInfo(VaultLabel),
     Proxmox(Proxmox),
-    /// Arten, die diese Version nicht kennt. Solche Datensätze bleiben unangetastet im Tresor.
+    /// Kinds this version does not know. Such records stay untouched in the vault.
     #[serde(other)]
     Unknown,
 }
 
-/// Unterscheidet „Feld fehlt“ (nichts ändern) von „Feld ist null“ (entfernen).
+/// Tells “field missing” (change nothing) from “field is null” (remove).
 pub fn double_option<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
 where
     D: Deserializer<'de>,
@@ -787,13 +787,13 @@ where
     Option::deserialize(deserializer).map(Some)
 }
 
-/// Woher ein wirksamer Wert stammt.
+/// Where an effective value comes from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Source {
     Host,
-    /// Kennung der Gruppe.
+    /// ID of the group.
     Group(String),
-    /// Weder Host noch Gruppen legen etwas fest.
+    /// Neither host nor groups set anything.
     Default,
 }
 
@@ -803,8 +803,8 @@ pub struct Resolved<T> {
     pub source: Source,
 }
 
-/// Wirksame Werte eines Hosts nach der Vererbung. Benutzer und Schlüssel hängen zusätzlich an Identitäten
-/// und stehen deshalb in [`Auth`].
+/// Effective values of a host after inheritance. User and key also depend on identities
+/// and are therefore in [`Auth`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Effective {
     pub port: Resolved<u16>,
@@ -826,12 +826,12 @@ pub struct Effective {
     pub mosh_server: Resolved<Option<String>>,
 }
 
-/// Was gilt, wenn niemand etwas festlegt. Das Verhalten bei Abriss kommt aus den Einstellungen.
+/// What applies if nobody sets anything. The behaviour on disconnect comes from the settings.
 pub const DEFAULT_USER: &str = "root";
 pub const DEFAULT_PORT: u16 = 22;
 
-/// Berechnet die wirksamen Werte. `chain` sind die Gruppen von der Wurzel bis zur Gruppe des Hosts,
-/// jeweils mit Kennung. Tiefere Gruppen überschreiben höhere, der Host überschreibt alles.
+/// Computes the effective values. `chain` are the groups from the root to the host's group,
+/// each with its ID. Deeper groups override higher ones, the host overrides everything.
 pub fn resolve(host: &Host, chain: &[(&str, &Group)], default_reconnect: Reconnect) -> Effective {
     fn pick<T: Clone>(own: &Option<T>, chain: &[(&str, &Group)], field: impl Fn(&Fields) -> &Option<T>, default: T) -> Resolved<T> {
         if let Some(value) = own {
@@ -874,30 +874,30 @@ pub fn resolve(host: &Host, chain: &[(&str, &Group)], default_reconnect: Reconne
     }
 }
 
-/// Anmeldung nach der Vererbung. Schlüssel und Identität sind Kennungen; ob es sie noch gibt, prüft der Aufrufer.
+/// Sign-in after inheritance. Key and identity are IDs; the caller checks whether they still exist.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Auth<'a> {
-    /// Kennung der wirksamen Identität.
+    /// ID of the effective identity.
     pub identity: Option<&'a str>,
-    /// Wirksamer Benutzer; `None` heißt, niemand legt einen fest.
+    /// Effective user; `None` means nobody sets one.
     pub user: Option<&'a str>,
-    /// Kennung des Schlüssels im Tresor.
+    /// ID of the key in the vault.
     pub key: Option<&'a str>,
     pub key_file: Option<&'a str>,
 }
 
-/// Berechnet die Anmeldung. `levels` sind die vererbbaren Werte von der obersten Gruppe bis zum Host,
-/// `identity` schlägt eine Identität nach.
+/// Computes the sign-in. `levels` are the inheritable values from the topmost group to the host,
+/// `identity` looks up an identity.
 ///
-/// Was näher am Host steht, gewinnt. Auf derselben Ebene gewinnt das einzeln eingetragene Feld über die Identität.
-/// Gegenstück in der Oberfläche: `authFor` in `src/lib/data.svelte.ts`.
+/// Whatever is closer to the host wins. On the same level a field set individually wins over the identity.
+/// Counterpart in the interface: `authFor` in `src/lib/data.svelte.ts`.
 pub fn resolve_auth<'a>(levels: &[&'a Fields], identity: impl Fn(&str) -> Option<&'a Identity>) -> Auth<'a> {
     fn deepest<'a, T: ?Sized>(levels: &[&'a Fields], field: impl Fn(&'a Fields) -> Option<&'a T>) -> Option<(usize, &'a T)> {
         levels.iter().enumerate().rev().find_map(|(i, fields)| field(fields).map(|value| (i, value)))
     }
-    // Die tiefste Ebene, die eine Identität festlegt (auch „keine“), bestimmt sie.
+    // The deepest level that sets an identity (including “none”) decides it.
     let chosen = deepest(levels, |f| f.identity.as_deref()).and_then(|(at, id)| identity(id).map(|found| (at, id, found)));
-    // Ein einzeln eingetragener Wert zählt nur, wenn er nicht oberhalb der Identität steht.
+    // A value set individually only counts if it is not above the identity.
     let pick = |field: fn(&'a Fields) -> Option<&'a str>| deepest(levels, field).filter(|(i, _)| chosen.is_none_or(|(at, _, _)| *i >= at)).map(|(_, value)| value);
     let some = |text: &'a str| (!text.is_empty()).then_some(text);
     Auth {
@@ -1008,32 +1008,32 @@ mod tests {
         let user_www = Fields { user: Some("www".into()), ..Fields::default() };
         let empty = Fields::default();
 
-        // Identität oben, einzelner Benutzer tiefer: Der tiefere Wert gewinnt, der Schlüssel bleibt aus der Identität.
+        // Identity above, single user deeper: the deeper value wins, the key stays from the identity.
         let auth = resolve_auth(&[&with_identity, &user_www, &empty], find);
         assert_eq!((auth.identity, auth.user, auth.key), (Some("i1"), Some("www"), Some("k1")));
 
-        // Einzelner Benutzer oben, Identität tiefer: Die Identität überstimmt ihn.
+        // Single user above, identity deeper: the identity overrules it.
         let auth = resolve_auth(&[&user_www, &with_identity, &empty], find);
         assert_eq!((auth.user, auth.key), (Some("deploy"), Some("k1")));
 
-        // Auf derselben Ebene gewinnt das einzeln eingetragene Feld.
+        // On the same level the field set individually wins.
         let both = Fields { identity: Some("i1".into()), user: Some("admin".into()), key: Some("k2".into()), ..Fields::default() };
         let auth = resolve_auth(&[&both], find);
         assert_eq!((auth.user, auth.key), (Some("admin"), Some("k2")));
 
-        // „Ausdrücklich keine“ am Host hebt die geerbte Identität auf, „ausdrücklich keiner“ den Schlüssel.
+        // “Explicitly none” on the host cancels the inherited identity, “explicitly none” the key.
         let none = Fields { identity: Some(String::new()), ..Fields::default() };
         assert_eq!(resolve_auth(&[&with_identity, &none], find), Auth::default());
         let no_key = Fields { key: Some(String::new()), ..Fields::default() };
         let auth = resolve_auth(&[&with_identity, &no_key], find);
         assert_eq!((auth.user, auth.key), (Some("deploy"), None));
 
-        // Eine gelöschte Identität wirkt nicht mehr; die einzelnen Felder gelten wieder.
+        // A deleted identity no longer has an effect; the individual fields apply again.
         let gone = Fields { identity: Some("weg".into()), ..Fields::default() };
         let auth = resolve_auth(&[&user_www, &gone], find);
         assert_eq!((auth.identity, auth.user), (None, Some("www")));
 
-        // Schlüsseldatei: leer zählt als nicht gesetzt.
+        // Key file: empty counts as not set.
         let file = Fields { key_file: Some("C:/k".into()), ..Fields::default() };
         assert_eq!(resolve_auth(&[&file, &empty], find).key_file, Some("C:/k"));
     }
@@ -1060,7 +1060,7 @@ mod tests {
         let back: Value = serde_json::to_value(Payload::Proxmox(connection)).unwrap();
         assert_eq!((back["t"].as_str(), back["tokenId"].as_str(), back["neu"].as_u64()), (Some("proxmox"), Some("glowport@pve!glowport"), Some(1)));
 
-        // Die Verknüpfung am Host: ohne sie steht nichts im Datensatz, mit ihr bleibt auch Unbekanntes stehen.
+        // The link on the host: without it nothing is in the record, with it unknown data stays too.
         assert!(serde_json::to_value(Payload::Host(host(Fields::default()))).unwrap().get("proxmox").is_none());
         let json = r#"{"t":"host","name":"web","address":"10.0.0.1","proxmox":{"connection":"c1","node":"pve","vmid":101,"kind":"qemu","name":"web","spaeter":true}}"#;
         let Payload::Host(linked) = serde_json::from_str::<Payload>(json).unwrap() else { panic!("kein Host") };

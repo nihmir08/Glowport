@@ -1,20 +1,20 @@
-//! Zusammenführen gleichzeitiger Änderungen an einem Datensatz. Regeln: `docs/sync.md`, „Gleichzeitige Änderungen“.
+//! Merging simultaneous changes to a record. Rules: `docs/sync.md`, “Simultaneous changes”.
 //!
-//! Drei Fassungen: der gemeinsame Ausgangsstand, die eigene, die des Servers. Objekte werden Schlüssel für
-//! Schlüssel verglichen, alles andere (Listen, Texte, Zahlen) gilt als ein Feld. Der Inhalt wird nicht
-//! gedeutet; unbekannte Felder und unbekannte Arten gehen denselben Weg.
+//! Three versions: the common base, our own, the server's. Objects are compared key by
+//! key, everything else (lists, texts, numbers) counts as one field. The content is not
+//! interpreted; unknown fields and unknown kinds take the same path.
 
 use serde_json::{Map, Value};
 use zeroize::Zeroizing;
 
-/// Wessen Wert bei einem Widerspruch gilt.
+/// Whose value applies in a conflict.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
     Mine,
     Theirs,
 }
 
-/// Ein Feld, das beide Seiten verschieden geändert haben, etwa `own.port`.
+/// A field both sides changed differently, e.g. `own.port`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Clash {
     pub path: String,
@@ -23,11 +23,11 @@ pub struct Clash {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Outcome {
-    /// Das Ergebnis ist genau die Fassung des Servers; es gibt nichts zu schicken.
+    /// The result is exactly the server's version; there is nothing to send.
     Theirs,
-    /// Das Ergebnis weicht von der Fassung des Servers ab und geht als neue Revision hinaus.
+    /// The result differs from the server's version and goes out as a new revision.
     Merged(Zeroizing<Vec<u8>>),
-    /// Der Datensatz bleibt gelöscht, obwohl der Server ihn noch führt.
+    /// The record stays deleted although the server still has it.
     Deleted,
 }
 
@@ -35,7 +35,7 @@ pub enum Outcome {
 pub struct Merge {
     pub outcome: Outcome,
     pub clashes: Vec<Clash>,
-    /// Eine Seite hatte gelöscht, die andere geändert: Die Änderung hat gewonnen.
+    /// One side had deleted, the other changed: the change has won.
     pub restored: bool,
 }
 
@@ -47,7 +47,7 @@ fn join(path: &str, key: &str) -> String {
     }
 }
 
-/// Führt ein Feld zusammen. `None` heißt: Das Feld gibt es in dieser Fassung nicht.
+/// Merges one field. `None` means: the field does not exist in this version.
 fn field(base: Option<&Value>, mine: Option<&Value>, theirs: Option<&Value>, prefer: Side, path: &str, clashes: &mut Vec<Clash>) -> Option<Value> {
     if mine == theirs || mine == base {
         return theirs.cloned();
@@ -69,7 +69,7 @@ fn field(base: Option<&Value>, mine: Option<&Value>, theirs: Option<&Value>, pre
 
 fn object(base: &Map<String, Value>, mine: &Map<String, Value>, theirs: &Map<String, Value>, prefer: Side, path: &str, clashes: &mut Vec<Clash>) -> Map<String, Value> {
     let mut out = Map::new();
-    // Reihenfolge wie beim Server, eigene neue Felder dahinter: So bleibt ein unverändertes Ergebnis erkennbar.
+    // Order as on the server, own new fields after it: that keeps an unchanged result recognisable.
     for key in theirs.keys().chain(mine.keys().filter(|k| !theirs.contains_key(*k))) {
         if let Some(value) = field(base.get(key), mine.get(key), theirs.get(key), prefer, &join(path, key), clashes) {
             out.insert(key.clone(), value);
@@ -82,13 +82,13 @@ fn parse(bytes: &[u8]) -> Option<Value> {
     serde_json::from_slice(bytes).ok()
 }
 
-/// Führt drei Fassungen eines Datensatzes zusammen. `None` steht für „gelöscht“, bei `base` auch für „gab es
-/// noch nicht“. `mine_newer`: Die eigene Änderung ist die jüngere und gewinnt, wo beide dasselbe Feld ändern.
+/// Merges three versions of a record. `None` stands for “deleted”, for `base` also for “did not exist
+/// yet”. `mine_newer`: our own change is the newer one and wins where both change the same field.
 pub fn merge(base: Option<&[u8]>, mine: Option<&[u8]>, theirs: Option<&[u8]>, mine_newer: bool) -> Merge {
     let done = |outcome| Merge { outcome, clashes: Vec::new(), restored: false };
     let (mine, theirs) = match (mine, theirs) {
         (None, None) => return done(Outcome::Theirs),
-        // Löschen gegen Ändern: Die Änderung gewinnt. Hat die andere Seite nichts geändert, gilt das Löschen.
+        // Delete against change: the change wins. If the other side changed nothing, the deletion applies.
         (None, Some(theirs)) => {
             return match base {
                 Some(base) if parse(base) == parse(theirs) => done(Outcome::Deleted),
@@ -105,7 +105,7 @@ pub fn merge(base: Option<&[u8]>, mine: Option<&[u8]>, theirs: Option<&[u8]>, mi
     };
     let prefer = if mine_newer { Side::Mine } else { Side::Theirs };
     let (Some(mine_value), Some(theirs_value)) = (parse(mine), parse(theirs)) else {
-        // Kein JSON: als ein einziges Feld behandeln.
+        // Not JSON: treat as a single field.
         return match (prefer, mine == theirs) {
             (_, true) | (Side::Theirs, _) => done(Outcome::Theirs),
             (Side::Mine, _) => done(Outcome::Merged(Zeroizing::new(mine.to_vec()))),
@@ -169,7 +169,7 @@ mod tests {
 
     #[test]
     fn removed_fields_lists_and_unknown_fields() {
-        // Ein Feld entfernen ist eine Änderung; Listen gelten als Ganzes; Unbekanntes bleibt.
+        // Removing a field is a change; lists count as a whole; unknown things stay.
         let base = json!({"color": "#FE9803", "env": [["A", "1"]], "zukunft": {"x": 1}});
         let mine = json!({"env": [["A", "1"], ["B", "2"]], "zukunft": {"x": 1}});
         let theirs = json!({"color": "#FE9803", "env": [["A", "1"]], "zukunft": {"x": 1, "y": 2}});
@@ -177,7 +177,7 @@ mod tests {
         assert_eq!(value.unwrap(), json!({"env": [["A", "1"], ["B", "2"]], "zukunft": {"x": 1, "y": 2}}));
         assert!(merge.clashes.is_empty());
 
-        // Beide ändern dieselbe Liste: ein Feld, eine Seite gewinnt.
+        // Both change the same list: one field, one side wins.
         let mine = json!({"color": "#FE9803", "env": [["B", "2"]], "zukunft": {"x": 1}});
         let theirs = json!({"color": "#FE9803", "env": [["C", "3"]], "zukunft": {"x": 1}});
         let (value, merge) = run(Some(base), Some(mine), Some(theirs), true);
@@ -197,19 +197,19 @@ mod tests {
     fn change_beats_delete() {
         let base = json!({"name": "a"});
         let changed = json!({"name": "b"});
-        // Ich lösche, die anderen ändern: ihr Stand bleibt.
+        // I delete, the others change: their state stays.
         let (value, merge) = run(Some(base.clone()), None, Some(changed.clone()), true);
         assert_eq!((value, merge.restored, &merge.outcome), (Some(changed.clone()), true, &Outcome::Theirs));
-        // Ich lösche, die anderen haben nichts geändert (nur neu verschlüsselt): Es bleibt gelöscht.
+        // I delete, the others changed nothing (only re-encrypted): it stays deleted.
         let (value, merge) = run(Some(base.clone()), None, Some(base.clone()), true);
         assert_eq!((value, merge.restored, &merge.outcome), (None, false, &Outcome::Deleted));
-        // Die anderen löschen, ich ändere: Mein Stand kommt zurück.
+        // The others delete, I change: my state comes back.
         let (value, merge) = run(Some(base.clone()), Some(changed.clone()), None, false);
         assert_eq!((value, merge.restored), (Some(changed), true));
-        // Die anderen löschen, ich habe nichts geändert.
+        // The others delete, I changed nothing.
         let (value, merge) = run(Some(base.clone()), Some(base), None, false);
         assert_eq!((value, merge.restored, &merge.outcome), (None, false, &Outcome::Theirs));
-        // Beide löschen.
+        // Both delete.
         assert_eq!(run(Some(json!({})), None, None, true).1.outcome, Outcome::Theirs);
     }
 

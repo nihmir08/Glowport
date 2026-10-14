@@ -1,8 +1,8 @@
 [workspace]
 resolver = "2"
 members = ["src-tauri", "crates/core", "crates/net", "crates/extras", "crates/import", "crates/testserver", "crates/sync-proto", "crates/sync-server", "crates/sync", "crates/proxmox", "crates/ftp"]
-# Der RDP-Kern steht für sich, mit eigener Cargo.lock: IronRDP nagelt Vorabversionen der Krypto-Bibliotheken fest
-# (über `picky` und `sspi`), die sich mit denen von russh nicht in einer gemeinsamen Auflösung vertragen.
+# The RDP core stands on its own, with its own Cargo.lock: IronRDP pins pre-release versions of crypto libraries
+# (via `picky` and `sspi`) that cannot be resolved together with those of russh.
 exclude = ["crates/rdp"]
 
 [workspace.package]
@@ -15,14 +15,14 @@ lto = true
 codegen-units = 1
 strip = true
 
-# Die Schlüsselableitung wäre unoptimiert um ein Vielfaches langsamer; im Entwicklungsmodus soll sie sich wie später anfühlen.
+# Without optimisation, key derivation would be many times slower; in development it should feel like the release.
 [profile.dev.package.argon2]
 opt-level = 3
 
 [profile.dev.package.blake2]
 opt-level = 3
 
-# Dasselbe gilt für RSA: Primzahlen suchen dauert unoptimiert Minuten statt Sekunden.
+# The same goes for RSA: searching for primes takes minutes instead of seconds without optimisation.
 [profile.dev.package.rsa]
 opt-level = 3
 

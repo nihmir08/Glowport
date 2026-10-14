@@ -1,7 +1,7 @@
-//! Hosts, Gruppen, Schlüssel und Identitäten eines offenen Tresors: lesen, prüfen, ändern.
+//! Hosts, groups, keys and identities of an open vault: read, check, change.
 //!
-//! Jede Änderung wird erst geprüft, dann als Ganzes in den Tresor geschrieben und danach neu eingelesen.
-//! Der Stand im Speicher entspricht dadurch immer dem, was in der Datei steht.
+//! Every change is checked first, then written to the vault as a whole and read back afterwards.
+//! The state in memory therefore always matches what is in the file.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -17,7 +17,7 @@ use crate::{
     vault::{now_ms, Id, Kind, Vault, VaultError},
 };
 
-/// Grund, aus dem eine Eingabe abgelehnt wird. Die Oberfläche übersetzt ihn.
+/// Reason an input is rejected. The interface translates it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Invalid {
@@ -56,21 +56,21 @@ pub enum Invalid {
     HotkeyInvalid,
     HotkeyTaken,
     ProtocolInvalid,
-    /// Der Host ist Sprung-Server für andere oder trägt Port-Regeln; das geht nur mit SSH.
+    /// The host is a jump host for others or carries port rules; that only works with SSH.
     ProtocolInUse,
     SerialRequired,
     SerialInvalid,
     BaudInvalid,
-    /// Gebraucht wird ein Host, zu dem SSH führt.
+    /// A host reached via SSH is needed.
     HostNotSsh,
-    /// Ein Eintrag liegt im selben Tresor wie seine Gruppe, und ein geteilter Tresor verweist nur in sich selbst.
+    /// An entry lives in the same vault as its group, and a shared vault only refers within itself.
     OtherVault,
-    /// Die Kennung des Tokens hat nicht die Form `benutzer@realm!name`, oder im Geheimnis steht, was dort nicht hingehört.
+    /// The token ID does not have the form `user@realm!name`, or the secret contains something that does not belong there.
     TokenInvalid,
-    /// Eine neue Verbindung zu Proxmox braucht das Geheimnis ihres Tokens.
+    /// A new Proxmox connection needs its token's secret.
     SecretRequired,
     FingerprintInvalid,
-    /// Die Art der Maschine ist weder VM noch Container.
+    /// The kind of machine is neither VM nor container.
     GuestInvalid,
 }
 
@@ -93,13 +93,13 @@ pub struct HostInput {
     pub id: Option<String>,
     pub name: String,
     pub address: String,
-    /// Fehlt das Feld, bleibt das Protokoll, wie es ist; ein neuer Host bekommt SSH.
+    /// If the field is missing, the protocol stays as it is; a new host gets SSH.
     #[serde(default)]
     pub protocol: Option<String>,
-    /// Einstellungen der seriellen Leitung. Fehlen sie, bleiben sie, wie sie sind.
+    /// Serial line settings. If missing, they stay as they are.
     #[serde(default)]
     pub serial: Option<Serial>,
-    /// Einstellungen für FTP. Fehlen sie, bleiben sie, wie sie sind.
+    /// FTP settings. If missing, they stay as they are.
     #[serde(default)]
     pub ftp: Option<Ftp>,
     #[serde(default)]
@@ -110,10 +110,10 @@ pub struct HostInput {
     pub os: Option<String>,
     #[serde(default)]
     pub own: Fields,
-    /// Fehlt das Feld, bleibt das Passwort wie es ist; `null` entfernt es.
+    /// If the field is missing, the password stays as it is; `null` removes it.
     #[serde(default, deserialize_with = "double_option")]
     pub password: Option<Option<Secret>>,
-    /// Passwort für den Proxy des Hosts, mit denselben Regeln.
+    /// Password for the host's proxy, with the same rules.
     #[serde(default, deserialize_with = "double_option")]
     pub proxy_password: Option<Option<Secret>>,
 }
@@ -130,26 +130,26 @@ pub struct GroupInput {
     pub color: Option<String>,
     #[serde(default)]
     pub defs: Fields,
-    /// Passwort für den Proxy der Gruppe: fehlt = unverändert, `null` = entfernen.
+    /// Password for the group's proxy: missing = unchanged, `null` = remove.
     #[serde(default, deserialize_with = "double_option")]
     pub proxy_password: Option<Option<Secret>>,
 }
 
-/// Ein fertig erzeugter oder gelesener Schlüssel, bereit zum Ablegen. Erzeugen und Lesen ist Sache von `keys`.
+/// A key already generated or read, ready to be stored. Generating and reading is the job of `keys`.
 #[derive(Debug)]
 pub struct NewKey {
     pub name: String,
     pub kind: KeyKind,
     pub bits: u32,
     pub fingerprint: String,
-    /// Öffentlicher Schlüssel im OpenSSH-Format; ein Kommentar dahinter wird verworfen.
+    /// Public key in OpenSSH format; a comment after it is discarded.
     pub public: String,
-    /// Privater Schlüssel im OpenSSH-Format, unverschlüsselt.
+    /// Private key in OpenSSH format, unencrypted.
     pub private: Secret,
     pub origin: KeyOrigin,
 }
 
-/// Eine Zertifizierungsstelle für Server, bereit zum Ablegen. Den Schlüssel liest und prüft der Aufrufer.
+/// A certificate authority for servers, ready to be stored. The caller reads and checks the key.
 #[derive(Debug)]
 pub struct NewAuthority {
     pub name: String,
@@ -159,7 +159,7 @@ pub struct NewAuthority {
     pub public: String,
 }
 
-/// Ein Arbeitsbereich, wie ihn die Oberfläche schickt. Ohne Kennung entsteht ein neuer.
+/// A workspace as the interface sends it. Without an ID a new one is created.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceInput {
@@ -180,8 +180,8 @@ pub struct WorkspaceView {
     pub layout: Arrangement,
 }
 
-/// Eine Port-Regel, wie die Oberfläche sie schickt. Ohne Kennung entsteht eine neue.
-/// Ports kommen als breite Zahl, damit ein unmöglicher Wert als Ablehnung endet und nicht als Lesefehler.
+/// A port rule as the interface sends it. Without an ID a new one is created.
+/// Ports arrive as a wide number so an impossible value ends as a rejection and not as a parse error.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ForwardInput {
@@ -212,7 +212,7 @@ pub struct ForwardView {
     pub dest_port: u16,
 }
 
-/// Ein Snippet oder Makro, wie die Oberfläche es schickt. Ohne Kennung entsteht ein neues.
+/// A snippet or macro as the interface sends it. Without an ID a new one is created.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SnippetInput {
@@ -248,7 +248,7 @@ pub struct AuthorityView {
     pub id: String,
     pub name: String,
     pub pattern: String,
-    /// Art des Schlüssels zum Anzeigen.
+    /// Kind of key, for display.
     pub kind: String,
     pub fingerprint: String,
     pub added_at: i64,
@@ -263,12 +263,12 @@ pub struct IdentityInput {
     pub user: String,
     #[serde(default)]
     pub key: Option<String>,
-    /// Fehlt das Feld, bleibt das Passwort wie es ist; `null` entfernt es.
+    /// If the field is missing, the password stays as it is; `null` removes it.
     #[serde(default, deserialize_with = "double_option")]
     pub password: Option<Option<Secret>>,
 }
 
-/// Schlüssel, wie ihn die Oberfläche sieht: ohne den privaten Teil.
+/// Key as the interface sees it: without the private part.
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct KeyView {
@@ -277,7 +277,7 @@ pub struct KeyView {
     pub kind: KeyKind,
     pub bits: u32,
     pub fingerprint: String,
-    /// Zeile für `authorized_keys`, mit dem Namen als Kommentar.
+    /// Line for `authorized_keys`, with the name as comment.
     pub public_key: String,
     pub origin: KeyOrigin,
     pub added_at: i64,
@@ -294,7 +294,7 @@ pub struct IdentityView {
     pub has_password: bool,
 }
 
-/// Host, wie ihn die Oberfläche sieht: ohne Passwort, nur mit dem Hinweis, ob eines gesetzt ist.
+/// Host as the interface sees it: without password, only a hint whether one is set.
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct HostView {
@@ -312,12 +312,12 @@ pub struct HostView {
     pub own: Fields,
     pub has_password: bool,
     pub has_proxy_password: bool,
-    /// Die Maschine in Proxmox, zu der der Host gehört; nur, solange es ihre Verbindung gibt.
+    /// The Proxmox machine the host belongs to; only while its connection exists.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub proxmox: Option<LinkView>,
 }
 
-/// Die Verknüpfung eines Hosts mit seiner Maschine, wie die Oberfläche sie sieht.
+/// The link between a host and its machine, as the interface sees it.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct LinkView {
@@ -327,7 +327,7 @@ pub struct LinkView {
     pub kind: String,
 }
 
-/// Eine Verbindung zu Proxmox, wie die Oberfläche sie schickt. Ohne Kennung entsteht eine neue.
+/// A Proxmox connection as the interface sends it. Without an ID a new one is created.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProxmoxInput {
@@ -336,18 +336,18 @@ pub struct ProxmoxInput {
     pub name: String,
     pub address: String,
     pub token_id: String,
-    /// Fehlt das Geheimnis, bleibt es, wie es ist.
+    /// If the secret is missing, it stays as it is.
     #[serde(default)]
     pub secret: Option<Secret>,
-    /// Der bestätigte Fingerabdruck eines selbst erstellten Zertifikats. Fehlt er, muss das Zertifikat anerkannt sein.
+    /// The confirmed fingerprint of a self-signed certificate. If missing, the certificate must be trusted.
     #[serde(default)]
     pub fingerprint: Option<String>,
-    /// Kennung der Identität für die Maschinen dieser Verbindung. Fehlt sie oder ist sie leer, gibt es keine.
+    /// ID of the identity for this connection's machines. Missing or empty means none.
     #[serde(default)]
     pub identity: Option<String>,
 }
 
-/// Eine Verbindung zu Proxmox, wie die Oberfläche sie sieht: ohne das Geheimnis des Tokens.
+/// A Proxmox connection as the interface sees it: without the token's secret.
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ProxmoxView {
@@ -357,24 +357,24 @@ pub struct ProxmoxView {
     pub token_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fingerprint: Option<String>,
-    /// Die Identität für die Maschinen dieser Verbindung; nur, solange es sie gibt.
+    /// The identity for this connection's machines; only while it exists.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub identity: Option<String>,
 }
 
-/// Womit sich eine Verbindung ohne gespeicherten Host anmeldet.
+/// What a connection without a saved host signs in with.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Login {
-    /// Der Benutzer der Identität; `None`, wenn nur ein Schlüssel genannt war.
+    /// The identity's user; `None` if only a key was named.
     pub user: Option<String>,
     pub password: Option<Secret>,
-    /// Privater Schlüssel aus dem Tresor im OpenSSH-Format.
+    /// Private key from the vault in OpenSSH format.
     pub key: Option<Secret>,
-    /// Benutzer-Zertifikat zu `key`, falls eines hinterlegt ist.
+    /// User certificate for `key`, if one is stored.
     pub certificate: Option<String>,
 }
 
-/// Was nötig ist, um einen Proxmox-Server anzusprechen. Verlässt den Kern nur in Richtung dieses Servers.
+/// What is needed to talk to a Proxmox server. Leaves the core only towards that server.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProxmoxAccess {
     pub address: String,
@@ -383,30 +383,30 @@ pub struct ProxmoxAccess {
     pub fingerprint: Option<String>,
 }
 
-/// Eine Maschine, die ein Host werden soll, mit dem, was Proxmox über sie weiß.
+/// A machine that is to become a host, with what Proxmox knows about it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GuestHost {
     pub node: String,
     pub vmid: u32,
-    /// `qemu` oder `lxc`.
+    /// `qemu` or `lxc`.
     pub kind: String,
     pub name: String,
-    /// Kennt Proxmox keine, steht am Host vorerst der Name der Maschine; die Adresse zieht nach, sobald es eine gibt.
+    /// If Proxmox knows none, the host gets the machine's name for now; the address follows as soon as there is one.
     pub address: Option<String>,
     pub user: Option<String>,
-    /// Kennung eines Schlüssels im Tresor.
+    /// ID of a key in the vault.
     pub key: Option<String>,
-    /// Kürzel des Betriebssystems.
+    /// Short name of the operating system.
     pub os: Option<String>,
 }
 
-/// Eine Maschine, wie Proxmox sie gerade nennt; zum Nachziehen der verknüpften Hosts.
+/// A machine as Proxmox currently names it; for updating the linked hosts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GuestSeen {
     pub node: String,
     pub vmid: u32,
     pub name: String,
-    /// `None`: Proxmox kennt gerade keine (Maschine aus und ohne feste Adresse). Dann bleibt die des Hosts.
+    /// `None`: Proxmox currently knows none (machine off and without a fixed address). The host's stays.
     pub address: Option<String>,
 }
 
@@ -421,11 +421,11 @@ pub struct GroupView {
     pub has_proxy_password: bool,
 }
 
-/// Laufende Nummer der Stände, die dieses Programm herausgibt. Ein später erzeugter Stand hat immer die höhere,
-/// über Sperren, Entsperren und einen Wechsel des Tresors hinweg.
+/// Sequence number of the states this program hands out. A state created later always has the higher one,
+/// across locking, unlocking and switching vaults.
 static SNAPSHOTS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Die Nummer eines Stands. Für den Vergleich zweier Stände zählt sie nicht: Gleich ist, was dasselbe zeigt.
+/// The number of a state. It does not count when comparing two states: equal is what shows the same.
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(transparent)]
 pub struct Stamp(pub u64);
@@ -439,12 +439,12 @@ impl PartialEq for Stamp {
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Snapshot {
-    /// Antworten und Ereignisse erreichen die Oberfläche nicht immer in der Reihenfolge, in der sie entstanden
-    /// sind. An dieser Nummer erkennt sie einen Stand, der älter ist als der gezeigte, und lässt ihn liegen.
+    /// Responses and events do not always reach the interface in the order they were created.
+    /// This number lets it recognise a state older than the one shown, and ignore it.
     pub seq: Stamp,
     pub groups: Vec<GroupView>,
     pub hosts: Vec<HostView>,
-    /// Anzahl der Datensätze, die sich nicht öffnen oder lesen ließen.
+    /// Number of records that could not be opened or read.
     pub damaged: usize,
     pub known_hosts: Vec<KnownHostView>,
     pub keys: Vec<KeyView>,
@@ -453,11 +453,11 @@ pub struct Snapshot {
     pub workspaces: Vec<WorkspaceView>,
     pub forwards: Vec<ForwardView>,
     pub snippets: Vec<SnippetView>,
-    /// Verbindungen zu Proxmox.
+    /// Proxmox connections.
     pub proxmox: Vec<ProxmoxView>,
-    /// Alle Tresore dieses Geräts, der persönliche zuerst.
+    /// All vaults of this device, the personal one first.
     pub vaults: Vec<VaultView>,
-    /// Für jeden Eintrag, der in einem geteilten Tresor liegt: dessen Kennung. Alles andere liegt im persönlichen.
+    /// For every entry in a shared vault: that vault's ID. Everything else is in the personal one.
     pub homes: BTreeMap<String, String>,
 }
 
@@ -465,11 +465,11 @@ pub struct Snapshot {
 #[serde(rename_all = "camelCase")]
 pub struct VaultView {
     pub id: String,
-    /// `personal` oder `shared`.
+    /// `personal` or `shared`.
     pub kind: &'static str,
-    /// Beim persönlichen leer.
+    /// Empty for the personal one.
     pub name: String,
-    /// Die eigene Rolle.
+    /// Own role.
     pub role: Role,
     pub members: Vec<MemberView>,
     pub rolled_back: bool,
@@ -483,20 +483,20 @@ pub struct MemberView {
     pub name: String,
     pub role: Role,
     pub me: bool,
-    /// Eingeladen, hat aber noch nicht angenommen.
+    /// Invited, but has not accepted yet.
     pub invited: bool,
-    /// Sicherheitscode: sechs Wörter aus dem Prüfwert der Schlüssel.
+    /// Safety code: six words from the hash of the keys.
     pub code: String,
 }
 
-/// Was nur der Abgleich über die Tresore weiß und die Oberfläche trotzdem zeigt.
+/// What only sync knows about the vaults, and the interface shows anyway.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct VaultMarks {
-    /// Tresore, bei denen der Server einen älteren Stand hat als dieses Gerät.
+    /// Vaults for which the server has an older state than this device.
     pub rolled_back: BTreeSet<String>,
-    /// Eigene Tresore, die der Server nicht mehr kennt.
+    /// Own vaults the server no longer knows.
     pub orphaned: BTreeSet<String>,
-    /// Tresor und Konto derer, die eingeladen sind und noch nicht angenommen haben.
+    /// Vault and account of those who are invited and have not accepted yet.
     pub invited: BTreeSet<(String, String)>,
 }
 
@@ -508,116 +508,116 @@ pub struct KnownHostView {
     pub port: u16,
     pub algorithm: String,
     pub fingerprint: String,
-    /// Zeitpunkt des Vertrauens in Millisekunden seit 1970.
+    /// Time of trust in milliseconds since 1970.
     pub added_at: i64,
 }
 
-/// Urteil über den Schlüssel, den ein Server beim Verbinden zeigt.
+/// Verdict on the key a server shows when connecting.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Verdict {
-    /// Genau dieser Schlüssel ist für diese Adresse hinterlegt.
+    /// Exactly this key is stored for this address.
     Trusted,
-    /// Für diese Adresse ist noch nichts hinterlegt.
+    /// Nothing is stored for this address yet.
     Unknown,
-    /// Für diese Adresse ist ein anderer Schlüssel hinterlegt. Das kann ein neu aufgesetzter Server sein
-    /// oder jemand, der sich dazwischengeschaltet hat. `known` sind die Fingerabdrücke von bisher.
+    /// A different key is stored for this address. That can be a reinstalled server
+    /// or someone who has put themselves in between. `known` are the fingerprints so far.
     Changed { known: Vec<String> },
 }
 
-/// Was zum Verbinden mit einem Host gebraucht wird, nach der Vererbung.
+/// What is needed to connect to a host, after inheritance.
 #[derive(Debug)]
 pub struct ConnectInfo {
     pub name: String,
     pub address: String,
     pub port: u16,
     pub user: String,
-    /// Passwort des Hosts, sonst das der Identität.
+    /// The host's password, otherwise the identity's.
     pub password: Option<Secret>,
-    /// Privater Schlüssel aus dem Tresor im OpenSSH-Format.
+    /// Private key from the vault in OpenSSH format.
     pub key: Option<Secret>,
-    /// Benutzer-Zertifikat zu `key`, falls eines hinterlegt ist.
+    /// User certificate for `key`, if one is stored.
     pub certificate: Option<String>,
     pub key_file: Option<String>,
-    /// Öffentliche Schlüssel der Zertifizierungsstellen, die für die Adresse dieses Hosts gelten.
+    /// Public keys of the certificate authorities that apply to this host's address.
     pub authorities: Vec<String>,
-    /// Kennung des Hosts, über den verbunden wird. Er hat seine eigenen Verbindungsdaten.
+    /// ID of the host the connection goes through. It has its own connection details.
     pub jump: Option<String>,
     pub startcmd: Option<String>,
     pub env: Vec<(String, String)>,
     pub agent: bool,
     pub agent_forward: bool,
     pub proxy: Option<ProxySpec>,
-    /// Passwort für den Proxy, von dort, wo auch der Proxy festgelegt ist.
+    /// Password for the proxy, from wherever the proxy is defined.
     pub proxy_password: Option<Secret>,
-    /// Sekunden; 0 = keine Lebenszeichen.
+    /// Seconds; 0 = no keepalives.
     pub keepalive: u16,
     pub timeout: u16,
     pub term: String,
     pub charset: String,
     pub legacy: bool,
-    /// Gesetzt, wenn das Terminal über Mosh laufen soll.
+    /// Set if the terminal should run over Mosh.
     pub mosh: Option<MoshInfo>,
 }
 
-/// Mosh-Einstellungen eines Hosts nach der Vererbung.
+/// A host's Mosh settings after inheritance.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MoshInfo {
-    /// Einer aus [`model::MOSH_PREDICT`].
+    /// One of [`model::MOSH_PREDICT`].
     pub predict: String,
     pub port: Option<String>,
     pub server: Option<String>,
 }
 
-/// Was zum Verbinden mit einem Host über Telnet gebraucht wird. Port und Benutzer erbt er nicht: Die Vorgaben
-/// einer Gruppe meinen SSH.
+/// What is needed to connect to a host over Telnet. It does not inherit port and user: a group's defaults
+/// mean SSH.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TelnetInfo {
     pub name: String,
     pub address: String,
     pub port: u16,
-    /// Wird dem Gerät genannt, wenn es danach fragt. Ein Passwort gibt es für Telnet nicht.
+    /// Given to the device when it asks for it. There is no password for Telnet.
     pub user: Option<String>,
     pub timeout: u16,
     pub term: String,
     pub charset: String,
 }
 
-/// Was zum Öffnen einer seriellen Leitung gebraucht wird.
+/// What is needed to open a serial line.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SerialInfo {
     pub name: String,
-    /// Name des Ports: `COM3`, `/dev/ttyUSB0`.
+    /// Name of the port: `COM3`, `/dev/ttyUSB0`.
     pub port: String,
     pub line: Serial,
     pub charset: String,
 }
 
-/// Wie ein Host angesprochen wird. Für SSH liefert [`Directory::connect_info`] die Einzelheiten.
+/// How a host is reached. For SSH, [`Directory::connect_info`] provides the details.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Endpoint {
     Ssh,
     Telnet(TelnetInfo),
     Serial(SerialInfo),
-    /// Kein Terminal: Dateien über FTP, siehe [`Directory::ftp_info`].
+    /// No terminal: files over FTP, see [`Directory::ftp_info`].
     Ftp,
 }
 
-/// Was es braucht, um sich mit einem FTP-Host zu verbinden. Enthält das Passwort und bleibt deshalb im Kern.
+/// What it takes to connect to an FTP host. Contains the password and therefore stays in the core.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FtpInfo {
     pub name: String,
     pub address: String,
     pub port: u16,
-    /// Leer bei anonymer Anmeldung.
+    /// Empty for anonymous sign-in.
     pub user: String,
     pub password: Option<Secret>,
     pub security: FtpSecurity,
     pub dir: Option<String>,
     pub plain_ok: bool,
-    /// Der Fingerabdruck des Zertifikats, das für diese Adresse bestätigt ist (`5F:1A:…`).
+    /// The fingerprint of the certificate confirmed for this address (`5F:1A:…`).
     pub pin: Option<String>,
-    /// Ein eingetipptes Passwort ließe sich am Host speichern: Er meldet sich mit eigenem Benutzer an, nicht
-    /// über eine Identität und nicht anonym.
+    /// A typed password could be saved on the host: it signs in with its own user, not
+    /// via an identity and not anonymously.
     pub saves_password: bool,
 }
 
@@ -626,33 +626,33 @@ pub struct Directory {
     groups: BTreeMap<String, Group>,
     hosts: BTreeMap<String, Host>,
     damaged: usize,
-    /// Bekannte Hosts samt Zeitpunkt des Vertrauens.
+    /// Known hosts with their time of trust.
     known: BTreeMap<String, (KnownHost, i64)>,
     keys: BTreeMap<String, Key>,
     identities: BTreeMap<String, Identity>,
-    /// Zertifizierungsstellen für Server samt Zeitpunkt des Hinzufügens.
+    /// Certificate authorities for servers with the time they were added.
     authorities: BTreeMap<String, (Authority, i64)>,
     workspaces: BTreeMap<String, Workspace>,
     forwards: BTreeMap<String, Forward>,
     snippets: BTreeMap<String, Snippet>,
-    /// Verbindungen zu Proxmox.
+    /// Proxmox connections.
     proxmox: BTreeMap<String, Proxmox>,
-    /// Läuft gerade [`Directory::batch`]? Dann merkt sich `put` das Geschriebene selbst, und `reload` wartet bis zum Ende.
+    /// Is [`Directory::batch`] running? Then `put` remembers what was written itself, and `reload` waits until the end.
     bulk: bool,
-    /// In welchem geteilten Tresor ein Datensatz liegt. Was hier fehlt, liegt im persönlichen.
+    /// Which shared vault a record lives in. Whatever is missing here is in the personal one.
     homes: BTreeMap<String, String>,
-    /// Name jedes geteilten Tresors samt der Kennung des Datensatzes, der ihn trägt.
+    /// Name of every shared vault together with the ID of the record that carries it.
     names: BTreeMap<String, (String, VaultLabel)>,
-    /// Wohin ein neuer Datensatz kommt, wenn es nicht der Tresor seiner Gruppe oder der persönliche sein soll.
+    /// Where a new record goes if it is not to be its group's vault or the personal one.
     target: Option<Id>,
     marks: VaultMarks,
 }
 
-/// Größter Befehl und größtes Makro, die sich speichern lassen.
+/// Largest command and largest macro that can be saved.
 const MAX_COMMAND: usize = 16 * 1024;
 const MAX_MACRO_STEPS: usize = 2000;
 const MAX_MACRO_KEYS: usize = 64 * 1024;
-/// Längste Pause eines Makros, die gespeichert wird (zehn Minuten).
+/// Longest pause of a macro that is saved (ten minutes).
 const MAX_MACRO_WAIT: u32 = 600_000;
 
 fn hex(id: &Id) -> String {
@@ -670,7 +670,7 @@ fn parse_id(text: &str) -> Result<Id> {
     Ok(id)
 }
 
-/// Algorithmus und Schlüssel ohne den Kommentar dahinter.
+/// Algorithm and key without the comment after them.
 fn key_body(openssh: &str) -> String {
     openssh.split_whitespace().take(2).collect::<Vec<_>>().join(" ")
 }
@@ -679,8 +679,8 @@ fn forward_view(id: &str, rule: &Forward) -> ForwardView {
     ForwardView { id: id.to_string(), name: rule.name.clone(), kind: rule.kind, host: rule.host.clone(), bind_address: rule.bind_address.clone(), bind_port: rule.bind_port, dest_host: rule.dest_host.clone(), dest_port: rule.dest_port }
 }
 
-/// Worauf ein Datensatz verweist: zuerst die Gruppe, in der er liegt (bei einer Gruppe die Elterngruppe), dann
-/// alles andere (Sprung-Server, Identität, Schlüssel, der Host einer Port-Regel).
+/// What a record refers to: first the group it lives in (for a group, the parent group), then
+/// everything else (jump host, identity, key, the host of a port rule).
 fn references(payload: &Payload) -> (Option<&str>, Vec<&str>) {
     fn of_fields(fields: &Fields) -> Vec<&str> {
         [&fields.jump, &fields.identity, &fields.key].into_iter().filter_map(|id| id.as_deref()).filter(|id| !id.is_empty()).collect()
@@ -707,8 +707,8 @@ fn clean_name(name: &str) -> Result<String> {
     }
 }
 
-/// Adressen und Benutzer landen später in Befehlszeilen und Protokollen: keine Leer- oder Steuerzeichen
-/// und kein führendes `-`, das als Option gelesen werden könnte.
+/// Addresses and users later end up in command lines and logs: no whitespace or control characters
+/// and no leading `-` that could be read as an option.
 fn is_safe_token(text: &str, max: usize) -> bool {
     !text.is_empty() && text.chars().count() <= max && !text.starts_with('-') && !text.chars().any(|c| c.is_whitespace() || c.is_control())
 }
@@ -722,7 +722,7 @@ fn clean_color(color: Option<String>) -> Result<Option<String>> {
 }
 
 impl Directory {
-    /// Liest einen offenen Tresor ein.
+    /// Reads an open vault.
     pub fn load(vault: Vault) -> Result<Self> {
         let mut directory = Self { vault, groups: BTreeMap::new(), hosts: BTreeMap::new(), damaged: 0, known: BTreeMap::new(), keys: BTreeMap::new(), identities: BTreeMap::new(), authorities: BTreeMap::new(), workspaces: BTreeMap::new(), forwards: BTreeMap::new(), snippets: BTreeMap::new(), proxmox: BTreeMap::new(), bulk: false, homes: BTreeMap::new(), names: BTreeMap::new(), target: None, marks: VaultMarks::default() };
         directory.reload()?;
@@ -737,7 +737,7 @@ impl Directory {
         &mut self.vault
     }
 
-    /// Gibt den Tresor zurück, etwa zum Sperren. Die entschlüsselten Einträge werden dabei verworfen.
+    /// Hands the vault back, e.g. for locking. The decrypted entries are discarded.
     pub fn into_vault(self) -> Vault {
         self.vault
     }
@@ -776,8 +776,8 @@ impl Directory {
                 Ok(Payload::Workspace(workspace)) => drop(self.workspaces.insert(hex(&record.id), workspace)),
                 Ok(Payload::Forward(forward)) => drop(self.forwards.insert(hex(&record.id), forward)),
                 Ok(Payload::Snippet(snippet)) => drop(self.snippets.insert(hex(&record.id), snippet)),
-                // Verbindungen zu Proxmox gelten nur aus dem persönlichen Tresor. Was jemand in einen geteilten legt,
-                // bleibt dort liegen und zählt nicht: Sonst bestimmte ein anderes Mitglied, wohin Glowport sich verbindet.
+                // Proxmox connections only count from the personal vault. Whatever someone puts into a shared one
+                // stays there and does not count: otherwise another member would decide where Glowport connects to.
                 Ok(Payload::Proxmox(connection)) if record.vault == personal => drop(self.proxmox.insert(hex(&record.id), connection)),
                 Ok(Payload::Proxmox(_)) | Ok(Payload::Unknown) => {}
                 Err(_) => self.damaged += 1,
@@ -892,36 +892,36 @@ impl Directory {
         self.vault.vaults().unwrap_or_default().into_iter().map(view).collect()
     }
 
-    /// Liest den Tresor neu ein, nachdem der Abgleich ihn geändert hat.
+    /// Reads the vault again after sync changed it.
     pub fn refresh(&mut self) -> Result<()> {
         self.reload()
     }
 
-    /// Hält fest, was der Abgleich über die Tresore weiß. Liefert, ob sich dadurch etwas an der Ansicht ändert.
+    /// Records what sync knows about the vaults. Returns whether this changes anything in the view.
     pub fn mark_vaults(&mut self, marks: VaultMarks) -> bool {
         let changed = self.marks != marks;
         self.marks = marks;
         changed
     }
 
-    /// Der Tresor, in dem ein Eintrag liegt.
+    /// The vault an entry lives in.
     fn home(&self, id: &str, personal: Id) -> Id {
         self.homes.get(id).and_then(|vault| crate::crypto::unhex(vault)).unwrap_or(personal)
     }
 
-    /// Die eigene Rolle in dem Tresor, in dem ein Eintrag liegt.
+    /// Own role in the vault an entry lives in.
     pub fn role_of(&self, id: &str) -> Role {
         let Ok(personal) = self.vault.personal() else { return Role::Read };
         let home = self.home(id, personal);
         self.vault.vaults().ok().and_then(|vaults| vaults.into_iter().find(|info| info.id == home)).map_or(Role::Read, |info| info.role)
     }
 
-    /// Name eines Tresors zum Anzeigen; beim persönlichen leer.
+    /// Name of a vault for display; empty for the personal one.
     pub fn vault_name(&self, vault: &str) -> String {
         self.names.get(vault).map(|(_, label)| label.name.clone()).unwrap_or_default()
     }
 
-    /// Name eines Eintrags zum Anzeigen, etwa in einem Hinweis aus dem Abgleich.
+    /// Name of an entry for display, e.g. in a notice from sync.
     pub fn record_name(&self, id: &str) -> Option<String> {
         None.or_else(|| self.hosts.get(id).map(|h| h.name.clone()))
             .or_else(|| self.groups.get(id).map(|g| g.name.clone()))
@@ -933,8 +933,8 @@ impl Directory {
             .or_else(|| self.proxmox.get(id).map(|p| p.name.clone()))
     }
 
-    /// Führt `work` so aus, dass neu Angelegtes in diesem Tresor landet. Ohne Angabe gilt der Tresor der Gruppe,
-    /// in die der Eintrag kommt, sonst der persönliche.
+    /// Runs `work` so that newly created entries land in this vault. Without one, the vault of the group
+    /// the entry goes into applies, otherwise the personal one.
     pub fn in_vault<T>(&mut self, vault: Option<&str>, work: impl FnOnce(&mut Self) -> Result<T>) -> Result<T> {
         let target = match vault {
             Some(vault) => {
@@ -952,7 +952,7 @@ impl Directory {
         outcome
     }
 
-    /// Gibt einem eigenen geteilten Tresor einen Namen. Er steht als Datensatz im Tresor selbst.
+    /// Gives an own shared vault a name. It is stored as a record inside the vault itself.
     pub fn rename_vault(&mut self, vault: &str, name: &str) -> Result<()> {
         let name = clean_name(name)?;
         let id = parse_id(vault)?;
@@ -966,12 +966,12 @@ impl Directory {
         self.reload()
     }
 
-    /// Die Gruppe, unter der eine Gruppe erscheint und von der sie erbt.
+    /// The group under which a group appears and from which it inherits.
     ///
-    /// Zwei Geräte können beim Abgleich gemeinsam anrichten, was jedes allein nicht darf (`docs/sync.md`,
-    /// „Regeln über mehrere Datensätze“): eine Gruppe, deren Elterngruppe gelöscht ist, oder Gruppen im Kreis.
-    /// Beides wird hier entschärft und nicht umgeschrieben: Ohne Elterngruppe liegt die Gruppe auf oberster
-    /// Ebene, und einen Kreis öffnet auf jedem Gerät dieselbe Gruppe, die mit der kleinsten Kennung.
+    /// Two devices can cause together during sync what neither may do alone (`docs/sync.md`,
+    /// “Rules across several records”): a group whose parent was deleted, or groups in a cycle.
+    /// Both are defused here, not rewritten: without a parent the group sits at the top
+    /// level, and a cycle is broken on every device at the same group, the one with the smallest ID.
     fn shown_parent<'a>(&'a self, id: &str, group: &'a Group) -> Option<&'a str> {
         let parent_of = |group: &'a Group| group.parent.as_deref().filter(|parent| self.groups.contains_key(*parent));
         let parent = parent_of(group)?;
@@ -989,13 +989,13 @@ impl Directory {
         Some(parent)
     }
 
-    /// Ein Tastenkürzel gehört einem Snippet. Tragen es nach einem Abgleich zwei, gilt es für das mit der
-    /// kleineren Kennung.
+    /// A hotkey belongs to one snippet. If two carry it after a sync, it applies to the one with the
+    /// smaller ID.
     fn owns_hotkey(&self, id: &str, hotkey: &str) -> bool {
         !self.snippets.iter().any(|(other, snippet)| other.as_str() < id && snippet.hotkey.as_deref() == Some(hotkey))
     }
 
-    /// Gruppen von der Wurzel bis `group`.
+    /// Groups from the root down to `group`.
     fn chain(&self, group: Option<&str>) -> Vec<(&str, &Group)> {
         let mut chain = Vec::new();
         let mut current = group;
@@ -1012,7 +1012,7 @@ impl Directory {
         Ok(model::resolve(host, &self.chain(host.group.as_deref()), default_reconnect))
     }
 
-    /// Anmeldung eines Hosts nach der Vererbung. Ein Verweis auf einen gelöschten Schlüssel zählt nicht.
+    /// A host's sign-in after inheritance. A reference to a deleted key does not count.
     fn auth<'a>(&'a self, host: &'a Host) -> Auth<'a> {
         let chain = self.chain(host.group.as_deref());
         let mut levels: Vec<&Fields> = chain.iter().map(|(_, group)| &group.defs).collect();
@@ -1022,7 +1022,7 @@ impl Directory {
         auth
     }
 
-    /// Verbindungsdaten eines Hosts nach der Vererbung. Enthält Passwort und Schlüssel und bleibt deshalb im Kern.
+    /// A host's connection details after inheritance. Contains password and key and therefore stays in the core.
     pub fn connect_info(&self, host_id: &str) -> Result<ConnectInfo> {
         let host = self.hosts.get(host_id).ok_or(DirError::NotFound)?;
         if host.protocol != model::PROTOCOL_SSH {
@@ -1032,7 +1032,7 @@ impl Directory {
         let auth = self.auth(host);
         let identity = auth.identity.and_then(|id| self.identities.get(id));
         let key = auth.key.and_then(|id| self.keys.get(id));
-        // Das Passwort gehört zu dem Proxy, der gilt: am Host, wenn er ihn selbst festlegt, sonst an der Gruppe, von der er kommt.
+        // The password belongs to the proxy that applies: on the host if it sets one itself, otherwise on the group it comes from.
         let proxy_password = match &effective.proxy.source {
             model::Source::Host => host.proxy_password.clone(),
             model::Source::Group(id) => self.groups.get(id).and_then(|group| group.proxy_password.clone()),
@@ -1064,8 +1064,8 @@ impl Directory {
         })
     }
 
-    /// Wie ein Host angesprochen wird, bei Telnet und serieller Leitung samt allem, was es zum Verbinden braucht.
-    /// Ein Protokoll, das diese Version nicht kennt, wird abgelehnt.
+    /// How a host is reached, for Telnet and serial lines including everything needed to connect.
+    /// A protocol this version does not know is rejected.
     pub fn endpoint(&self, host_id: &str) -> Result<Endpoint> {
         let host = self.hosts.get(host_id).ok_or(DirError::NotFound)?;
         let effective = || model::resolve(host, &self.chain(host.group.as_deref()), Reconnect::Notice);
@@ -1092,18 +1092,18 @@ impl Directory {
         }
     }
 
-    /// Der Name eines Hosts, gleich mit welchem Protokoll.
+    /// A host's name, whatever its protocol.
     pub fn host_name(&self, host_id: &str) -> Option<String> {
         self.hosts.get(host_id).map(|host| host.name.clone())
     }
 
-    /// Führt FTP zu diesem Host?
+    /// Does FTP lead to this host?
     pub fn is_ftp(&self, host_id: &str) -> bool {
         self.hosts.get(host_id).is_some_and(|host| host.protocol == model::PROTOCOL_FTP)
     }
 
-    /// Verbindungsdaten eines FTP-Hosts. Benutzer und Passwort kommen aus der Identität, wenn eine gewählt ist,
-    /// sonst vom Host selbst; Gruppen geben für FTP nichts vor.
+    /// Connection details of an FTP host. User and password come from the identity if one is chosen,
+    /// otherwise from the host itself; groups set nothing for FTP.
     pub fn ftp_info(&self, host_id: &str) -> Result<FtpInfo> {
         let host = self.hosts.get(host_id).ok_or(DirError::NotFound)?;
         if host.protocol != model::PROTOCOL_FTP {
@@ -1121,12 +1121,12 @@ impl Directory {
         Ok(FtpInfo { name: host.name.clone(), address: host.address.clone(), port, user, password, security: ftp.security, dir: ftp.dir, plain_ok: ftp.plain_ok, pin: self.certificate_pin(&host.address, port), saves_password })
     }
 
-    /// Der Fingerabdruck des Zertifikats, das der Nutzer für eine Adresse bestätigt hat.
+    /// The fingerprint of the certificate the user confirmed for an address.
     pub fn certificate_pin(&self, host: &str, port: u16) -> Option<String> {
         self.known_for(host, port).find(|(_, entry)| entry.algorithm == model::ALGORITHM_TLS).map(|(_, entry)| entry.fingerprint.clone())
     }
 
-    /// Merkt sich das Zertifikat eines Servers. Es steht bei den bekannten Hosts; was dort für die Adresse lag, wird ersetzt.
+    /// Remembers a server's certificate. It is listed with the known hosts; whatever was there for the address is replaced.
     pub fn trust_certificate(&mut self, host: &str, port: u16, fingerprint: &str) -> Result<()> {
         if !is_safe_token(host, 255) || port == 0 {
             return invalid(Invalid::AddressInvalid);
@@ -1141,8 +1141,8 @@ impl Directory {
         })
     }
 
-    /// Ändert an einem FTP-Host, was die Rückfrage vor einer unverschlüsselten Verbindung ergab: sie abbestellen
-    /// (`plain_ok`) oder den Host auf FTPS umstellen (`secure`). Der Port folgt dabei nicht: Er gilt für beides.
+    /// Changes on an FTP host what the question before an unencrypted connection resulted in: switching it off
+    /// (`plain_ok`) or moving the host to FTPS (`secure`). The port does not follow: it applies to both.
     pub fn set_ftp_choice(&mut self, id: &str, plain_ok: bool, secure: bool) -> Result<()> {
         let mut host = self.hosts.get(id).ok_or(DirError::NotFound)?.clone();
         let Some(ftp) = host.ftp.as_mut().filter(|_| host.protocol == model::PROTOCOL_FTP) else { return invalid(Invalid::ProtocolInvalid) };
@@ -1156,7 +1156,7 @@ impl Directory {
         self.reload()
     }
 
-    /// Führt SSH zu diesem Host? Nur dann taugt er als Sprung-Server, für Port-Regeln, Dateien und Befehle.
+    /// Does SSH lead to this host? Only then is it suitable as a jump host, for port rules, files and commands.
     pub fn is_ssh(&self, host_id: &str) -> bool {
         self.hosts.get(host_id).is_some_and(|host| host.protocol == model::PROTOCOL_SSH)
     }
@@ -1166,7 +1166,7 @@ impl Directory {
         self.known.iter().filter(move |(_, (k, _))| k.host == host && k.port == port).map(|(id, (k, _))| (id, k))
     }
 
-    /// Beurteilt den Schlüssel, den ein Server zeigt. Verglichen wird der Schlüssel selbst, nicht der Fingerabdruck.
+    /// Judges the key a server shows. The key itself is compared, not the fingerprint.
     pub fn judge_host_key(&self, host: &str, port: u16, key_openssh: &str) -> Verdict {
         let key = key_body(key_openssh);
         let mut known = Vec::new();
@@ -1183,7 +1183,7 @@ impl Directory {
         }
     }
 
-    /// Vertraut einem Schlüssel für eine Adresse. Was dort bisher hinterlegt war, wird ersetzt.
+    /// Trusts a key for an address. Whatever was stored there so far is replaced.
     pub fn trust_host_key(&mut self, host: &str, port: u16, algorithm: &str, fingerprint: &str, key_openssh: &str) -> Result<()> {
         let old: Vec<String> = self.known_for(host, port).map(|(id, _)| id.clone()).collect();
         let entry = KnownHost { v: 1, host: host.to_lowercase(), port, algorithm: algorithm.to_string(), fingerprint: fingerprint.to_string(), key: key_body(key_openssh), extra: Map::new() };
@@ -1203,7 +1203,7 @@ impl Directory {
         self.reload()
     }
 
-    /// Trägt das beim Verbinden erkannte Betriebssystem ein. Liefert, ob sich etwas geändert hat.
+    /// Records the operating system detected while connecting. Returns whether anything changed.
     pub fn set_host_os(&mut self, id: &str, os: &str) -> Result<bool> {
         let mut host = self.hosts.get(id).ok_or(DirError::NotFound)?.clone();
         if host.os.as_deref() == Some(os) {
@@ -1215,7 +1215,7 @@ impl Directory {
         Ok(true)
     }
 
-    /// Vertraut einer Zertifizierungsstelle für die Adressen, auf die ihr Muster passt.
+    /// Trusts a certificate authority for the addresses its pattern matches.
     pub fn add_authority(&mut self, authority: NewAuthority) -> Result<String> {
         let pattern = authority.pattern.trim().to_string();
         let allowed = |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | '*' | '?' | ',' | ':' | ' ');
@@ -1236,7 +1236,7 @@ impl Directory {
         self.reload()
     }
 
-    /// Legt einen Arbeitsbereich an oder ersetzt ihn. Bereiche, deren Host es nicht gibt, fallen weg.
+    /// Creates or replaces a workspace. Panes whose host does not exist are dropped.
     pub fn save_workspace(&mut self, input: WorkspaceInput) -> Result<String> {
         let name = clean_name(&input.name)?;
         let old = match &input.id {
@@ -1264,12 +1264,12 @@ impl Directory {
         self.reload()
     }
 
-    /// Eine Port-Regel, wie sie im Tresor steht; zum Einschalten.
+    /// A port rule as stored in the vault; for switching it on.
     pub fn forward(&self, id: &str) -> Result<ForwardView> {
         self.forwards.get(id).map(|f| forward_view(id, f)).ok_or(DirError::NotFound)
     }
 
-    /// Legt eine Port-Regel an oder ersetzt sie.
+    /// Creates or replaces a port rule.
     pub fn save_forward(&mut self, input: ForwardInput) -> Result<String> {
         let name = clean_name(&input.name)?;
         let old = match &input.id {
@@ -1308,7 +1308,7 @@ impl Directory {
         self.reload()
     }
 
-    /// Legt ein Snippet oder Makro an oder ersetzt es. Ein Tastenkürzel gehört höchstens einem.
+    /// Creates or replaces a snippet or macro. A hotkey belongs to at most one.
     pub fn save_snippet(&mut self, input: SnippetInput) -> Result<String> {
         let name = clean_name(&input.name)?;
         let old = match &input.id {
@@ -1321,7 +1321,7 @@ impl Directory {
         }
         let (command, steps) = match input.kind {
             SnippetKind::Command => {
-                // Zeilenenden einheitlich; beim Ausführen wird jede Zeile mit der Eingabetaste abgeschickt.
+                // Uniform line endings; when run, every line is sent with Enter.
                 let command = input.command.replace("\r\n", "\n").trim().to_string();
                 if command.is_empty() {
                     return invalid(Invalid::CommandRequired);
@@ -1365,7 +1365,7 @@ impl Directory {
         self.reload()
     }
 
-    /// Stellt einen Host auf einen Schlüssel aus dem Tresor um. Liefert, ob sich etwas geändert hat.
+    /// Switches a host to a key from the vault. Returns whether anything changed.
     pub fn set_host_key(&mut self, id: &str, key: &str) -> Result<bool> {
         let mut host = self.hosts.get(id).ok_or(DirError::NotFound)?.clone();
         if !self.keys.contains_key(key) {
@@ -1380,7 +1380,7 @@ impl Directory {
         Ok(true)
     }
 
-    /// Speichert ein Passwort, das beim Verbinden eingegeben wurde und funktioniert hat.
+    /// Saves a password that was typed while connecting and worked.
     pub fn set_host_password(&mut self, id: &str, password: Secret) -> Result<()> {
         let mut host = self.hosts.get(id).ok_or(DirError::NotFound)?.clone();
         host.password = Some(password);
@@ -1388,7 +1388,7 @@ impl Directory {
         self.reload()
     }
 
-    /// Prüft und bereinigt vererbbare Werte. `owner` ist der Host, der sie trägt (für „nicht auf sich selbst springen“).
+    /// Checks and cleans inheritable values. `owner` is the host carrying them (for “do not jump to itself”).
     fn clean_fields(&self, fields: Fields, owner: Option<&str>) -> Result<Fields> {
         let user = fields.user.map(|u| u.trim().to_string()).filter(|u| !u.is_empty());
         if user.as_deref().is_some_and(|u| !is_safe_token(u, 64)) {
@@ -1416,7 +1416,7 @@ impl Directory {
         if env.as_deref().is_some_and(|e| model::parse_env(e).is_none()) {
             return invalid(Invalid::EnvInvalid);
         }
-        // Leer heißt beim Proxy „ausdrücklich keiner“ und bleibt deshalb stehen.
+        // For the proxy, empty means “explicitly none” and therefore stays.
         let proxy = fields.proxy.map(|p| p.trim().to_string());
         if proxy.as_deref().is_some_and(|p| !p.is_empty() && model::parse_proxy(p).is_none()) {
             return invalid(Invalid::ProxyInvalid);
@@ -1435,7 +1435,7 @@ impl Directory {
         if charset.as_deref().is_some_and(|c| !model::CHARSETS.contains(&c)) {
             return invalid(Invalid::CharsetInvalid);
         }
-        // Welche Schemata es gibt, weiß nur die Oberfläche; hier zählt die Form der Kennung.
+        // Only the interface knows which schemes exist; here the form of the ID counts.
         let scheme = fields.scheme.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
         if scheme.as_deref().is_some_and(|s| s.len() > 64 || !s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')) {
             return invalid(Invalid::SchemeInvalid);
@@ -1481,14 +1481,14 @@ impl Directory {
     fn put(&mut self, id: Option<&str>, payload: &Payload) -> Result<String> {
         let personal = self.vault.personal()?;
         let (parent, others) = references(payload);
-        // Ein bestehender Eintrag bleibt, wo er liegt. Ein neuer kommt in den gewählten Tresor, sonst in den
-        // seiner Gruppe, sonst in den persönlichen.
+        // An existing entry stays where it is. A new one goes into the chosen vault, otherwise into
+        // its group's, otherwise into the personal one.
         let home = match id {
             Some(id) => self.home(id, personal),
             None => self.target.unwrap_or_else(|| parent.map_or(personal, |parent| self.home(parent, personal))),
         };
-        // Ein Eintrag liegt im selben Tresor wie seine Gruppe. Und was in einem geteilten Tresor liegt, verweist
-        // nur auf Einträge desselben Tresors: Die anderen Mitglieder hätten sie sonst nicht.
+        // An entry lives in the same vault as its group. And whatever lives in a shared vault only refers
+        // to entries of the same vault: the other members would not have them otherwise.
         let elsewhere = |id: &&str| self.known(id) && self.home(id, personal) != home;
         if parent.as_ref().is_some_and(elsewhere) || (home != personal && others.iter().any(elsewhere)) {
             return invalid(Invalid::OtherVault);
@@ -1507,12 +1507,12 @@ impl Directory {
         Ok(id)
     }
 
-    /// Gibt es einen Eintrag mit dieser Kennung, auf den sich verweisen lässt?
+    /// Is there an entry with this ID that can be referred to?
     fn known(&self, id: &str) -> bool {
         self.hosts.contains_key(id) || self.groups.contains_key(id) || self.keys.contains_key(id) || self.identities.contains_key(id)
     }
 
-    /// Trägt einen eben geschriebenen Datensatz in den Stand im Speicher ein, ohne den ganzen Tresor neu zu lesen.
+    /// Adds a record just written to the state in memory without reading the whole vault again.
     fn remember(&mut self, id: &str, payload: &Payload) {
         let id = id.to_string();
         match payload.clone() {
@@ -1530,9 +1530,9 @@ impl Directory {
         }
     }
 
-    /// Führt viele Änderungen als eine aus: Scheitert `work`, bleibt der Tresor, wie er war. Währenddessen wird
-    /// nicht nach jedem Schreiben neu eingelesen, erst am Ende; so bleibt ein Import von Hunderten Einträgen flott.
-    /// Darin erlaubt ist alles, was anlegt oder ersetzt (`save_…`, `add_…`), nichts, was löscht.
+    /// Runs many changes as one: if `work` fails, the vault stays as it was. Meanwhile it is not
+    /// read again after every write, only at the end; so an import of hundreds of entries stays quick.
+    /// Allowed inside is everything that creates or replaces (`save_…`, `add_…`), nothing that deletes.
     pub fn batch<T>(&mut self, work: impl FnOnce(&mut Self) -> Result<T>) -> Result<T> {
         self.vault.begin()?;
         self.bulk = true;
@@ -1545,8 +1545,8 @@ impl Directory {
         Ok(value)
     }
 
-    /// Nimmt einen Server-Schlüssel zu denen hinzu, die für eine Adresse schon gelten, etwa aus einem Import.
-    /// Anders als [`Directory::trust_host_key`] ersetzt das nichts. Liefert, ob er neu war.
+    /// Adds a server key to those already valid for an address, e.g. from an import.
+    /// Unlike [`Directory::trust_host_key`] this replaces nothing. Returns whether it was new.
     pub fn add_known_host(&mut self, host: &str, port: u16, algorithm: &str, fingerprint: &str, key_openssh: &str) -> Result<bool> {
         let key = key_body(key_openssh);
         if !is_safe_token(host, 255) || port == 0 || key.split(' ').count() != 2 {
@@ -1561,38 +1561,38 @@ impl Directory {
         Ok(true)
     }
 
-    /// Die bekannten Hosts samt ihrem Schlüssel, für den Export. Die Sicht der Oberfläche trägt nur den Fingerabdruck.
+    /// The known hosts with their key, for exporting. The interface's view only carries the fingerprint.
     pub fn known_hosts(&self) -> Vec<KnownHost> {
         self.known.values().map(|(entry, _)| entry.clone()).collect()
     }
 
-    /// Der Benutzer einer Identität. Der Export schreibt ihn an die Stelle, an der die Identität eingetragen war.
+    /// An identity's user. The export writes it where the identity was set.
     pub fn identity_user(&self, id: &str) -> Option<String> {
         self.identities.get(id).map(|i| i.user.clone())
     }
 
-    /// Die Verknüpfung eines Hosts, sofern es ihre Verbindung gibt. Ein Abgleich kann eine Verbindung löschen,
-    /// während ein anderes Gerät einen Host mit ihr verknüpft; die Verknüpfung zeigt dann ins Leere und zählt nicht.
-    /// Ebenso wenig zählt sie an einem Host in einem geteilten Tresor: Dort legt Glowport keine an.
+    /// A host's link, if its connection exists. A sync can delete a connection
+    /// while another device links a host to it; the link then points nowhere and does not count.
+    /// Nor does it count on a host in a shared vault: Glowport creates none there.
     fn link_of<'a>(&self, id: &str, host: &'a Host) -> Option<&'a ProxmoxLink> {
         host.proxmox.as_ref().filter(|link| !self.homes.contains_key(id) && self.proxmox.contains_key(&link.connection))
     }
 
-    /// Legt eine Verbindung zu Proxmox an oder ändert sie. Sie liegt immer im persönlichen Tresor. Ob die Adresse
-    /// antwortet und der Token gilt, prüft der Aufrufer; hier zählt die Form.
+    /// Creates or changes a Proxmox connection. It always lives in the personal vault. Whether the address
+    /// answers and the token is valid is checked by the caller; here the form counts.
     pub fn save_proxmox(&mut self, input: ProxmoxInput) -> Result<String> {
         let existing = match &input.id {
             Some(id) => Some(self.proxmox.get(id).ok_or(DirError::NotFound)?.clone()),
             None => None,
         };
         let name = clean_name(&input.name)?;
-        // `https://host[:port]` und sonst nichts: Dorthin geht das Geheimnis des Tokens.
+        // `https://host[:port]` and nothing else: that is where the token's secret goes.
         let address = input.address.trim().trim_end_matches('/').to_string();
         let host = address.strip_prefix("https://").unwrap_or_default();
         if host.is_empty() || address.len() > 255 || !host.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':' | '[' | ']')) {
             return invalid(Invalid::AddressInvalid);
         }
-        // Kennung und Geheimnis stehen später im Kopf einer Anfrage: nur sichtbare ASCII-Zeichen.
+        // ID and secret later go into a request header: visible ASCII characters only.
         let plain = |text: &str| !text.is_empty() && text.len() <= 255 && text.chars().all(|c| c.is_ascii_graphic());
         let token_id = input.token_id.trim().to_string();
         let shaped = token_id.split_once('@').is_some_and(|(user, rest)| !user.is_empty() && rest.split_once('!').is_some_and(|(realm, token)| !realm.is_empty() && !token.is_empty()));
@@ -1606,7 +1606,7 @@ impl Directory {
         };
         let fingerprint = match input.fingerprint.as_deref().map(str::trim).filter(|text| !text.is_empty()) {
             Some(text) => {
-                // So, wie Proxmox ihn zeigt: 32 Paare, groß geschrieben, mit Doppelpunkten.
+                // As Proxmox shows it: 32 pairs, upper case, with colons.
                 let digits = text.chars().filter(|c| !matches!(c, ':' | ' ')).collect::<String>().to_ascii_uppercase();
                 if digits.len() != 64 || !digits.chars().all(|c| c.is_ascii_hexdigit()) {
                     return invalid(Invalid::FingerprintInvalid);
@@ -1628,7 +1628,7 @@ impl Directory {
         Ok(id)
     }
 
-    /// Entfernt eine Verbindung zu Proxmox. Ihre Hosts bleiben und verlieren nur die Verknüpfung.
+    /// Removes a Proxmox connection. Its hosts stay and only lose the link.
     pub fn delete_proxmox(&mut self, id: &str) -> Result<()> {
         if !self.proxmox.contains_key(id) {
             return Err(DirError::NotFound);
@@ -1636,7 +1636,7 @@ impl Directory {
         self.atomically(|dir| {
             let linked: Vec<(String, Host)> = dir.hosts.iter().filter(|(_, h)| h.proxmox.as_ref().is_some_and(|link| link.connection == id)).map(|(i, h)| (i.clone(), h.clone())).collect();
             for (host_id, mut host) in linked {
-                // Wo man nur lesen darf, bleibt die Verknüpfung stehen; ohne ihre Verbindung zählt sie nicht.
+                // Where one may only read, the link stays; without its connection it does not count.
                 if dir.role_of(&host_id).may_write() {
                     host.proxmox = None;
                     dir.put(Some(&host_id), &Payload::Host(host))?;
@@ -1646,21 +1646,21 @@ impl Directory {
         })
     }
 
-    /// Adresse und Token einer Verbindung, um ihren Server anzusprechen.
+    /// Address and token of a connection, to talk to its server.
     pub fn proxmox_access(&self, id: &str) -> Result<ProxmoxAccess> {
         let p = self.proxmox.get(id).ok_or(DirError::NotFound)?;
         Ok(ProxmoxAccess { address: p.address.clone(), token_id: p.token_id.clone(), secret: p.secret.clone(), fingerprint: p.fingerprint.clone() })
     }
 
-    /// Der Host, der zu einer Maschine gehört. Gibt es mehrere (zwei Geräte haben dieselbe Maschine angelegt),
-    /// der mit der kleinsten Kennung, auf jedem Gerät derselbe.
+    /// The host belonging to a machine. If there are several (two devices created the same machine),
+    /// the one with the smallest ID, the same on every device.
     pub fn proxmox_host(&self, connection: &str, vmid: u32) -> Option<&str> {
         self.hosts.iter().find(|(id, h)| self.link_of(id, h).is_some_and(|link| link.connection == connection && link.vmid == vmid)).map(|(id, _)| id.as_str())
     }
 
-    /// Womit sich eine Verbindung ohne gespeicherten Host anmeldet: mit einer Identität (Benutzer, ihr Schlüssel,
-    /// ihr Passwort) oder mit einem einzelnen Schlüssel aus dem Tresor. Ein genannter Schlüssel geht dem der
-    /// Identität vor.
+    /// What a connection without a saved host signs in with: an identity (user, its key,
+    /// its password) or a single key from the vault. A named key takes precedence over the
+    /// identity's.
     pub fn login(&self, identity: Option<&str>, key: Option<&str>) -> Result<Login> {
         let identity = match identity.filter(|id| !id.is_empty()) {
             Some(id) => Some(self.identities.get(id).ok_or(DirError::Invalid(Invalid::IdentityMissing))?),
@@ -1678,14 +1678,14 @@ impl Directory {
         })
     }
 
-    /// Der Schlüssel im Tresor mit diesem Fingerabdruck (`SHA256:…`): Kennung und Name.
+    /// The key in the vault with this fingerprint (`SHA256:…`): ID and name.
     pub fn key_by_fingerprint(&self, fingerprint: &str) -> Option<(&str, &str)> {
         self.keys.iter().find(|(_, key)| key.fingerprint == fingerprint).map(|(id, key)| (id.as_str(), key.name.as_str()))
     }
 
-    /// Legt aus Maschinen einer Verbindung Hosts an und verknüpft sie, alle oder keinen. Die Hosts liegen im
-    /// persönlichen Tresor, wie die Verbindung; eine Gruppe aus einem geteilten Tresor wird deshalb abgelehnt.
-    /// Maschinen, die schon einen Host haben, bleiben, wie sie sind. Liefert die Kennungen der neuen Hosts.
+    /// Creates hosts from machines of a connection and links them, all or none. The hosts live in the
+    /// personal vault, like the connection; a group from a shared vault is therefore rejected.
+    /// Machines that already have a host stay as they are. Returns the IDs of the new hosts.
     pub fn add_proxmox_hosts(&mut self, connection: &str, guests: Vec<GuestHost>, group: Option<&str>) -> Result<Vec<String>> {
         if !self.proxmox.contains_key(connection) {
             return Err(DirError::NotFound);
@@ -1708,8 +1708,8 @@ impl Directory {
                     return invalid(Invalid::GuestInvalid);
                 }
                 let address = guest.address.clone().unwrap_or_else(|| guest.name.clone());
-                // Nennt Cloud-Init einen Schlüssel aus dem Tresor, gilt Cloud-Init. Sonst gilt die Identität der
-                // Verbindung als Ganzes, und ohne sie nur der Benutzer, den Proxmox nennt.
+                // If Cloud-Init names a key from the vault, Cloud-Init applies. Otherwise the connection's identity
+                // applies as a whole, and without one only the user Proxmox names.
                 let own = match (guest.key.filter(|key| dir.keys.contains_key(key)), &identity) {
                     (Some(key), _) => Fields { user: guest.user, key: Some(key), ..Fields::default() },
                     (None, Some(identity)) => Fields { identity: Some(identity.clone()), ..Fields::default() },
@@ -1728,7 +1728,7 @@ impl Directory {
         outcome
     }
 
-    /// Löst die Verknüpfung eines Hosts mit seiner Maschine. Der Host bleibt, wie er ist.
+    /// Unlinks a host from its machine. The host stays as it is.
     pub fn unlink_proxmox(&mut self, host_id: &str) -> Result<()> {
         let mut host = self.hosts.get(host_id).ok_or(DirError::NotFound)?.clone();
         if host.proxmox.take().is_some() {
@@ -1738,11 +1738,11 @@ impl Directory {
         Ok(())
     }
 
-    /// Zieht die Hosts einer Verbindung nach: Hat sich in Proxmox der Name oder die Adresse einer Maschine
-    /// geändert, bekommt ihr Host den neuen Wert, aber nur, wenn er noch den trägt, den Glowport ihm zuletzt
-    /// gegeben hat. Was der Nutzer am Host selbst geändert hat, bleibt. Eine Maschine, die auf einen anderen Knoten
-    /// umgezogen ist, wird an ihrer Nummer wiedererkannt. Geschrieben wird nur, was sich wirklich ändert; liefert,
-    /// ob das der Fall war.
+    /// Updates a connection's hosts: if a machine's name or address changed in Proxmox,
+    /// its host gets the new value, but only if it still carries the one Glowport last
+    /// gave it. What the user changed on the host stays. A machine that moved to another node
+    /// is recognised by its number. Only what really changes is written; returns
+    /// whether that was the case.
     pub fn follow_proxmox(&mut self, connection: &str, seen: &[GuestSeen]) -> Result<bool> {
         let mut changes: Vec<(String, Host)> = Vec::new();
         for (id, host) in &self.hosts {
@@ -1792,14 +1792,14 @@ impl Directory {
         if input.group.as_deref().is_some_and(|g| !self.groups.contains_key(g)) {
             return invalid(Invalid::GroupMissing);
         }
-        // Ohne Angabe bleibt das Protokoll stehen, auch eines, das erst eine neuere Version kennt.
+        // Without a value the protocol stays, even one only a newer version knows.
         let protocol = match input.protocol {
             Some(protocol) if model::PROTOCOLS.contains(&protocol.as_str()) => protocol,
             Some(_) => return invalid(Invalid::ProtocolInvalid),
             None => existing.as_ref().map_or_else(|| model::PROTOCOL_SSH.into(), |h| h.protocol.clone()),
         };
         let ssh = protocol == model::PROTOCOL_SSH;
-        // Wer Sprung-Server für andere ist oder Port-Regeln trägt, muss bei SSH bleiben.
+        // Whoever is a jump host for others or carries port rules must stay on SSH.
         if let (false, Some(id)) = (ssh, input.id.as_deref()) {
             let jumped = self.hosts.iter().any(|(other, h)| other != id && h.own.jump.as_deref() == Some(id)) || self.groups.values().any(|g| g.defs.jump.as_deref() == Some(id));
             if jumped || self.forwards.values().any(|rule| rule.host == id) {
@@ -1824,18 +1824,18 @@ impl Directory {
             if ftp.dir.as_deref().is_some_and(|dir| dir.len() > 1024 || dir.chars().any(char::is_control)) {
                 return invalid(Invalid::AddressInvalid);
             }
-            // Die abbestellte Rückfrage gilt nur für eine unverschlüsselte Verbindung.
+            // Switching off the question only applies to an unencrypted connection.
             ftp.plain_ok = ftp.plain_ok && ftp.security == FtpSecurity::None;
             Some(ftp)
         } else {
             None
         };
         let own = self.clean_fields(input.own, input.id.as_deref())?;
-        // Was zum Protokoll nicht gehört, wird nicht gespeichert: Es gälte nie und stünde doch im Tresor.
+        // What does not belong to the protocol is not saved: it would never apply and still sit in the vault.
         let own = match protocol.as_str() {
             model::PROTOCOL_TELNET => Fields { user: own.user, port: own.port, reconnect: own.reconnect, timeout: own.timeout, term: own.term, charset: own.charset, scheme: own.scheme, ..Fields::default() },
             model::PROTOCOL_SERIAL => Fields { reconnect: own.reconnect, charset: own.charset, scheme: own.scheme, ..Fields::default() },
-            // Bei anonymer Anmeldung gibt es weder Benutzer noch Identität; mit einer Identität keinen eigenen Benutzer.
+            // With anonymous sign-in there is neither user nor identity; with an identity no user of its own.
             model::PROTOCOL_FTP => {
                 let anonymous = ftp.as_ref().is_some_and(|ftp| ftp.anonymous);
                 let identity = own.identity.filter(|id| !anonymous && !id.is_empty());
@@ -1843,15 +1843,15 @@ impl Directory {
             }
             _ => own,
         };
-        // Passwörter gibt es für SSH und FTP. Über Telnet gingen sie im Klartext, eine serielle Leitung kennt keine.
-        // (Unverschlüsseltes FTP schickt sie auch im Klartext; davor warnt die Oberfläche, und der Nutzer hat es so gewählt.)
+        // Passwords exist for SSH and FTP. Over Telnet they would travel in plain text, and a serial line knows none.
+        // (Unencrypted FTP also sends them in plain text; the interface warns about that, and the user chose it.)
         let keeps_password = ssh || (protocol == model::PROTOCOL_FTP && own.user.is_some());
         let password = match input.password {
             None => existing.as_ref().and_then(|h| h.password.clone()),
             Some(new) => new.filter(|p| !p.expose().is_empty()),
         }
         .filter(|_| keeps_password);
-        // Ohne eigenen Proxy gibt es auch kein Passwort dafür.
+        // Without a proxy of its own there is no password for it either.
         let proxy_password = match input.proxy_password {
             None => existing.as_ref().and_then(|h| h.proxy_password.clone()),
             Some(new) => new.filter(|p| !p.expose().is_empty()),
@@ -1870,8 +1870,8 @@ impl Directory {
             own,
             password,
             proxy_password,
-            // Die Verknüpfung mit Proxmox bleibt. Ein Name oder eine Adresse, die jetzt von Hand gesetzt sind,
-            // weichen von dem ab, was sie festhält, und werden deshalb nicht mehr nachgezogen.
+            // The Proxmox link stays. A name or address now set by hand
+            // differs from what the link records and is therefore no longer updated.
             proxmox: existing.as_ref().and_then(|h| h.proxmox.clone()),
             extra: existing.map(|h| h.extra).unwrap_or_else(Map::new),
         };
@@ -1883,21 +1883,21 @@ impl Directory {
     pub fn duplicate_host(&mut self, id: &str, name: &str) -> Result<String> {
         let mut copy = self.hosts.get(id).ok_or(DirError::NotFound)?.clone();
         copy.name = clean_name(name)?;
-        // Zu einer Maschine in Proxmox gehört das Original, nicht die Kopie.
+        // The original belongs to a Proxmox machine, not the copy.
         copy.proxmox = None;
-        // Die Kopie liegt im selben Tresor wie das Original.
+        // The copy lives in the same vault as the original.
         let home = hex(&self.home(id, self.vault.personal()?));
         let id = self.in_vault(Some(&home), |dir| dir.put(None, &Payload::Host(copy)))?;
         self.reload()?;
         Ok(id)
     }
 
-    /// Verschiebt einen Host in einen anderen Tresor. Er entsteht dort neu (ohne Gruppe) und verschwindet hier.
+    /// Moves a host into another vault. It is created anew there (without a group) and disappears here.
     ///
-    /// Ein geteilter Tresor verweist nur in sich selbst. Hängen Identität oder Schlüssel aus einem anderen Tresor
-    /// am Host, kommen sie mit `carry` als Kopie mit, sonst wird der Verweis gelöst; ein Sprung-Server von
-    /// anderswo wird immer gelöst. Port-Regeln, Arbeitsbereiche und Sprung-Verweise anderer folgen dem Host,
-    /// soweit sie dorthin verweisen dürfen. Liefert die neue Kennung.
+    /// A shared vault only refers within itself. If an identity or key from another vault is attached
+    /// to the host, `carry` brings them along as copies, otherwise the reference is dropped; a jump host from
+    /// elsewhere is always dropped. Port rules, workspaces and jump references of others follow the host
+    /// as far as they may refer there. Returns the new ID.
     pub fn move_host(&mut self, id: &str, vault: &str, carry: bool) -> Result<String> {
         let target = parse_id(vault)?;
         let personal = self.vault.personal()?;
@@ -1920,14 +1920,14 @@ impl Directory {
         Ok(moved)
     }
 
-    /// Darf ein Eintrag im Zieltresor auf `id` verweisen? Der persönliche darf auf alles verweisen.
+    /// May an entry in the target vault refer to `id`? The personal one may refer to anything.
     fn reachable(&self, id: &str, target: Id, personal: Id) -> bool {
         id.is_empty() || target == personal || self.home(id, personal) == target
     }
 
     fn move_into(&mut self, old: &str, mut host: Host, target: Id, personal: Id, carry: bool) -> Result<String> {
         host.group = None;
-        // Verbindungen zu Proxmox liegen im persönlichen Tresor; die anderen Mitglieder hätten sie nicht.
+        // Proxmox connections live in the personal vault; the other members would not have them.
         if target != personal {
             host.proxmox = None;
         }
@@ -1956,7 +1956,7 @@ impl Directory {
         }
         let new = self.put(None, &Payload::Host(host))?;
 
-        // Wer auf den Host verwies, folgt ihm, sofern er dorthin verweisen darf.
+        // Whoever referred to the host follows it, as far as it may refer there.
         let follows = |dir: &Self, id: &str| {
             let home = dir.home(id, personal);
             home == personal || home == target
@@ -1972,7 +1972,7 @@ impl Directory {
         }
         let workspaces: Vec<(String, Workspace)> = self.workspaces.iter().filter(|(_, w)| w.layout.hosts().contains(&old)).map(|(id, w)| (id.clone(), w.clone())).collect();
         for (id, mut workspace) in workspaces {
-            // Kennungen sind 32 Hex-Zeichen und kommen im Aufbau nur als Kennung vor.
+            // IDs are 32 hex characters and appear in the structure only as IDs.
             let layout = serde_json::to_string(&workspace.layout).expect("Aufbau lässt sich immer schreiben").replace(old, &new);
             workspace.layout = serde_json::from_str(&layout).expect("derselbe Aufbau mit anderer Kennung");
             self.put(Some(&id), &Payload::Workspace(workspace))?;
@@ -1992,9 +1992,9 @@ impl Directory {
         Ok(new)
     }
 
-    /// Entfernt Hosts und löst dabei Verweise auf sie als Sprung-Server. Arbeitsbereiche verlieren ihre Bereiche;
-    /// einer ohne Bereiche verschwindet. Port-Regeln laufen über genau einen Host und verschwinden mit ihm.
-    /// Läuft innerhalb einer Sammeländerung.
+    /// Removes hosts and drops references to them as jump hosts. Workspaces lose their panes;
+    /// one without panes disappears. Port rules run through exactly one host and disappear with it.
+    /// Runs inside a batch change.
     fn remove_hosts(&mut self, ids: &[String]) -> Result<()> {
         let rules: Vec<String> = self.forwards.iter().filter(|(_, rule)| ids.contains(&rule.host)).map(|(id, _)| id.clone()).collect();
         for id in rules {
@@ -2028,7 +2028,7 @@ impl Directory {
         Ok(())
     }
 
-    /// Führt mehrere Schreibvorgänge als einen aus und liest danach in jedem Fall neu ein.
+    /// Runs several writes as one and reads again afterwards in any case.
     fn atomically(&mut self, work: impl FnOnce(&mut Self) -> Result<()>) -> Result<()> {
         self.vault.begin()?;
         let outcome = work(self);
@@ -2068,7 +2068,7 @@ impl Directory {
             if !self.groups.contains_key(parent) {
                 return invalid(Invalid::GroupMissing);
             }
-            // Eine Gruppe darf nicht in sich selbst oder in eine ihrer Untergruppen wandern.
+            // A group must not move into itself or into one of its subgroups.
             if input.id.as_deref().is_some_and(|id| self.descendants(id).iter().any(|d| d == parent)) {
                 return invalid(Invalid::GroupCycle);
             }
@@ -2093,7 +2093,7 @@ impl Directory {
         Ok(id)
     }
 
-    /// Schreibt alle Hosts und Gruppen neu, deren vererbbare Werte `change` verändert. Läuft innerhalb einer Sammeländerung.
+    /// Rewrites all hosts and groups whose inheritable values `change` alters. Runs inside a batch change.
     fn rewrite_fields(&mut self, change: impl Fn(&mut Fields) -> bool) -> Result<()> {
         let hosts: Vec<(String, Host)> = self.hosts.iter().map(|(id, h)| (id.clone(), h.clone())).filter_map(|(id, mut h)| change(&mut h.own).then_some((id, h))).collect();
         let groups: Vec<(String, Group)> = self.groups.iter().map(|(id, g)| (id.clone(), g.clone())).filter_map(|(id, mut g)| change(&mut g.defs).then_some((id, g))).collect();
@@ -2106,7 +2106,7 @@ impl Directory {
         Ok(())
     }
 
-    /// Legt einen fertigen Schlüssel ab und liefert seine Kennung.
+    /// Stores a finished key and returns its ID.
     pub fn add_key(&mut self, key: NewKey) -> Result<String> {
         let record = Key {
             v: 1,
@@ -2133,7 +2133,7 @@ impl Directory {
         self.reload()
     }
 
-    /// Hinterlegt ein Benutzer-Zertifikat am Schlüssel oder entfernt es. Dass es zum Schlüssel gehört, prüft der Aufrufer.
+    /// Attaches a user certificate to the key or removes it. The caller checks that it belongs to the key.
     pub fn set_key_certificate(&mut self, id: &str, certificate: Option<KeyCertificate>) -> Result<()> {
         let mut key = self.keys.get(id).ok_or(DirError::NotFound)?.clone();
         key.certificate = certificate;
@@ -2141,19 +2141,19 @@ impl Directory {
         self.reload()
     }
 
-    /// Öffentlicher Schlüssel als Zeile für `authorized_keys`, mit dem Namen als Kommentar.
+    /// Public key as a line for `authorized_keys`, with the name as comment.
     pub fn key_public(&self, id: &str) -> Result<String> {
         let key = self.keys.get(id).ok_or(DirError::NotFound)?;
         Ok(format!("{} {}", key.public, key.name))
     }
 
-    /// Name und privater Schlüssel im OpenSSH-Format. Verlässt den Kern nur, wenn der Nutzer ausdrücklich exportiert.
+    /// Name and private key in OpenSSH format. Leaves the core only when the user explicitly exports.
     pub fn key_private(&self, id: &str) -> Result<(String, Secret)> {
         let key = self.keys.get(id).ok_or(DirError::NotFound)?;
         Ok((key.name.clone(), key.private.clone()))
     }
 
-    /// Löscht einen Schlüssel und löst die Verweise aus Hosts, Gruppen und Identitäten.
+    /// Deletes a key and drops the references from hosts, groups and identities.
     pub fn delete_key(&mut self, id: &str) -> Result<()> {
         if !self.keys.contains_key(id) {
             return Err(DirError::NotFound);
@@ -2197,7 +2197,7 @@ impl Directory {
         Ok(id)
     }
 
-    /// Löscht eine Identität und löst die Verweise aus Hosts und Gruppen.
+    /// Deletes an identity and drops the references from hosts and groups.
     pub fn delete_identity(&mut self, id: &str) -> Result<()> {
         if !self.identities.contains_key(id) {
             return Err(DirError::NotFound);
@@ -2205,7 +2205,7 @@ impl Directory {
         let id = id.to_string();
         self.atomically(|dir| {
             dir.rewrite_fields(|fields| fields.identity.as_deref() == Some(id.as_str()) && fields.identity.take().is_some())?;
-            // Auch eine Verbindung zu Proxmox kann sie für ihre Maschinen vorgeben.
+            // A Proxmox connection can also set it for its machines.
             let connections: Vec<(String, Proxmox)> = dir.proxmox.iter().filter(|(_, p)| p.identity.as_deref() == Some(id.as_str())).map(|(i, p)| (i.clone(), p.clone())).collect();
             for (connection, mut record) in connections {
                 record.identity = None;
@@ -2215,7 +2215,7 @@ impl Directory {
         })
     }
 
-    /// Löscht eine Gruppe. Mit `with_contents` samt allem darin, sonst rückt der Inhalt eine Ebene nach oben.
+    /// Deletes a group. With `with_contents` together with everything inside, otherwise the content moves up a level.
     pub fn delete_group(&mut self, id: &str, with_contents: bool) -> Result<()> {
         let parent = self.groups.get(id).ok_or(DirError::NotFound)?.parent.clone();
         let id = id.to_string();
@@ -2284,7 +2284,7 @@ mod tests {
         }
     }
 
-    /// Schreibt am Verzeichnis vorbei in den Tresor, so wie ein Abgleich Datensätze anderer Geräte hineinbringt.
+    /// Writes into the vault past the directory, the way a sync brings in records from other devices.
     fn raw(dir: &mut Directory, id: Option<&str>, value: serde_json::Value) -> String {
         let id = dir.vault.put(id.map(|id| parse_id(id).unwrap()), &serde_json::to_vec(&value).unwrap()).unwrap();
         dir.reload().unwrap();
@@ -2297,9 +2297,9 @@ mod tests {
         let dir = temp.directory();
         let (first, second) = (dir.snapshot(), dir.snapshot());
         assert!(first.seq.0 > 0 && second.seq.0 > first.seq.0);
-        // Die Nummer sagt, welcher Stand der jüngere ist, nicht, ob zwei Stände dasselbe zeigen.
+        // The number says which state is the newer one, not whether two states show the same.
         assert_eq!(first, second);
-        // Auch ein anderer Tresor im selben Programm zählt weiter: Nach Sperren und Entsperren gilt dieselbe Reihe.
+        // Another vault in the same program keeps counting too: after locking and unlocking the same sequence applies.
         let other = Temp::new("stamp-other");
         assert!(other.directory().snapshot().seq.0 > second.seq.0);
     }
@@ -2314,18 +2314,18 @@ mod tests {
         let web = dir.save_host(host("web", Some(&c))).unwrap();
         assert_eq!(reason(dir.save_group(GroupInput { id: Some(a.clone()), ..group("A", Some(&c)) })), Invalid::GroupCycle, "ein Gerät allein darf das nicht");
 
-        // Ein anderes Gerät hat A unter C gehängt, während hier B unter A hing: A → C → B → A.
+        // Another device put A under C while here B was under A: A → C → B → A.
         raw(&mut dir, Some(&a), serde_json::json!({"t": "group", "v": 1, "name": "A", "parent": c, "defs": {"user": "von-a"}}));
         let snapshot = dir.snapshot();
         let parent = |id: &str| snapshot.groups.iter().find(|g| g.id == id).unwrap().parent.clone();
         let smallest = [&a, &b, &c].into_iter().min().unwrap();
         let roots: Vec<&String> = [&a, &b, &c].into_iter().filter(|id| parent(id).is_none()).collect();
         assert_eq!(roots, [smallest], "genau eine Gruppe öffnet den Kreis, überall dieselbe");
-        // Die Vererbung endet dort und läuft nicht im Kreis.
+        // Inheritance ends there and does not go round in circles.
         assert!(dir.chain(Some(&c)).len() <= 3);
         assert!(dir.effective(&web, Reconnect::Auto).is_ok());
 
-        // Die Elterngruppe einer Gruppe und die Gruppe eines Hosts sind auf einem anderen Gerät gelöscht worden.
+        // A group's parent and a host's group were deleted on another device.
         let orphan = raw(&mut dir, None, serde_json::json!({"t": "group", "v": 1, "name": "Waise", "parent": "00".repeat(16)}));
         let lost = raw(&mut dir, None, serde_json::json!({"t": "host", "v": 1, "name": "verloren", "address": "10.0.0.9", "group": "00".repeat(16)}));
         let snapshot = dir.snapshot();
@@ -2333,7 +2333,7 @@ mod tests {
         assert_eq!(snapshot.hosts.iter().find(|h| h.id == lost).unwrap().group, None);
         assert!(dir.connect_info(&lost).is_ok());
 
-        // Zwei Geräte haben dasselbe Kürzel vergeben: Es gilt für das Snippet mit der kleineren Kennung.
+        // Two devices assigned the same hotkey: it applies to the snippet with the smaller ID.
         let snippet = |name: &str| serde_json::json!({"t": "snippet", "v": 1, "name": name, "kind": "command", "command": "uptime", "hotkey": "Alt+1"});
         let (one, two) = (raw(&mut dir, None, snippet("eins")), raw(&mut dir, None, snippet("zwei")));
         let snapshot = dir.snapshot();
@@ -2354,7 +2354,7 @@ mod tests {
         assert_eq!(dir.connect_info(&id).unwrap().user, "deploy");
         assert_eq!((effective.port.value, effective.port.source), (2200, Source::Group(web.clone())));
 
-        // Nach Sperren und erneutem Öffnen ist alles wieder da.
+        // After locking and opening again everything is back.
         let mut vault = dir.into_vault();
         vault.lock();
         vault.unlock("richtig").unwrap();
@@ -2383,7 +2383,7 @@ mod tests {
         assert_eq!(reason(dir.save_host(HostInput { own: Fields { jump: Some("ffffffffffffffffffffffffffffffff".into()), ..Fields::default() }, ..host("a", None) })), Invalid::JumpMissing);
         assert!(dir.snapshot().hosts.is_empty(), "abgelehnte Eingaben dürfen nichts hinterlassen");
 
-        // Leerraum wird entfernt, leere Angaben gelten als „nicht festgelegt“.
+        // Whitespace is removed, empty values count as “not set”.
         let id = dir.save_host(HostInput { address: " example.org ".into(), color: Some("#ff2e63".into()), own: own("  "), ..host("  web  ", None) }).unwrap();
         let snapshot = dir.snapshot();
         let saved = &snapshot.hosts[0];
@@ -2408,7 +2408,7 @@ mod tests {
         dir.save_host(edit(Some(None))).unwrap();
         assert!(!dir.snapshot().hosts[0].has_password);
 
-        // So kommt es von der Oberfläche: fehlend, null oder Text.
+        // This is how it comes from the interface: missing, null or text.
         let parse = |json: &str| serde_json::from_str::<HostInput>(json).unwrap().password;
         assert_eq!(parse(r#"{"name":"a","address":"b"}"#), None);
         assert_eq!(parse(r#"{"name":"a","address":"b","password":null}"#), Some(None));
@@ -2441,13 +2441,13 @@ mod tests {
         let in_low = dir.save_host(host("in-unten", Some(&low))).unwrap();
         let outside = dir.save_host(HostInput { own: Fields { jump: Some(in_low.clone()), ..Fields::default() }, ..host("draussen", None) }).unwrap();
 
-        // Auflösen: Inhalt rückt eine Ebene nach oben.
+        // Dissolve: the content moves up one level.
         dir.delete_group(&mid, false).unwrap();
         assert!(!dir.groups.contains_key(&mid));
         assert_eq!(dir.groups[&low].parent.as_deref(), Some(top.as_str()));
         assert_eq!(dir.hosts[&in_mid].group.as_deref(), Some(top.as_str()));
 
-        // Mit Inhalt löschen: Untergruppen und Hosts verschwinden, Verweise auf sie werden gelöst.
+        // Delete with content: subgroups and hosts disappear, references to them are dropped.
         dir.delete_group(&top, true).unwrap();
         assert!(dir.groups.is_empty());
         assert_eq!(dir.hosts.keys().collect::<Vec<_>>(), [&outside]);
@@ -2487,7 +2487,7 @@ mod tests {
         assert_eq!(dir.judge_host_key("server.example", 2222, key_a), Verdict::Unknown, "ein anderer Port ist ein anderer Dienst");
         assert_eq!(dir.judge_host_key("server.example", 22, key_b), Verdict::Changed { known: vec!["SHA256:aaa".into()] });
 
-        // Vertraut der Nutzer dem neuen Schlüssel, ersetzt er den alten.
+        // If the user trusts the new key, it replaces the old one.
         dir.trust_host_key("server.example", 22, "ssh-ed25519", "SHA256:bbb", key_b).unwrap();
         assert_eq!(dir.judge_host_key("server.example", 22, key_b), Verdict::Trusted);
         assert_eq!(dir.judge_host_key("server.example", 22, key_a), Verdict::Changed { known: vec!["SHA256:bbb".into()] });
@@ -2496,7 +2496,7 @@ mod tests {
         assert_eq!((snapshot.known_hosts[0].host.as_str(), snapshot.known_hosts[0].fingerprint.as_str()), ("server.example", "SHA256:bbb"));
         assert!(snapshot.known_hosts[0].added_at > 0);
 
-        // Übersteht Sperren und Entsperren; Löschen macht den Server wieder unbekannt.
+        // Survives locking and unlocking; deleting makes the server unknown again.
         let mut vault = dir.into_vault();
         vault.lock();
         vault.unlock("richtig").unwrap();
@@ -2521,7 +2521,7 @@ mod tests {
         }
         assert_eq!(reason(dir.save_host(fine(Fields { mosh_predict: Some("manchmal".into()), ..Fields::default() }))), Invalid::MoshPredictInvalid);
 
-        // Eine Gruppe schaltet Mosh ein; ein Host übernimmt es, ein anderer schaltet es ab.
+        // A group switches Mosh on; one host takes it over, another switches it off.
         let defs = Fields { mosh: Some(true), mosh_port: Some(" 60001:60010 ".into()), mosh_server: Some("~/.local/bin/mosh-server".into()), ..Fields::default() };
         let roaming = dir.save_group(GroupInput { defs, ..group("Unterwegs", None) }).unwrap();
         let laptop = dir.save_host(HostInput { own: Fields { mosh_predict: Some("always".into()), ..Fields::default() }, ..host("laptop", Some(&roaming)) }).unwrap();
@@ -2547,7 +2547,7 @@ mod tests {
         assert_eq!((info.agent, info.agent_forward), (false, false), "ohne Vorgabe kein Agent");
         assert_eq!((info.proxy.is_none(), info.keepalive, info.timeout, info.term.as_str(), info.charset.as_str(), info.legacy), (true, 30, 15, "xterm-256color", "utf-8", false));
 
-        // Feineinstellungen und Proxy: geprüft beim Speichern, vererbt wie alles andere, am Host abschaltbar.
+        // Fine-tuning and proxy: checked when saving, inherited like everything else, can be switched off on the host.
         let fine = |fields: Fields| HostInput { own: fields, ..host("x", None) };
         assert_eq!(reason(dir.save_host(fine(Fields { proxy: Some("ich:pw@proxy".into()), ..Fields::default() }))), Invalid::ProxyInvalid);
         assert_eq!(reason(dir.save_host(fine(Fields { keepalive: Some(4000), ..Fields::default() }))), Invalid::KeepaliveInvalid);
@@ -2563,7 +2563,7 @@ mod tests {
         assert_eq!((info.keepalive, info.timeout, info.term.as_str(), info.charset.as_str(), info.legacy), (0, 60, "vt100", "iso-8859-1", true));
         assert!(dir.connect_info(&switch).unwrap().proxy.is_none(), "„ausdrücklich keiner“ am Host");
 
-        // Proxy mit Anmeldung: Der Benutzer steht in der Adresse, das Passwort liegt als Geheimnis dort, wo der Proxy festgelegt ist.
+        // Proxy with sign-in: the user is in the address, the password is stored as a secret where the proxy is defined.
         let secret = |text: &str| Some(Some(Secret::new(text.into())));
         let with_login = Fields { proxy: Some("http://ich@proxy.firma.test:3128".into()), ..Fields::default() };
         dir.save_group(GroupInput { id: Some(switches.clone()), defs: with_login.clone(), proxy_password: secret("gruppen-pw"), ..group("Switches", None) }).unwrap();
@@ -2576,7 +2576,7 @@ mod tests {
         let snapshot = dir.snapshot();
         assert!(snapshot.groups.iter().any(|g| g.has_proxy_password) && snapshot.hosts.iter().find(|h| h.id == other).unwrap().has_proxy_password);
         assert!(!serde_json::to_string(&snapshot).unwrap().contains("-pw"), "kein Passwort verlässt den Kern");
-        // Ohne das Feld bleibt es, `null` entfernt es, und ohne eigenen Proxy fällt es weg.
+        // Without the field it stays, `null` removes it, and without a proxy of its own it is dropped.
         dir.save_host(HostInput { id: Some(other.clone()), own: own_proxy.clone(), ..host("sw-02", Some(&switches)) }).unwrap();
         assert!(dir.snapshot().hosts.iter().find(|h| h.id == other).unwrap().has_proxy_password);
         dir.save_host(HostInput { id: Some(other.clone()), own: own_proxy, proxy_password: Some(None), ..host("sw-02", Some(&switches)) }).unwrap();
@@ -2585,7 +2585,7 @@ mod tests {
         assert!(!dir.snapshot().groups.iter().any(|g| g.has_proxy_password));
         dir.delete_group(&switches, true).unwrap();
 
-        // Sprung-Server, Startbefehl und Umgebung kommen aus Gruppe und Host; der Sprung-Server hat eigene Daten.
+        // Jump host, startup command and environment come from group and host; the jump host has its own details.
         let bastion = dir.save_host(HostInput { address: "203.0.113.10".into(), own: Fields { jump: Some(String::new()), user: Some("sprung".into()), ..Fields::default() }, ..host("bastion", Some(&group_id)) }).unwrap();
         let defs = Fields { user: Some("deploy".into()), port: Some(2200), jump: Some(bastion.clone()), env: Some(" STUFE=prod ".into()), agent: Some(true), agent_forward: Some(true), ..Fields::default() };
         dir.save_group(GroupInput { id: Some(group_id.clone()), defs, ..group("Produktiv", None) }).unwrap();
@@ -2650,7 +2650,7 @@ mod tests {
         assert_eq!((name.as_str(), private.expose()), ("arbeit-2026", "-----BEGIN OPENSSH PRIVATE KEY-----arbeit"));
         assert!(matches!(dir.rename_key("00000000000000000000000000000000", "x"), Err(DirError::NotFound)));
 
-        // Nach Sperren und erneutem Öffnen ist der Schlüssel samt Zeitpunkt wieder da.
+        // After locking and opening again the key and its time are back.
         let added_at = dir.snapshot().keys[1].added_at;
         let mut vault = dir.into_vault();
         vault.lock();
@@ -2674,7 +2674,7 @@ mod tests {
         assert_eq!((view.name.as_str(), view.user.as_str(), view.key.as_deref(), view.has_password), ("Deploy", "deploy", Some(key_id.as_str()), true));
         assert!(!serde_json::to_string(&dir.snapshot()).unwrap().contains("geheim"));
 
-        // Ohne das Feld bleibt das Passwort, `null` entfernt es; ein leerer Schlüssel heißt „keiner“.
+        // Without the field the password stays, `null` removes it; an empty key means “none”.
         dir.save_identity(IdentityInput { id: Some(id.clone()), ..identity("Deploy", "deploy", Some("")) }).unwrap();
         let view = &dir.snapshot().identities[0];
         assert_eq!((view.key.as_deref(), view.has_password), (None, true));
@@ -2699,19 +2699,19 @@ mod tests {
         assert_eq!((info.user.as_str(), info.password.as_ref().map(Secret::expose)), ("deploy", Some("id-passwort")));
         assert_eq!(info.key.as_ref().map(Secret::expose), Some("-----BEGIN OPENSSH PRIVATE KEY-----arbeit"));
 
-        // Am Host einzeln eingetragene Werte gehen vor, auch das eigene Passwort.
+        // Values set individually on the host take precedence, including its own password.
         let own = Fields { user: Some("admin".into()), key: Some(other.clone()), ..Fields::default() };
         let special = dir.save_host(HostInput { own, password: Some(Some(Secret::new("host-passwort".into()))), ..host("db-01", Some(&prod)) }).unwrap();
         let info = dir.connect_info(&special).unwrap();
         assert_eq!((info.user.as_str(), info.password.as_ref().map(Secret::expose)), ("admin", Some("host-passwort")));
         assert_eq!(info.key.as_ref().map(Secret::expose), Some("-----BEGIN OPENSSH PRIVATE KEY-----anderer"));
 
-        // „Ausdrücklich keine Identität“ am Host: Vorgabe-Benutzer, kein Schlüssel, kein Passwort.
+        // “Explicitly no identity” on the host: default user, no key, no password.
         let bare = dir.save_host(HostInput { own: Fields { identity: Some(String::new()), ..Fields::default() }, ..host("alt", Some(&prod)) }).unwrap();
         let info = dir.connect_info(&bare).unwrap();
         assert_eq!((info.user.as_str(), info.password.is_none(), info.key.is_none()), (model::DEFAULT_USER, true, true));
 
-        // Ein Zertifikat am Schlüssel geht mit in die Verbindungsdaten und in die Anzeige, bis es entfernt wird.
+        // A certificate on the key goes into the connection details and the display until it is removed.
         let certificate = KeyCertificate { text: "ssh-ed25519-cert-v01@openssh.com AAAAzert".into(), key_id: "deploy".into(), principals: vec!["deploy".into()], valid_after: 0, valid_before: None, authority: "SHA256:ca".into() };
         dir.set_key_certificate(&work, Some(certificate.clone())).unwrap();
         assert_eq!(dir.connect_info(&plain).unwrap().certificate.as_deref(), Some("ssh-ed25519-cert-v01@openssh.com AAAAzert"));
@@ -2721,7 +2721,7 @@ mod tests {
         assert!(dir.connect_info(&plain).unwrap().certificate.is_none());
         assert!(matches!(dir.set_key_certificate("00000000000000000000000000000000", None), Err(DirError::NotFound)));
 
-        // Schlüssel löschen löst die Verweise am Host und in der Identität, sonst bleibt alles.
+        // Deleting a key drops the references on the host and in the identity, everything else stays.
         dir.delete_key(&other).unwrap();
         assert!(dir.snapshot().hosts.iter().all(|h| h.own.key.is_none()));
         assert_eq!(dir.connect_info(&special).unwrap().key.as_ref().map(Secret::expose), Some("-----BEGIN OPENSSH PRIVATE KEY-----arbeit"), "jetzt gilt der Schlüssel der Identität");
@@ -2730,14 +2730,14 @@ mod tests {
         assert!(dir.connect_info(&plain).unwrap().key.is_none());
         assert!(matches!(dir.delete_key(&work), Err(DirError::NotFound)));
 
-        // Nach dem Kopieren auf einen Host lässt er sich auf den Schlüssel umstellen.
+        // After copying it to a host, the host can be switched to the key.
         let fresh = dir.add_key(key("frisch")).unwrap();
         assert!(dir.set_host_key(&plain, &fresh).unwrap());
         assert!(!dir.set_host_key(&plain, &fresh).unwrap(), "derselbe Schlüssel ist keine Änderung");
         assert_eq!(dir.connect_info(&plain).unwrap().key.as_ref().map(Secret::expose), Some("-----BEGIN OPENSSH PRIVATE KEY-----frisch"));
         assert_eq!(reason(dir.set_host_key(&plain, "00000000000000000000000000000000")), Invalid::KeyMissing);
 
-        // Identität löschen löst die Verweise in Gruppe und Host.
+        // Deleting an identity drops the references in group and host.
         dir.delete_identity(&deploy).unwrap();
         let snapshot = dir.snapshot();
         assert!(snapshot.identities.is_empty() && snapshot.groups[0].defs.identity.is_none());
@@ -2797,7 +2797,7 @@ mod tests {
         let alone = dir.snapshot().workspaces.into_iter().find(|w| w.id == single).unwrap();
         assert_eq!((alone.layout.clone(), alone.multi), (*pane(&db), false), "unbekannte Hosts fallen weg, Multi-Exec braucht zwei Bereiche");
 
-        // Dieselbe Form, wie sie die Oberfläche schickt und liest.
+        // The same form the interface sends and reads.
         let json = serde_json::to_value(&alone.layout).unwrap();
         assert_eq!(json, serde_json::json!({ "pane": { "kind": "host", "id": db } }));
         assert!(serde_json::from_value::<Arrangement>(serde_json::json!({ "pane": { "kind": "direct", "user": "root", "host": "1.2.3.4", "port": 22 } })).is_err(), "eingetippte Adressen gehören nicht in den Tresor");
@@ -2839,7 +2839,7 @@ mod tests {
         let dynamic = dir.forward(&socks).unwrap();
         assert_eq!((dynamic.dest_host.as_str(), dynamic.dest_port), ("", 0), "ein SOCKS-Proxy hat kein festes Ziel");
         assert_eq!(dir.snapshot().forwards.iter().map(|f| (f.name.as_str(), f.bind_address.as_str())).collect::<Vec<_>>(), [("Grafana", "127.0.0.1"), ("SOCKS", "127.0.0.1"), ("Webhook", "0.0.0.0")]);
-        // Dieselbe Form, wie sie die Oberfläche liest.
+        // The same form the interface reads.
         assert_eq!(serde_json::to_value(&dynamic).unwrap(), serde_json::json!({ "id": socks, "name": "SOCKS", "kind": "dynamic", "host": db, "bindAddress": "127.0.0.1", "bindPort": 1080, "destHost": "", "destPort": 0 }));
 
         dir.save_forward(ForwardInput { id: Some(grafana.clone()), ..rule("Grafana neu", ForwardKind::Local, &web, 3001, "10.0.0.5", 80) }).unwrap();
@@ -2880,7 +2880,7 @@ mod tests {
         assert_eq!(serde_json::to_value(&played.steps[0]).unwrap(), serde_json::json!({ "wait": 0, "keys": "cd /var\r" }));
         assert!(!format!("{:?}", dir.snippets[&tour]).contains("cd /var"), "getippte Tasten erscheinen in keiner Ausgabe");
 
-        // Das eigene Kürzel darf ein Snippet beim Bearbeiten behalten; ein freies bekommt es ohne Weiteres.
+        // A snippet may keep its own hotkey when edited; it gets a free one without further ado.
         dir.save_snippet(SnippetInput { id: Some(space.clone()), ..command("Platz", "df -h", Some("Alt+1")) }).unwrap();
         assert_eq!(reason(dir.save_snippet(SnippetInput { id: Some(containers.clone()), ..command("Container", "docker ps", Some("Alt+1")) })), Invalid::HotkeyTaken);
         dir.save_snippet(SnippetInput { id: Some(containers.clone()), ..command("Container", "docker ps", Some("")) }).unwrap();
@@ -2934,7 +2934,7 @@ mod tests {
     fn batch_writes_all_or_nothing_and_known_hosts_add_up() {
         let temp = Temp::new("batch");
         let mut dir = temp.directory();
-        // Mitten in der Sammeländerung sieht jeder Schritt, was die vorigen geschrieben haben.
+        // In the middle of the batch change every step sees what the previous ones wrote.
         let made = dir
             .batch(|dir| {
                 let g = dir.save_group(group("Import", None))?;
@@ -2947,7 +2947,7 @@ mod tests {
         assert_eq!((snapshot.groups.len(), snapshot.hosts.len()), (1, 2));
         assert_eq!(snapshot.hosts.iter().find(|h| h.id == made.2).unwrap().own.jump.as_deref(), Some(made.1.as_str()));
 
-        // Scheitert ein Schritt, ist auch das davor Geschriebene wieder weg.
+        // If a step fails, what was written before is gone again too.
         let failed = dir.batch(|dir| {
             dir.save_host(host("bleibt-nicht", None))?;
             dir.save_host(HostInput { address: " ".into(), ..host("kaputt", None) })
@@ -2956,7 +2956,7 @@ mod tests {
         assert_eq!(dir.snapshot().hosts.len(), 2);
         assert!(dir.save_host(host("danach", None)).is_ok(), "nach einer Sammeländerung geht es normal weiter");
 
-        // Für eine Adresse dürfen mehrere Schlüssel gelten; derselbe kommt kein zweites Mal dazu.
+        // Several keys may apply to one address; the same one is not added a second time.
         assert!(dir.add_known_host("Web.Example.org", 22, "ssh-ed25519", "SHA256:a", "ssh-ed25519 AAAA kommentar").unwrap());
         assert!(dir.add_known_host("web.example.org", 22, "ssh-rsa", "SHA256:b", "ssh-rsa BBBB").unwrap());
         assert!(!dir.add_known_host("web.example.org", 22, "ssh-ed25519", "SHA256:a", "ssh-ed25519 AAAA").unwrap());
@@ -2970,7 +2970,7 @@ mod tests {
     fn ftp_hosts_follow_their_own_rules() {
         let temp = Temp::new("ftp");
         let mut dir = temp.directory();
-        // Eine Gruppe gibt für FTP nichts vor: weder Benutzer noch Port.
+        // A group sets nothing for FTP: neither user nor port.
         let net = dir.save_group(GroupInput { defs: Fields { user: Some("deploy".into()), port: Some(2222), ..Fields::default() }, ..group("Netz", None) }).unwrap();
         let ftp = |security| Ftp { security, anonymous: false, dir: None, plain_ok: false };
         let web = |own: Fields, settings: Option<Ftp>, password: Option<&str>| HostInput {
@@ -2982,7 +2982,7 @@ mod tests {
             ..host("webspace", Some(&net))
         };
 
-        // Ohne Angabe gilt FTPS auf Port 21; Benutzer und Passwort stehen am Host, alles vom Terminal fällt weg.
+        // Without a value, FTPS on port 21 applies; user and password are on the host, everything for the terminal is dropped.
         let own = Fields { user: Some("web123".into()), term: Some("xterm".into()), charset: Some("utf-8".into()), startcmd: Some("ls".into()), ..Fields::default() };
         let id = dir.save_host(web(own, None, Some("geheim"))).unwrap();
         assert!(matches!(dir.endpoint(&id).unwrap(), Endpoint::Ftp));
@@ -2997,7 +2997,7 @@ mod tests {
         assert_eq!(view["own"], serde_json::json!({ "user": "web123" }));
         assert_eq!(view["hasPassword"], true);
 
-        // FTPS von Anfang an hat seinen eigenen Port; ein eigener Port und ein Startordner bleiben.
+        // Implicit FTPS has its own port; a port of its own and a start folder stay.
         let settings = Ftp { dir: Some(" /htdocs ".into()), ..ftp(FtpSecurity::Implicit) };
         dir.save_host(HostInput { id: Some(id.clone()), ..web(Fields { user: Some("web123".into()), ..Fields::default() }, Some(settings), None) }).unwrap();
         let info = dir.ftp_info(&id).unwrap();
@@ -3006,7 +3006,7 @@ mod tests {
         dir.save_host(HostInput { id: Some(id.clone()), ..web(Fields { user: Some("web123".into()), port: Some(2121), ..Fields::default() }, None, None) }).unwrap();
         assert_eq!((dir.ftp_info(&id).unwrap().port, dir.ftp_info(&id).unwrap().security), (2121, FtpSecurity::Implicit), "ohne Angabe bleiben die Einstellungen");
 
-        // Mit einer Identität kommen Benutzer und Passwort von ihr; der Host hält dann keines.
+        // With an identity, user and password come from it; the host then holds none.
         let identity = dir.save_identity(IdentityInput { password: Some(Some(Secret::new("aus-der-identitaet".into()))), ..identity("Hoster", "kunde7", None) }).unwrap();
         dir.save_host(HostInput { id: Some(id.clone()), ..web(Fields { user: Some("web123".into()), identity: Some(identity.clone()), ..Fields::default() }, None, None) }).unwrap();
         let info = dir.ftp_info(&id).unwrap();
@@ -3014,13 +3014,13 @@ mod tests {
         let view = serde_json::to_value(dir.snapshot().hosts.iter().find(|h| h.id == id).unwrap()).unwrap();
         assert_eq!((view["own"].clone(), view["hasPassword"].clone()), (serde_json::json!({ "identity": identity }), serde_json::json!(false)));
 
-        // Anonym: kein Benutzer, kein Passwort, keine Identität.
+        // Anonymous: no user, no password, no identity.
         let anonymous = Ftp { anonymous: true, ..ftp(FtpSecurity::None) };
         dir.save_host(HostInput { id: Some(id.clone()), ..web(Fields { user: Some("web123".into()), identity: Some(identity), ..Fields::default() }, Some(anonymous), Some("egal")) }).unwrap();
         let info = dir.ftp_info(&id).unwrap();
         assert_eq!((info.user.as_str(), info.password.is_none(), info.saves_password, info.security), ("", true, false, FtpSecurity::None));
 
-        // Die Rückfrage vor der unverschlüsselten Verbindung lässt sich abbestellen; mit FTPS verfällt das.
+        // The question before the unencrypted connection can be switched off; with FTPS that lapses.
         dir.set_ftp_choice(&id, true, false).unwrap();
         assert!(dir.ftp_info(&id).unwrap().plain_ok);
         dir.set_ftp_choice(&id, false, true).unwrap();
@@ -3029,7 +3029,7 @@ mod tests {
         dir.set_ftp_choice(&id, true, false).unwrap();
         assert!(!dir.ftp_info(&id).unwrap().plain_ok, "bei FTPS gibt es nichts abzubestellen");
 
-        // Ein bestätigtes Zertifikat steht bei den bekannten Hosts und gilt für genau diese Adresse und diesen Port.
+        // A confirmed certificate is listed with the known hosts and applies to exactly this address and port.
         let port = dir.ftp_info(&id).unwrap().port;
         dir.trust_certificate("FTP.example.org", port, "5F:1A").unwrap();
         assert_eq!(dir.ftp_info(&id).unwrap().pin.as_deref(), Some("5F:1A"));
@@ -3039,7 +3039,7 @@ mod tests {
         let known = dir.snapshot().known_hosts;
         assert_eq!(known.iter().filter(|k| k.algorithm == "tls").map(|k| (k.host.as_str(), k.fingerprint.as_str())).collect::<Vec<_>>(), [("ftp.example.org", "AA:BB")]);
 
-        // Ein FTP-Host taugt nicht als Sprung-Server und trägt keine Port-Regeln; mit anderem Protokoll verschwinden seine Einstellungen.
+        // An FTP host is not suitable as a jump host and carries no port rules; with another protocol its settings disappear.
         assert_eq!(reason(dir.save_host(HostInput { own: Fields { jump: Some(id.clone()), ..Fields::default() }, ..host("hinten", None) })), Invalid::HostNotSsh);
         let plain = dir.save_host(host("ssh-host", None)).unwrap();
         assert_eq!(reason(dir.set_ftp_choice(&plain, true, false)), Invalid::ProtocolInvalid);
@@ -3057,7 +3057,7 @@ mod tests {
         let defs = Fields { user: Some("deploy".into()), port: Some(2222), charset: Some("iso-8859-1".into()), timeout: Some(40), ..Fields::default() };
         let net = dir.save_group(GroupInput { defs, ..group("Netz", None) }).unwrap();
 
-        // Telnet: Port und Benutzer erbt der Host nicht, Wartezeit und Zeichensatz schon.
+        // Telnet: the host does not inherit port and user, but timeout and charset it does.
         let own = Fields { startcmd: Some("enable".into()), ..Fields::default() };
         let switch = dir.save_host(HostInput { protocol: Some("telnet".into()), password: Some(Some(Secret::new("geheim".into()))), own, ..host("switch", Some(&net)) }).unwrap();
         let Endpoint::Telnet(info) = dir.endpoint(&switch).unwrap() else { panic!("Telnet erwartet") };
@@ -3069,12 +3069,12 @@ mod tests {
         assert!(view.own.startcmd.is_none(), "was zum Protokoll nicht gehört, wird nicht gespeichert");
         assert_eq!(reason(dir.connect_info(&switch)), Invalid::HostNotSsh);
 
-        // Ohne Angabe bleibt das Protokoll, etwa beim Verschieben in eine andere Gruppe.
+        // Without a value the protocol stays, e.g. when moving into another group.
         dir.save_host(HostInput { id: Some(switch.clone()), own: Fields { port: Some(2323), user: Some("admin".into()), ..Fields::default() }, ..host("switch", None) }).unwrap();
         let Endpoint::Telnet(info) = dir.endpoint(&switch).unwrap() else { panic!("Telnet erwartet") };
         assert_eq!((info.port, info.user.as_deref(), info.timeout), (2323, Some("admin"), 15));
 
-        // Seriell: Die Leitung gehört dazu und muss es geben können.
+        // Serial: the line belongs to it and must be possible.
         let serial = |line: Option<Serial>| HostInput { protocol: Some("serial".into()), serial: line, address: "COM3".into(), ..host("konsole", None) };
         assert_eq!(reason(dir.save_host(serial(None))), Invalid::SerialRequired);
         assert_eq!(reason(dir.save_host(serial(Some(Serial { baud: 10, ..line })))), Invalid::BaudInvalid);
@@ -3088,7 +3088,7 @@ mod tests {
         assert_eq!((info.port.as_str(), info.line.baud, info.charset.as_str()), ("/dev/ttyUSB0", 115_200, "iso-8859-1"), "die Leitung bleibt, der Zeichensatz kommt von der Gruppe");
         assert_eq!(serde_json::to_value(dir.snapshot().hosts.iter().find(|h| h.id == console).unwrap()).unwrap()["serial"], serde_json::json!({ "baud": 115_200, "dataBits": 8, "parity": "none", "stopBits": 1, "flow": "none" }));
 
-        // Wird aus der Leitung ein Telnet-Host, verschwinden ihre Einstellungen.
+        // If the line becomes a Telnet host, its settings disappear.
         let moved = dir.save_host(serial(Some(line))).unwrap();
         dir.save_host(HostInput { id: Some(moved.clone()), protocol: Some("telnet".into()), address: "10.0.0.9".into(), ..host("konsole-2", None) }).unwrap();
         assert!(dir.snapshot().hosts.iter().find(|h| h.id == moved).unwrap().serial.is_none());
@@ -3097,12 +3097,12 @@ mod tests {
         let plain = dir.save_host(host("web", None)).unwrap();
         assert!(matches!(dir.endpoint(&plain).unwrap(), Endpoint::Ssh));
 
-        // Springen und Port-Regeln gehen nur über SSH.
+        // Jumping and port rules only work over SSH.
         assert_eq!(reason(dir.save_host(HostInput { own: Fields { jump: Some(switch.clone()), ..Fields::default() }, ..host("hinten", None) })), Invalid::HostNotSsh);
         let rule = |host: &str| ForwardInput { id: None, name: "Web".into(), kind: ForwardKind::Local, host: host.into(), bind_address: String::new(), bind_port: 8080, dest_host: "127.0.0.1".into(), dest_port: 80 };
         assert_eq!(reason(dir.save_forward(rule(&switch))), Invalid::HostNotSsh);
 
-        // Wer Sprung-Server ist oder Port-Regeln trägt, bleibt bei SSH.
+        // Whoever is a jump host or carries port rules stays on SSH.
         let bastion = dir.save_host(host("bastion", None)).unwrap();
         let behind = dir.save_host(HostInput { own: Fields { jump: Some(bastion.clone()), ..Fields::default() }, ..host("dahinter", None) }).unwrap();
         let to_telnet = |id: &str| HostInput { id: Some(id.into()), protocol: Some("telnet".into()), ..host("bastion", None) };
@@ -3114,7 +3114,7 @@ mod tests {
         dir.save_host(to_telnet(&bastion)).unwrap();
         assert!(matches!(dir.endpoint(&bastion).unwrap(), Endpoint::Telnet(_)));
 
-        // Nach dem Sperren und Öffnen steht alles wieder da.
+        // After locking and opening, everything is there again.
         drop(dir);
         let mut vault = Vault::open(&temp.0).unwrap();
         vault.unlock("richtig").unwrap();
@@ -3138,7 +3138,7 @@ mod tests {
         assert!(view.multi, "ein lokales Terminal zählt als Bereich");
         assert_eq!(serde_json::to_value(&view.layout).unwrap()["b"], serde_json::json!({ "pane": { "kind": "local", "shell": "wsl:Ubuntu" } }));
 
-        // Mit dem Host verschwindet sein Bereich; das lokale Terminal bleibt allein übrig.
+        // The host's pane disappears with it; the local terminal remains on its own.
         dir.delete_host(&web).unwrap();
         let left = dir.snapshot().workspaces;
         assert_eq!((left[0].layout.clone(), left[0].multi), (*local("wsl:Ubuntu"), false));
@@ -3148,7 +3148,7 @@ mod tests {
         dir.save_workspace(input(*local("pwsh"))).unwrap();
     }
 
-    /// Ein Verzeichnis mit einem eigenen geteilten Tresor namens „Team Infra“.
+    /// A directory with an own shared vault called “Team Infra”.
     fn with_shared(temp: &Temp) -> (Directory, String) {
         let mut dir = temp.directory();
         let shared = hex(&dir.vault.create_shared(&[1; 16], "ich").unwrap());
@@ -3168,7 +3168,7 @@ mod tests {
         assert_eq!((dir.vault_name(&shared), dir.snapshot().homes.len()), ("Team".to_string(), 1), "umbenennen ersetzt den einen Datensatz mit dem Namen");
         assert!(matches!(dir.rename_vault(&snapshot.vaults[0].id, "x"), Err(DirError::Vault(VaultError::NotOwner))), "der persönliche Tresor hat keinen Namen");
 
-        // Anlegen im gewählten Tresor. Ohne Wahl bestimmt die Gruppe, wohin ein Eintrag kommt.
+        // Creating in the chosen vault. Without a choice, the group decides where an entry goes.
         let team_group = dir.in_vault(Some(&shared), |d| d.save_group(group("Team", None))).unwrap();
         let team_host = dir.save_host(host("pve-01", Some(&team_group))).unwrap();
         let own_group = dir.save_group(group("Privat", None)).unwrap();
@@ -3177,12 +3177,12 @@ mod tests {
         assert_eq!((homes.get(&team_group), homes.get(&team_host), homes.get(&own_host), homes.get(&own_group)), (Some(&shared), Some(&shared), None, None));
         assert_eq!(dir.record_name(&team_host).as_deref(), Some("pve-01"));
 
-        // Ein Eintrag liegt im selben Tresor wie seine Gruppe.
+        // An entry lives in the same vault as its group.
         assert_eq!(reason(dir.in_vault(Some(&shared), |d| d.save_host(host("falsch", Some(&own_group))))), Invalid::OtherVault);
         assert_eq!(reason(dir.save_host(HostInput { id: Some(own_host.clone()), ..host("web", Some(&team_group)) })), Invalid::OtherVault);
         assert_eq!(reason(dir.save_group(GroupInput { id: Some(own_group.clone()), ..group("Privat", Some(&team_group)) })), Invalid::OtherVault);
 
-        // Ein geteilter Tresor verweist nur in sich selbst; der persönliche darf auf alles verweisen.
+        // A shared vault only refers within itself; the personal one may refer to anything.
         let own_key = dir.add_key(key("mein")).unwrap();
         let team_key = dir.in_vault(Some(&shared), |d| d.add_key(key("team"))).unwrap();
         let with_key = |id: &str, name: &str, group: &str, key: &str| HostInput { id: Some(id.into()), own: Fields { key: Some(key.into()), ..Fields::default() }, ..host(name, Some(group)) };
@@ -3190,13 +3190,13 @@ mod tests {
         dir.save_host(with_key(&team_host, "pve-01", &team_group, &team_key)).unwrap();
         dir.save_host(with_key(&own_host, "web", &own_group, &team_key)).unwrap();
 
-        // Eine Kopie bleibt im Tresor des Originals.
+        // A copy stays in the original's vault.
         let copy = dir.duplicate_host(&team_host, "pve-02").unwrap();
         assert_eq!(dir.snapshot().homes.get(&copy), Some(&shared));
         assert_eq!(dir.role_of(&team_host), Role::Owner);
         assert!(matches!(dir.in_vault(Some(&"00".repeat(16)), |d| d.save_group(group("x", None))), Err(DirError::NotFound)));
 
-        // Nach dem Sperren und Entsperren ist alles wieder an seinem Platz.
+        // After locking and unlocking everything is back in its place.
         let mut vault = dir.into_vault();
         vault.lock();
         vault.unlock("richtig").unwrap();
@@ -3231,7 +3231,7 @@ mod tests {
         assert!(!snapshot.hosts.iter().any(|h| h.id == web), "hier ist er weg");
         let host_view = snapshot.hosts.iter().find(|h| h.id == moved).unwrap();
         assert_eq!((snapshot.homes.get(&moved), host_view.group.as_deref(), host_view.has_password), (Some(&shared), None, true));
-        // Der Sprung-Server von anderswo ist gelöst; Identität und ihr Schlüssel sind als Kopien mitgekommen.
+        // The jump host from elsewhere is dropped; identity and its key came along as copies.
         assert_eq!(host_view.own.jump, None);
         let carried = host_view.own.identity.clone().unwrap();
         assert_ne!(carried, deploy);
@@ -3240,18 +3240,18 @@ mod tests {
         assert_eq!((snapshot.homes.get(&carried), snapshot.homes.get(&carried_key), carried_key != own_key), (Some(&shared), Some(&shared), true));
         assert!(snapshot.identities.iter().any(|i| i.id == deploy) && snapshot.keys.iter().any(|k| k.id == own_key), "die eigenen bleiben, wo sie waren");
         assert_eq!(dir.connect_info(&moved).unwrap().user, "deploy");
-        // Port-Regel, Arbeitsbereich und der Host dahinter sind persönlich und folgen dem Host.
+        // Port rule, workspace and the host behind them are personal and follow the host.
         assert_eq!(snapshot.forwards.iter().find(|f| f.id == rule).unwrap().host, moved);
         assert_eq!(snapshot.workspaces.iter().find(|w| w.id == workspace).unwrap().layout.hosts(), [moved.as_str(), behind.as_str()]);
         assert_eq!(snapshot.hosts.iter().find(|h| h.id == behind).unwrap().own.jump.as_deref(), Some(moved.as_str()));
 
-        // Zurück in den persönlichen Tresor: Der darf auf den geteilten verweisen, also bleibt die Identität.
+        // Back into the personal vault: it may refer to the shared one, so the identity stays.
         let back = dir.move_host(&moved, &personal, false).unwrap();
         let snapshot = dir.snapshot();
         let host_view = snapshot.hosts.iter().find(|h| h.id == back).unwrap();
         assert_eq!((snapshot.homes.get(&back), host_view.own.identity.as_deref()), (None, Some(carried.as_str())));
 
-        // Ohne Mitnehmen wird der Verweis gelöst statt kopiert.
+        // Without carrying, the reference is dropped instead of copied.
         let plain = dir.save_host(HostInput { own: Fields { key: Some(own_key.clone()), ..Fields::default() }, ..host("ohne", None) }).unwrap();
         let moved = dir.move_host(&plain, &shared, false).unwrap();
         assert_eq!(dir.snapshot().hosts.iter().find(|h| h.id == moved).unwrap().own.key, None);
@@ -3282,7 +3282,7 @@ mod tests {
         assert_eq!(dir.proxmox_access(&id).unwrap().secret.expose(), "0c6f2c1e-58a1");
         assert_eq!(dir.record_name(&id).as_deref(), Some("Dedi"));
 
-        // Ohne neues Geheimnis bleibt das alte; ohne Fingerabdruck muss das Zertifikat von sich aus gelten.
+        // Without a new secret the old one stays; without a fingerprint the certificate must be valid on its own.
         dir.save_proxmox(ProxmoxInput { id: Some(id.clone()), secret: None, ..pve("Dedi 2") }).unwrap();
         let access = dir.proxmox_access(&id).unwrap();
         assert_eq!((access.secret.expose(), access.fingerprint, dir.snapshot().proxmox[0].name.as_str()), ("0c6f2c1e-58a1", None, "Dedi 2"));
@@ -3319,7 +3319,7 @@ mod tests {
 
         let web = GuestHost { user: Some("deploy".into()), key: Some(deploy.clone()), os: Some("Ub".into()), ..guest(101, "web-01", Some("10.0.10.11")) };
         let container = GuestHost { kind: model::GUEST_LXC.into(), user: Some("root".into()), key: Some("gibt-es-nicht".into()), ..guest(111, "pihole", Some("10.0.0.53")) };
-        // Auch wenn gerade in einen geteilten Tresor angelegt würde: Diese Hosts kommen in den persönlichen.
+        // Even if entries were currently being created in a shared vault: these hosts go into the personal one.
         let made = dir.in_vault(Some(&shared), |dir| dir.add_proxmox_hosts(&connection, vec![web.clone(), container, guest(130, "spielwiese", None)], Some(&own_group))).unwrap();
         assert_eq!(made.len(), 3);
         let snapshot = dir.snapshot();
@@ -3333,7 +3333,7 @@ mod tests {
         assert_eq!(dir.proxmox_host(&connection, 111), Some(by("pihole").id.as_str()));
         assert_eq!(dir.proxmox_host(&connection, 999), None);
 
-        // Wer schon einen Host hat, bekommt keinen zweiten. Scheitert einer, entsteht keiner.
+        // Whoever already has a host gets no second one. If one fails, none is created.
         assert_eq!(dir.add_proxmox_hosts(&connection, vec![web.clone(), guest(120, "monitoring", Some("10.0.10.90"))], None).unwrap().len(), 1);
         assert_eq!(reason(dir.add_proxmox_hosts(&connection, vec![guest(140, "neu", Some("10.0.0.9")), guest(141, "kaputt", Some("a b"))], None)), Invalid::AddressInvalid);
         assert_eq!(reason(dir.add_proxmox_hosts(&connection, vec![GuestHost { kind: "docker".into(), ..guest(142, "x", Some("10.0.0.8")) }], None)), Invalid::GuestInvalid);
@@ -3342,7 +3342,7 @@ mod tests {
         assert!(matches!(dir.add_proxmox_hosts(&"00".repeat(16), vec![guest(143, "x", Some("10.0.0.7"))], None), Err(DirError::NotFound)));
         assert_eq!(dir.snapshot().hosts.len(), 4);
 
-        // Die Kopie eines Hosts gehört zu keiner Maschine; ein Host, der in einen geteilten Tresor zieht, auch nicht mehr.
+        // A host's copy belongs to no machine; neither does a host that moves into a shared vault.
         let web_id = by("web-01").id.clone();
         let copy = dir.duplicate_host(&web_id, "web-01 Kopie").unwrap();
         let moved = dir.move_host(&by("pihole").id, &shared, false).unwrap();
@@ -3351,7 +3351,7 @@ mod tests {
         assert_eq!((&view(&copy).proxmox, &view(&moved).proxmox, &view(&web_id).proxmox), (&None, &None, &link(101, "qemu")));
         assert_eq!(dir.proxmox_host(&connection, 111), None);
 
-        // Bearbeiten lässt die Verknüpfung stehen, Lösen entfernt sie und sonst nichts.
+        // Editing leaves the link in place, unlinking removes it and nothing else.
         dir.save_host(HostInput { id: Some(web_id.clone()), color: Some("#ff0000".into()), address: "10.0.10.11".into(), ..host("web-01", None) }).unwrap();
         assert_eq!(dir.snapshot().hosts.iter().find(|h| h.id == web_id).unwrap().proxmox, link(101, "qemu"));
         dir.unlink_proxmox(&web_id).unwrap();
@@ -3360,8 +3360,8 @@ mod tests {
         let unlinked = snapshot.hosts.iter().find(|h| h.id == web_id).unwrap();
         assert_eq!((&unlinked.proxmox, unlinked.color.as_deref(), unlinked.address.as_str()), (&None, Some("#FF0000"), "10.0.10.11"));
 
-        // Was ein anderes Mitglied in einen geteilten Tresor legt, zählt nicht: weder eine Verbindung noch die
-        // Verknüpfung eines Hosts dort.
+        // What another member puts into a shared vault does not count: neither a connection nor the
+        // link of a host there.
         let foreign = serde_json::to_vec(&serde_json::json!({ "t": "proxmox", "name": "Fremd", "address": "https://boese.example", "tokenId": "a@pve!b", "secret": "x" })).unwrap();
         let linked = serde_json::to_vec(&serde_json::json!({ "t": "host", "name": "untergeschoben", "address": "10.9.9.9", "proxmox": { "connection": connection, "node": "pve", "vmid": 555, "kind": "qemu" } })).unwrap();
         let shared_id = parse_id(&shared).unwrap();
@@ -3373,7 +3373,7 @@ mod tests {
         assert_eq!((snapshot.hosts.iter().find(|h| h.name == "untergeschoben").unwrap().proxmox.clone(), dir.proxmox_host(&connection, 555)), (None, None));
         assert!(!dir.follow_proxmox(&connection, &[seen(555, "umbenannt", Some("10.6.6.6"))]).unwrap());
 
-        // Mit der Verbindung verschwinden die Verknüpfungen, die Hosts bleiben.
+        // The links disappear with the connection, the hosts stay.
         let before = dir.snapshot().hosts.len();
         dir.delete_proxmox(&connection).unwrap();
         let snapshot = dir.snapshot();
@@ -3394,8 +3394,8 @@ mod tests {
         let connection = dir.save_proxmox(ProxmoxInput { identity: Some(admin.clone()), ..pve("Dedi") }).unwrap();
         assert_eq!(dir.snapshot().proxmox[0].identity.as_deref(), Some(admin.as_str()));
 
-        // Cloud-Init nennt einen Schlüssel aus dem Tresor: Es gilt Cloud-Init. Sonst gilt die Identität als Ganzes,
-        // auch vor dem Benutzer, den Proxmox für die Maschine annimmt.
+        // Cloud-Init names a key from the vault: Cloud-Init applies. Otherwise the identity applies as a whole,
+        // even before the user Proxmox assumes for the machine.
         let with_key = GuestHost { user: Some("deploy".into()), key: Some(cloud.clone()), ..guest(101, "shop", Some("10.0.10.11")) };
         let without = GuestHost { user: Some("root".into()), ..guest(111, "pihole", Some("10.0.0.53")) };
         let made = dir.add_proxmox_hosts(&connection, vec![with_key, without], None).unwrap();
@@ -3406,7 +3406,7 @@ mod tests {
         let info = dir.connect_info(&made[1]).unwrap();
         assert_eq!((info.user.as_str(), info.key.as_ref().map(|k| k.expose().contains("mein")), info.password.as_ref().map(Secret::expose)), ("alex", Some(true), Some("hunter2")));
 
-        // Ohne gespeicherten Host: die Identität, oder nur ein Schlüssel; ein genannter Schlüssel geht vor.
+        // Without a saved host: the identity, or just a key; a named key takes precedence.
         let login = dir.login(Some(&admin), None).unwrap();
         assert_eq!((login.user.as_deref(), login.key.as_ref().map(|k| k.expose().contains("mein")), login.password.as_ref().map(Secret::expose)), (Some("alex"), Some(true), Some("hunter2")));
         let login = dir.login(None, Some(&cloud)).unwrap();
@@ -3415,13 +3415,13 @@ mod tests {
         assert_eq!(dir.login(None, None).unwrap(), Login::default());
         assert_eq!((reason(dir.login(Some("fehlt"), None)), reason(dir.login(None, Some("fehlt")))), (Invalid::IdentityMissing, Invalid::KeyMissing));
 
-        // Ein Bearbeiten ohne Identität nimmt sie weg; eine gelöschte Identität verschwindet auch aus der Verbindung.
+        // Editing without an identity removes it; a deleted identity also disappears from the connection.
         dir.save_proxmox(ProxmoxInput { id: Some(connection.clone()), secret: None, ..pve("Dedi") }).unwrap();
         assert_eq!(dir.snapshot().proxmox[0].identity, None);
         dir.save_proxmox(ProxmoxInput { id: Some(connection.clone()), secret: None, identity: Some(admin.clone()), ..pve("Dedi") }).unwrap();
         dir.delete_identity(&admin).unwrap();
         assert_eq!((dir.snapshot().proxmox[0].identity.clone(), dir.proxmox.get(&connection).unwrap().identity.clone()), (None, None));
-        // Ohne Identität und ohne Schlüssel bleibt der Benutzer, den Proxmox nennt.
+        // Without identity and key, the user Proxmox names remains.
         let plain = dir.add_proxmox_hosts(&connection, vec![GuestHost { user: Some("root".into()), ..guest(112, "gitea", Some("10.0.10.74")) }], None).unwrap();
         assert_eq!(dir.snapshot().hosts.iter().find(|h| h.id == plain[0]).unwrap().own, Fields { user: Some("root".into()), ..Fields::default() });
     }
@@ -3438,14 +3438,14 @@ mod tests {
         let shown = |dir: &Directory, id: &str| dir.hosts.get(id).map(|h| (h.name.clone(), h.address.clone())).unwrap();
         let writes = |dir: &Directory| dir.vault.writes();
 
-        // Nichts geändert: Es wird nichts geschrieben, auch nicht beim hundertsten Nachlesen.
+        // Nothing changed: nothing is written, not even on the hundredth refresh.
         let same = [seen(101, "web-01", Some("10.0.10.11")), seen(102, "db-01", Some("10.0.20.21")), seen(130, "spielwiese", None)];
         let before = writes(&dir);
         assert!(!dir.follow_proxmox(&connection, &same).unwrap());
         assert_eq!(writes(&dir), before);
 
-        // Name und Adresse ändern sich in Proxmox: Die Hosts ziehen nach. Die Maschine ohne Adresse bekommt ihre,
-        // sobald Proxmox eine kennt. Die andere Verbindung hat eine Maschine mit derselben Nummer; sie bleibt.
+        // Name and address change in Proxmox: the hosts follow. The machine without an address gets one
+        // as soon as Proxmox knows it. The other connection has a machine with the same number; it stays.
         let renamed = [seen(101, "web-prod", Some("10.0.10.12")), seen(102, "db-01", Some("10.0.20.21")), seen(130, "spielwiese", Some("10.0.10.77"))];
         assert!(dir.follow_proxmox(&connection, &renamed).unwrap());
         assert_eq!(shown(&dir, &web), ("web-prod".into(), "10.0.10.12".into()));
@@ -3453,7 +3453,7 @@ mod tests {
         assert_eq!(dir.hosts.values().find(|h| h.name == "fremd").map(|h| h.address.as_str()), Some("192.168.1.1"));
         assert!(!dir.follow_proxmox(&connection, &renamed).unwrap(), "ein zweites Mal ändert nichts");
 
-        // Von Hand geändert: Der Name bleibt, die Adresse zieht weiter nach. Und umgekehrt.
+        // Changed by hand: the name stays, the address keeps following. And the other way round.
         dir.save_host(HostInput { id: Some(web.clone()), ..HostInput { address: "10.0.10.12".into(), ..host("Mein Webserver", None) } }).unwrap();
         dir.save_host(HostInput { id: Some(db.clone()), ..HostInput { address: "db.intern".into(), ..host("db-01", None) } }).unwrap();
         let later = [seen(101, "web-neu", Some("10.0.10.13")), seen(102, "db-neu", Some("10.0.20.99")), seen(130, "spielwiese", None)];
@@ -3462,17 +3462,17 @@ mod tests {
         assert_eq!(shown(&dir, &db), ("db-neu".into(), "db.intern".into()));
         assert_eq!(shown(&dir, &sandbox).1, "10.0.10.77", "ohne Adresse in Proxmox bleibt die letzte bekannte");
 
-        // Umgezogen auf einen anderen Knoten: an der Nummer wiedererkannt. Unbrauchbares von Proxmox bleibt draußen.
+        // Moved to another node: recognised by its number. Unusable data from Proxmox stays out.
         let moved = [GuestSeen { node: "pve2".into(), ..seen(101, " ", Some("a b")) }, seen(102, "db-neu", Some("10.0.20.99"))];
         assert!(dir.follow_proxmox(&connection, &moved).unwrap());
         assert_eq!(dir.snapshot().hosts.iter().find(|h| h.id == web).unwrap().proxmox.as_ref().map(|link| link.node.as_str()), Some("pve2"));
         assert_eq!(shown(&dir, &web), ("Mein Webserver".into(), "10.0.10.13".into()));
 
-        // Eine Maschine, die es in Proxmox nicht mehr gibt: Der Host bleibt, wie er ist, samt Verknüpfung.
+        // A machine that no longer exists in Proxmox: the host stays as it is, link included.
         assert!(!dir.follow_proxmox(&connection, &[]).unwrap());
         assert_eq!(dir.snapshot().hosts.iter().filter(|h| h.proxmox.is_some()).count(), 4);
 
-        // Eine Verknüpfung, deren Verbindung fehlt (auf einem anderen Gerät gelöscht), zählt nicht.
+        // A link whose connection is missing (deleted on another device) does not count.
         dir.vault.delete(&parse_id(&other).unwrap()).unwrap();
         dir.refresh().unwrap();
         let snapshot = dir.snapshot();

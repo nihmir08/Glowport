@@ -5,8 +5,8 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-# Die Krypto-Bausteine sind bewusst auf eine zusammenpassende, lange erprobte Reihe festgelegt
-# (digest 0.10, rand_core 0.6). Ein Wechsel auf neuere Hauptversionen ist eine eigene, geprüfte Aufgabe.
+# The crypto crates are deliberately pinned to a matching, long-proven line
+# (digest 0.10, rand_core 0.6). Moving to newer major versions is a separate, reviewed task.
 [dependencies]
 argon2 = "0.5"
 hkdf = "0.12"

@@ -1,4 +1,4 @@
-# Für den Bau des Sync-Servers (server/Dockerfile) braucht es nur den Rust-Quelltext.
+# Building the sync server (server/Dockerfile) only needs the Rust sources.
 .git
 target
 node_modules

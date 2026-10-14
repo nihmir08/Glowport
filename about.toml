@@ -1,5 +1,5 @@
-# Einstellungen für `cargo about`: sammelt die Lizenzen der Rust-Bausteine, die in Glowport stecken.
-# Aufgerufen von scripts/lizenzen.mjs, das daraus THIRD-PARTY-LICENSES.md schreibt.
+# Settings for `cargo about`: collects the licenses of the Rust components built into Glowport.
+# Called by scripts/licenses.mjs, which writes THIRD-PARTY-LICENSES.md from it.
 accepted = [
     "MIT",
     "MIT-0",

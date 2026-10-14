@@ -1,8 +1,8 @@
-//! Tresor-Schlüssel für ein Mitglied verpacken. Format und Begründung: `docs/sync.md`, Abschnitt „Einladen“.
+//! Wraps a vault key for a member. Format and reasoning: `docs/sync.md`, section “Inviting”.
 //!
-//! Einmaliges X25519-Schlüsselpaar des Absenders → gemeinsames Geheimnis mit dem öffentlichen Schlüssel des
-//! Empfängers → HKDF-SHA-256 → XChaCha20-Poly1305. Aufbau des Pakets: öffentlicher Einmal-Schlüssel (32),
-//! Nonce (24), Schlüsseltext (48).
+//! One-time X25519 key pair of the sender → shared secret with the recipient's public key
+//! → HKDF-SHA-256 → XChaCha20-Poly1305. Structure of the package: one-time public key (32),
+//! nonce (24), ciphertext (48).
 
 use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::Zeroizing;
@@ -17,8 +17,8 @@ fn secrets(shared: &[u8; 32], ephemeral: &[u8; 32], recipient: &[u8; 32], vault:
     (key, crypto::aad(LABEL, &[vault, &epoch.to_le_bytes(), recipient, ephemeral]))
 }
 
-/// Mit festem Einmal-Schlüssel und fester Nonce, nur für Prüfwerte. Scheitert an einem öffentlichen Schlüssel,
-/// der kein Geheimnis ergibt (etwa lauter Nullen).
+/// With a fixed one-time key and fixed nonce, only for test vectors. Fails on a public key
+/// that yields no secret (e.g. all zeros).
 pub fn seal_with(ephemeral: &StaticSecret, nonce: &[u8; NONCE_LEN], vault_key: &Key, vault: &[u8; 16], epoch: u64, recipient: &[u8; 32]) -> Result<Vec<u8>, CryptoError> {
     let shared = ephemeral.diffie_hellman(&PublicKey::from(*recipient));
     if !shared.was_contributory() {
@@ -33,13 +33,13 @@ pub fn seal_with(ephemeral: &StaticSecret, nonce: &[u8; NONCE_LEN], vault_key: &
     Ok(out)
 }
 
-/// Verpackt den Schlüssel eines Tresors für den Inhaber von `recipient`.
+/// Wraps a vault's key for the holder of `recipient`.
 pub fn seal(vault_key: &Key, vault: &[u8; 16], epoch: u64, recipient: &[u8; 32]) -> Result<Vec<u8>, CryptoError> {
     let secret = Zeroizing::new(crypto::random::<KEY_LEN>());
     seal_with(&StaticSecret::from(*secret), &crypto::random(), vault_key, vault, epoch, recipient)
 }
 
-/// Entpackt mit dem eigenen privaten Schlüssel. Tresor und Schlüsselstand müssen die sein, für die verpackt wurde.
+/// Unwraps with the own private key. Vault and key generation must be those it was wrapped for.
 pub fn open(sealed: &[u8], vault: &[u8; 16], epoch: u64, secret: &StaticSecret) -> Result<Key, CryptoError> {
     if sealed.len() != SEALED_LEN {
         return Err(CryptoError::Decrypt);
@@ -66,7 +66,7 @@ mod tests {
         (secret, public)
     }
 
-    /// Fester Prüfwert: Ändert sich hier etwas, öffnet eine neue Version keine Einladung einer alten.
+    /// Fixed test vector: if anything changes here, a new version opens no invitation of an old one.
     #[test]
     fn pinned_vector() {
         let (bob, bob_public) = pair(2);

@@ -1,6 +1,6 @@
-//! Bausteine der Schlüsselkette. Das Format ist in `docs/tresor.md` festgelegt; hier steht nur die Umsetzung.
+//! Building blocks of the key chain. The format is defined in `docs/vault.md`; this is only the implementation.
 //!
-//! Verfahren: Argon2id (Passwort → Schlüssel), HKDF-SHA-256 (Unterschlüssel), XChaCha20-Poly1305 (Verschlüsselung).
+//! Algorithms: Argon2id (password → key), HKDF-SHA-256 (subkeys), XChaCha20-Poly1305 (encryption).
 
 use argon2::{Algorithm, Argon2, Params, Version};
 use chacha20poly1305::{
@@ -16,19 +16,19 @@ pub const KEY_LEN: usize = 32;
 pub const NONCE_LEN: usize = 24;
 pub const SALT_LEN: usize = 16;
 
-/// Schlüssel, der beim Freigeben überschrieben wird.
+/// Key that is overwritten when dropped.
 pub type Key = Zeroizing<[u8; KEY_LEN]>;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum CryptoError {
     #[error("Schlüsselableitung fehlgeschlagen")]
     Kdf,
-    /// Falscher Schlüssel oder veränderte Daten; beides ist von außen nicht zu unterscheiden.
+    /// Wrong key or altered data; the two cannot be told apart from outside.
     #[error("Entschlüsseln fehlgeschlagen")]
     Decrypt,
 }
 
-/// Aufwand von Argon2id. Steht in der Tresor-Datei und lässt sich bei einer Passwortänderung anheben.
+/// Cost of Argon2id. Stored in the vault file and can be raised on a password change.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct KdfParams {
     pub memory_kib: u32,
@@ -37,7 +37,7 @@ pub struct KdfParams {
 }
 
 impl KdfParams {
-    /// Gemessen am 2026-10-04 auf dem Entwicklungsrechner: 385 ms. Mit 64 MiB und 3 Durchläufen waren es nur 67 ms.
+    /// Measured on 2026-10-04 on the development machine: 385 ms. With 64 MiB and 3 passes it was only 67 ms.
     pub const DEFAULT: Self = Self { memory_kib: 256 * 1024, passes: 4, lanes: 4 };
 
     pub fn to_bytes(self) -> [u8; 12] {
@@ -54,7 +54,7 @@ impl KdfParams {
     }
 }
 
-/// Zufall des Betriebssystems.
+/// Operating system randomness.
 pub fn random<const N: usize>() -> [u8; N] {
     let mut bytes = [0u8; N];
     OsRng.fill_bytes(&mut bytes);
@@ -74,14 +74,14 @@ pub fn derive_master_key(password: &[u8], salt: &[u8; SALT_LEN], params: KdfPara
     Ok(key)
 }
 
-/// Unterschlüssel für genau einen Zweck. Aus einem Unterschlüssel lässt sich kein anderer berechnen.
+/// Subkey for exactly one purpose. No subkey can be computed from another.
 pub fn derive_subkey(master: &Key, info: &[u8]) -> Key {
     let mut key = Zeroizing::new([0u8; KEY_LEN]);
     Hkdf::<Sha256>::new(None, master.as_ref()).expand(info, key.as_mut()).expect("32 Byte sind für HKDF-SHA-256 immer zulässig");
     key
 }
 
-/// Schlüssel aus einem ausgehandelten Geheimnis (X25519). Das Salz bindet ihn an die beteiligten öffentlichen Schlüssel.
+/// Key from a negotiated secret (X25519). The salt binds it to the public keys involved.
 pub fn derive_shared(secret: &[u8], salt: &[u8], info: &[u8]) -> Key {
     let mut key = Zeroizing::new([0u8; KEY_LEN]);
     Hkdf::<Sha256>::new(Some(salt), secret).expand(info, key.as_mut()).expect("32 Byte sind für HKDF-SHA-256 immer zulässig");
@@ -92,7 +92,7 @@ pub fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// Liest genau `N` Byte aus Hex-Ziffern.
+/// Reads exactly `N` bytes from hex digits.
 pub fn unhex<const N: usize>(text: &str) -> Option<[u8; N]> {
     let mut out = [0u8; N];
     if text.len() != N * 2 || !text.is_ascii() {
@@ -104,8 +104,8 @@ pub fn unhex<const N: usize>(text: &str) -> Option<[u8; N]> {
     Some(out)
 }
 
-/// Gebundene Angaben eindeutig zusammensetzen: Zweck, dann jedes Teil mit vorangestellter Länge.
-/// Die Längen verhindern, dass zwei verschiedene Aufteilungen dieselben Bytes ergeben.
+/// Assembles bound data unambiguously: purpose, then every part prefixed with its length.
+/// The lengths prevent two different splits from producing the same bytes.
 pub fn aad(label: &str, parts: &[&[u8]]) -> Vec<u8> {
     let mut out = Vec::with_capacity(label.len() + parts.iter().map(|p| p.len() + 4).sum::<usize>() + 4);
     out.extend_from_slice(&(label.len() as u32).to_le_bytes());
@@ -122,13 +122,13 @@ pub struct Sealed {
     pub ciphertext: Vec<u8>,
 }
 
-/// Verschlüsselt mit frischer zufälliger Nonce.
+/// Encrypts with a fresh random nonce.
 pub fn seal(key: &Key, aad: &[u8], plaintext: &[u8]) -> Sealed {
     let nonce = random();
     Sealed { nonce, ciphertext: seal_with_nonce(key, &nonce, aad, plaintext) }
 }
 
-/// Nur für Prüfwerte gedacht: Eine Nonce darf mit demselben Schlüssel nie zweimal verwendet werden.
+/// Only meant for test vectors: a nonce must never be used twice with the same key.
 pub fn seal_with_nonce(key: &Key, nonce: &[u8; NONCE_LEN], aad: &[u8], plaintext: &[u8]) -> Vec<u8> {
     XChaCha20Poly1305::new(key.as_ref().into())
         .encrypt(XNonce::from_slice(nonce), Payload { msg: plaintext, aad })
@@ -149,10 +149,10 @@ pub fn open(key: &Key, nonce: &[u8], aad: &[u8], ciphertext: &[u8]) -> Result<Ze
 mod tests {
     use super::*;
 
-    /// Kleine Argon2-Werte, damit die Tests schnell bleiben. Die Vorgabe wird in `vault` gemessen.
+    /// Small Argon2 values so the tests stay fast. The default is measured in `vault`.
     const FAST: KdfParams = KdfParams { memory_kib: 64, passes: 1, lanes: 1 };
 
-    /// Feste Prüfwerte: Ändert sich hier etwas, öffnet eine neue Version alte Tresore nicht mehr.
+    /// Fixed test vectors: if anything changes here, a new version no longer opens old vaults.
     #[test]
     fn pinned_vectors() {
         let master = derive_master_key(b"korrekt pferd batterie", &[7u8; SALT_LEN], FAST).unwrap();
@@ -161,7 +161,7 @@ mod tests {
         let kek = derive_subkey(&master, b"glowport/kek/v1");
         let auth = derive_subkey(&master, b"glowport/auth/v1");
         assert_ne!(kek.as_ref(), auth.as_ref());
-        // Gegengeprüft mit der HKDF-Umsetzung von Node (crypto.hkdfSync).
+        // Cross-checked against Node's HKDF implementation (crypto.hkdfSync).
         assert_eq!(hex(kek.as_ref()), "af0c9ba13d82de22bdf265bd5c17df1b0597ffbf8565b69a2b692c0ceeb2038c", "HKDF kek");
         assert_eq!(hex(auth.as_ref()), "bfe910e1ac326913f6b9ff0d42b7b6a2b2a4636cae77036adb8c8eb80bd096eb", "HKDF auth");
 
@@ -171,7 +171,7 @@ mod tests {
         assert_eq!(open(&kek, &[9u8; NONCE_LEN], &aad, &sealed).unwrap().as_slice(), b"{\"t\":\"host\",\"v\":1}");
     }
 
-    /// Unabhängiger Vergleichswert: HKDF-SHA-256 aus RFC 5869, Testfall 3 (ohne Salz, ohne Info).
+    /// Independent reference value: HKDF-SHA-256 from RFC 5869, test case 3 (no salt, no info).
     #[test]
     fn hkdf_matches_rfc5869() {
         let mut okm = [0u8; 42];

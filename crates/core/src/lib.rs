@@ -1,4 +1,4 @@
-//! Kern von Glowport. Ohne Tauri nutzbar und testbar.
+//! Glowport's core. Usable and testable without Tauri.
 
 pub mod crypto;
 pub mod directory;

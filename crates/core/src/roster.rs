@@ -1,8 +1,8 @@
-//! Mitgliederliste eines geteilten Tresors. Der Besitzer signiert sie; der Server bewahrt sie nur auf.
-//! Regeln und Begründung: `docs/sync.md`, Abschnitt „Mitgliederliste“.
+//! Member list of a shared vault. The owner signs it; the server only keeps it.
+//! Rules and reasoning: `docs/sync.md`, section “Member list”.
 //!
-//! Abgelegt und übertragen als ein Stück: Signatur (64 Byte), dahinter die Liste als JSON. Signiert sind genau
-//! diese JSON-Bytes, deshalb werden sie nie neu geschrieben, nur gelesen.
+//! Stored and transferred as one piece: signature (64 bytes), followed by the list as JSON. Exactly these
+//! JSON bytes are signed, which is why they are never rewritten, only read.
 
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
@@ -14,7 +14,7 @@ const LABEL: &str = "glowport/roster/v1";
 const SIGNATURE_LEN: usize = 64;
 pub const MAX_MEMBERS: usize = 50;
 pub const MAX_NAME: usize = 32;
-/// So oft kann der Besitz eines Tresors wechseln.
+/// This many times the ownership of a vault can change.
 pub const MAX_HANDOVERS: usize = 64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -33,7 +33,7 @@ impl Role {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Member {
-    /// Kennung des Kontos auf dem Server (16 Byte als Hex).
+    /// ID of the account on the server (16 bytes as hex).
     pub account: String,
     pub name: String,
     pub ed25519: String,
@@ -51,14 +51,14 @@ impl Member {
     }
 }
 
-/// Eine Übergabe des Besitzes, signiert vom bisherigen Besitzer. Jede Liste trägt alle Übergaben, die es je
-/// gab; so kann auch ein Gerät, das eine verpasst hat, vom Besitzer, den es kennt, bis zum heutigen prüfen.
+/// A transfer of ownership, signed by the previous owner. Every list carries all transfers that ever
+/// happened; so even a device that missed one can verify from the owner it knows up to today's.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Handover {
-    /// Signaturschlüssel des bisherigen und des neuen Besitzers.
+    /// Signing keys of the previous and the new owner.
     pub from: String,
     pub to: String,
-    /// Nummer der Liste, mit der die Übergabe gilt.
+    /// Number of the list with which the transfer applies.
     pub version: u64,
     pub signature: String,
 }
@@ -66,9 +66,9 @@ pub struct Handover {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Roster {
     pub vault: String,
-    /// Schlüsselstand des Tresors, für den diese Liste gilt.
+    /// Key generation of the vault this list applies to.
     pub epoch: u64,
-    /// Laufende Nummer; eine Liste ersetzt nur eine mit kleinerer Nummer.
+    /// Sequence number; a list only replaces one with a smaller number.
     pub version: u64,
     pub members: Vec<Member>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -102,7 +102,7 @@ impl Roster {
         self.member(signing_key).map(|m| m.role)
     }
 
-    /// Darf der Inhaber dieses Schlüssels Datensätze schreiben?
+    /// May the holder of this key write records?
     pub fn may_write(&self, signing_key: &[u8; 32]) -> bool {
         self.role(signing_key).is_some_and(Role::may_write)
     }
@@ -111,7 +111,7 @@ impl Roster {
         self.owner().and_then(Member::signing_key)
     }
 
-    /// Genau ein Besitzer, kein Konto und kein Schlüssel doppelt, alle Schlüssel lesbar.
+    /// Exactly one owner, no account and no key twice, all keys readable.
     fn consistent(&self) -> bool {
         let mut accounts = std::collections::BTreeSet::new();
         let mut keys = std::collections::BTreeSet::new();
@@ -132,8 +132,8 @@ impl Roster {
             })
     }
 
-    /// Die Übergaben bilden eine Kette: jede vom bisherigen Besitzer signiert, jede setzt die vorige fort,
-    /// die letzte endet beim Besitzer, den die Liste nennt.
+    /// The transfers form a chain: each signed by the previous owner, each continuing the one before,
+    /// the last one ending at the owner the list names.
     fn handovers_valid(&self, vault: &[u8; 16]) -> bool {
         let (mut holder, mut last_version) = (None, 0);
         for (index, handover) in self.handovers.iter().enumerate() {
@@ -152,8 +152,8 @@ fn message(json: &[u8]) -> Vec<u8> {
     crypto::aad(LABEL, &[json])
 }
 
-/// Was der bisherige Besitzer bei einer Übergabe signiert. Die Stelle in der Kette und die Nummer der Liste
-/// gehören dazu, damit sich eine alte Übergabe nicht ein zweites Mal verwenden lässt.
+/// What the previous owner signs for a transfer. The position in the chain and the list number
+/// are part of it, so an old transfer cannot be used a second time.
 fn handover_message(vault: &[u8; 16], index: u64, version: u64, from: &[u8; 32], to: &[u8; 32]) -> Vec<u8> {
     crypto::aad("glowport/handover/v1", &[vault, &index.to_le_bytes(), &version.to_le_bytes(), from, to])
 }
@@ -165,8 +165,8 @@ fn signed_by(key: &[u8; 32], message: &[u8], signature: &[u8]) -> bool {
     }
 }
 
-/// Signiert eine Liste und prüft sie gleich so, wie jedes andere Gerät sie prüfen wird. Scheitert, wenn sie
-/// sich widerspricht oder `key` sie nicht signieren darf.
+/// Signs a list and checks it right away the way every other device will check it. Fails if it
+/// contradicts itself or `key` may not sign it.
 pub fn sign(roster: &Roster, previous: Option<&Roster>, key: &SigningKey) -> Result<Vec<u8>, RosterError> {
     let json = serde_json::to_vec(roster).map_err(|_| RosterError::Malformed)?;
     let mut out = key.sign(&message(&json)).to_bytes().to_vec();
@@ -176,8 +176,8 @@ pub fn sign(roster: &Roster, previous: Option<&Roster>, key: &SigningKey) -> Res
     Ok(out)
 }
 
-/// Übergibt den Besitz an ein Mitglied: Der bisherige Besitzer behält das Schreibrecht und signiert die
-/// Übergabe. Die Nummer der Liste muss schon die neue sein; danach signiert er die Liste ein letztes Mal.
+/// Transfers ownership to a member: the previous owner keeps write permission and signs the
+/// transfer. The list number must already be the new one; afterwards they sign the list one last time.
 pub fn hand_over(roster: &mut Roster, to: &[u8; 32], key: &SigningKey) -> Result<(), RosterError> {
     let vault = crypto::unhex(&roster.vault).ok_or(RosterError::Malformed)?;
     let from = key.verifying_key().to_bytes();
@@ -199,12 +199,12 @@ pub fn hand_over(roster: &mut Roster, to: &[u8; 32], key: &SigningKey) -> Result
     Ok(())
 }
 
-/// Prüft ein Stück vom Server.
+/// Checks a piece from the server.
 ///
-/// Eine Liste trägt die Signatur des Besitzers, den sie nennt; nur die eine Liste, mit der ein Besitz
-/// übergeht, signiert der bisherige. Mit `previous` muss sie außerdem neuer sein und denselben Besitzer
-/// nennen oder ihn über signierte Übergaben erreichen: Der Server kann also weder sich noch sonst jemanden
-/// zum Besitzer machen. Ohne `previous` (die erste Liste, die dieses Gerät von dem Tresor sieht) gilt, wen sie nennt.
+/// A list carries the signature of the owner it names; only the one list with which ownership
+/// passes on is signed by the previous owner. With `previous` it must also be newer and name the same
+/// owner or reach them through signed transfers: so the server can make neither itself nor anyone else
+/// the owner. Without `previous` (the first list this device sees of the vault), whoever it names applies.
 pub fn verify(blob: &[u8], vault: &[u8; 16], previous: Option<&Roster>) -> Result<Roster, RosterError> {
     if blob.len() <= SIGNATURE_LEN {
         return Err(RosterError::Malformed);
@@ -225,7 +225,7 @@ pub fn verify(blob: &[u8], vault: &[u8; 16], previous: Option<&Roster>) -> Resul
         if roster.version <= previous.version || roster.epoch < previous.epoch {
             return Err(RosterError::Stale);
         }
-        // Die Übergaben setzen die bekannten fort und beginnen beim bekannten Besitzer.
+        // The transfers continue the known ones and start at the known owner.
         let known = previous.handovers.len();
         let continues = roster.handovers.len() >= known
             && roster.handovers[..known] == previous.handovers[..]
@@ -246,8 +246,8 @@ pub fn verify(blob: &[u8], vault: &[u8; 16], previous: Option<&Roster>) -> Resul
     }
 }
 
-/// Verliert jemand mit der neuen Liste die Mitgliedschaft oder das Schreibrecht? Dann gälten seine Datensätze
-/// nicht mehr, und er behielte den Schlüssel: Das geht nur zusammen mit einem Schlüsseltausch.
+/// Does someone lose membership or write permission with the new list? Then their records would no longer
+/// count, and they would keep the key: that is only possible together with a key rotation.
 pub fn reduces(previous: &Roster, next: &Roster) -> bool {
     previous.members.iter().any(|old| match old.signing_key().and_then(|key| next.role(&key)) {
         Some(role) => old.role.may_write() && !role.may_write(),
@@ -255,18 +255,18 @@ pub fn reduces(previous: &Roster, next: &Roster) -> bool {
     })
 }
 
-/// Prüfwert über beide öffentlichen Schlüssel eines Kontos. Aus ihm entsteht der Sicherheitscode,
-/// den zwei Leute über einen anderen Weg vergleichen können.
+/// Hash over both public keys of an account. The safety code is derived from it,
+/// which two people can compare through another channel.
 pub fn fingerprint(ed25519: &[u8; 32], x25519: &[u8; 32]) -> [u8; 32] {
     Sha256::digest(crypto::aad("glowport/fingerprint/v1", &[ed25519, x25519])).into()
 }
 
-/// Die Wörter des Sicherheitscodes. Die Liste steht fest: Mit ihr änderte sich der Code jedes Kontos.
+/// The words of the safety code. The list is fixed: changing it would change every account's code.
 const WORDS: &str = include_str!("words.txt");
 
-/// Der Sicherheitscode eines Kontos: sechs Wörter aus dem Prüfwert seiner Schlüssel (54 Bit). Zwei Leute
-/// vergleichen ihn über einen anderen Weg; stimmt er überein, hat der Server keine falschen Schlüssel
-/// untergeschoben. Wer einen passenden Code fälschen wollte, müsste dafür Billiarden Schlüsselpaare erzeugen.
+/// An account's safety code: six words from the hash of its keys (54 bits). Two people
+/// compare it through another channel; if it matches, the server has not slipped in false
+/// keys. Forging a matching code would take generating quadrillions of key pairs.
 pub fn safety_code(ed25519: &[u8; 32], x25519: &[u8; 32]) -> String {
     let print = fingerprint(ed25519, x25519);
     let bits = u64::from_be_bytes(print[..8].try_into().expect("acht Byte"));
@@ -285,7 +285,7 @@ mod tests {
         assert_eq!((words.len(), unique.len()), (512, 512));
         assert!(words.iter().all(|w| w.len() >= 2 && w.bytes().all(|b| b.is_ascii_lowercase())), "nur Kleinbuchstaben ohne Umlaute: überall gleich zu lesen und zu tippen");
         assert_eq!(crypto::hex(&Sha256::digest(WORDS.as_bytes())), "a52c086639c7e6e0cb1ffbc0295a66266cbb8b18d21efa15fdbe676c2ec7b059", "die Liste darf sich nie ändern");
-        // Unabhängig nachgerechnet (Python: SHA-256 über die gebundenen Angaben, je neun Bit ein Wort).
+        // Recomputed independently (Python: SHA-256 over the bound data, nine bits per word).
         assert_eq!(safety_code(&[1; 32], &[2; 32]), "wiese · krabbe · wippe · hahn · holz · drossel");
         assert_ne!(safety_code(&[1; 32], &[2; 32]), safety_code(&[1; 32], &[3; 32]));
     }
@@ -331,7 +331,7 @@ mod tests {
         assert!(!first.may_write(&key(3).verifying_key().to_bytes()), "kein Mitglied");
     }
 
-    /// Der Server kann sich nicht selbst eintragen: Eine neue Liste gilt nur mit der Signatur des bisherigen Besitzers.
+    /// The server cannot add itself: a new list only counts with the previous owner's signature.
     #[test]
     fn a_new_roster_needs_the_previous_owner() {
         let first = roster(1, vec![member(1, Role::Owner), member(2, Role::Write)]);
@@ -340,7 +340,7 @@ mod tests {
         assert_eq!(verify(&blob, &VAULT, Some(&first)).unwrap(), second);
         assert_eq!(verify(&blob, &VAULT, Some(&second)), Err(RosterError::Stale), "dieselbe Nummer noch einmal");
 
-        // Ein Angreifer nennt sich selbst Besitzer und signiert passend dazu.
+        // An attacker names themselves owner and signs accordingly.
         let forged = roster(3, vec![member(9, Role::Owner), member(1, Role::Read)]);
         let blob = sign(&forged, None, &key(9)).unwrap();
         assert_eq!(verify(&blob, &VAULT, Some(&second)), Err(RosterError::BadSignature));
@@ -355,7 +355,7 @@ mod tests {
     #[test]
     fn ownership_is_handed_over_by_the_owner_and_stays_verifiable() {
         let first = roster(1, vec![member(1, Role::Owner), member(2, Role::Write), member(3, Role::Read)]);
-        // Einen anderen Besitzer einfach hinzuschreiben, geht nicht, auch nicht für den Besitzer selbst.
+        // Simply writing in a different owner does not work, not even for the owner themselves.
         let renamed = roster(2, vec![member(1, Role::Write), member(2, Role::Owner), member(3, Role::Read)]);
         assert_eq!(sign(&renamed, Some(&first), &key(1)), Err(RosterError::BadSignature));
         assert_eq!(sign(&renamed, Some(&first), &key(2)), Err(RosterError::BadSignature));
@@ -370,7 +370,7 @@ mod tests {
         verify(&blob, &VAULT, Some(&first)).unwrap();
         verify(&blob, &VAULT, None).unwrap();
 
-        // Der neue Besitzer führt die Liste weiter. Wer die Übergabe verpasst hat oder neu dazukommt, kann sie prüfen.
+        // The new owner continues the list. Whoever missed the transfer or joins later can verify it.
         let mut third = handed.clone();
         third.version = 3;
         third.members.push(member(4, Role::Read));
@@ -379,7 +379,7 @@ mod tests {
         verify(&blob, &VAULT, None).unwrap();
         assert_eq!(sign(&third, Some(&handed), &key(1)), Err(RosterError::BadSignature), "die frühere Besitzerin signiert nichts mehr");
 
-        // Eine Übergabe lässt sich weder weglassen noch umschreiben.
+        // A transfer can neither be left out nor rewritten.
         let mut stripped = third.clone();
         stripped.version = 4;
         stripped.handovers.clear();
@@ -389,7 +389,7 @@ mod tests {
         redirected.handovers[0].to = crypto::hex(&public(3));
         assert_eq!(sign(&redirected, Some(&third), &key(2)), Err(RosterError::BadSignature));
 
-        // Hin und zurück: Die erste Übergabe lässt sich danach nicht noch einmal verwenden.
+        // There and back: the first transfer cannot be used again afterwards.
         let mut back = third.clone();
         back.version = 4;
         hand_over(&mut back, &public(1), &key(2)).unwrap();

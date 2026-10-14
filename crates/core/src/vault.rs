@@ -1,7 +1,7 @@
-//! Verschlüsselte Ablage: eine SQLite-Datei mit einzeln verschlüsselten und signierten Datensätzen.
+//! Encrypted storage: an SQLite file with individually encrypted and signed records.
 //!
-//! Der Tresor kennt keine Hosts oder Gruppen, nur Bytes. Was darin steht, legt `model` fest.
-//! Format und Begründungen: `docs/tresor.md`; mehrere Tresore, Teilen und Abgleich: `docs/sync.md`.
+//! The vault knows no hosts or groups, only bytes. What they contain is defined by `model`.
+//! Format and reasoning: `docs/vault.md`; several vaults, sharing and sync: `docs/sync.md`.
 
 use std::{
     cell::Cell,
@@ -23,11 +23,11 @@ use crate::{
     share,
 };
 
-/// Fassung 2 (Meilenstein 9): mehrere Tresore je Datei und alles für den Abgleich. Datensätze, Schlüsselkette
-/// und Prüfwerte sind dieselben wie in Fassung 1; eine Datei der Fassung 1 wird beim Öffnen umgestellt.
+/// Version 2: several vaults per file and everything for syncing. Records, key chain
+/// and test vectors are the same as in version 1; a version 1 file is converted when opened.
 pub const FORMAT_VERSION: u32 = 2;
 
-/// Kennung eines Tresors oder Datensatzes: 16 zufällige Byte.
+/// ID of a vault or record: 16 random bytes.
 pub type Id = [u8; 16];
 
 const INFO_KEK: &[u8] = b"glowport/kek/v1";
@@ -43,7 +43,7 @@ const AAD_OWN: &str = "glowport/own/v1";
 const AAD_CONTACT: &str = "glowport/contact/v1";
 const AAD_NOTICE: &str = "glowport/notice/v1";
 
-/// So viele Hinweise aus dem Abgleich bleiben stehen; ältere fallen heraus.
+/// This many notices from syncing are kept; older ones drop out.
 const MAX_NOTICES: i64 = 200;
 
 const SCHEMA_1: &str = "
@@ -63,17 +63,17 @@ CREATE TABLE records (
 ) WITHOUT ROWID;
 ";
 
-/// Der Schritt von Fassung 1 zu 2. Eine neue Datei entsteht aus `SCHEMA_1` und diesem Schritt, damit eine
-/// umgestellte und eine neue Datei nie verschieden aussehen.
+/// The step from version 1 to 2. A new file is created from `SCHEMA_1` and this step, so that a
+/// converted and a new file never look different.
 ///
-/// - `vaults.kind`: 0 persönlich, 1 geteilt. `epoch`: Schlüsselstand. `cursor`: bis zu welcher Nummer des
-///   Servers alles geholt ist. `roster`: signierte Mitgliederliste eines geteilten Tresors.
-/// - `records.synced`: die Revision, die der Server zuletzt bestätigt oder geliefert hat (0 = kennt er nicht).
-/// - `base`: der zuletzt abgeglichene Stand jedes Datensatzes, dessen Änderung noch nicht beim Server ist.
-/// - `contacts`: einmal gesehene öffentliche Schlüssel anderer Konten. `notices`: Hinweise aus dem Abgleich.
+/// - `vaults.kind`: 0 personal, 1 shared. `epoch`: key generation. `cursor`: up to which server number
+///   everything has been fetched. `roster`: signed member list of a shared vault.
+/// - `records.synced`: the revision the server last confirmed or delivered (0 = the server does not know it).
+/// - `base`: the last synced state of every record whose change has not reached the server yet.
+/// - `contacts`: public keys of other accounts seen once. `notices`: notices from syncing.
 ///
-/// Mitgliederlisten, Kontakte und Hinweise nennen Namen; sie liegen deshalb mit dem Kontoschlüssel
-/// verschlüsselt in der Datei (`sealed`: Nonce, dahinter der Schlüsseltext).
+/// Member lists, contacts and notices contain names; they are therefore stored in the file encrypted
+/// with the account key (`sealed`: nonce, followed by the ciphertext).
 const SCHEMA_2: &str = "
 ALTER TABLE vaults ADD COLUMN kind INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE vaults ADD COLUMN epoch INTEGER NOT NULL DEFAULT 1;
@@ -112,7 +112,7 @@ pub enum VaultError {
     UnsupportedFormat(u32),
     #[error("Schlüsselableitung fehlgeschlagen")]
     Kdf,
-    /// Der auf diesem Gerät hinterlegte Schlüssel passt nicht (mehr) zu diesem Tresor.
+    /// The key stored on this device does not fit this vault (any more).
     #[error("Der hinterlegte Geräteschlüssel passt nicht zu diesem Tresor")]
     StaleDeviceKey,
     #[error("Der persönliche Tresor lässt sich nicht entfernen")]
@@ -123,7 +123,7 @@ pub enum VaultError {
     NotOwner,
     #[error("Du bist kein Mitglied dieses Tresors")]
     NotMember,
-    /// Ein Schlüsseltausch braucht einen Tresor ohne wartende Änderungen.
+    /// A key rotation needs a vault without waiting changes.
     #[error("In diesem Tresor warten noch Änderungen auf den Abgleich")]
     Pending,
     #[error(transparent)]
@@ -136,7 +136,7 @@ pub enum VaultError {
 
 type Result<T> = std::result::Result<T, VaultError>;
 
-/// Entschlüsselter Datensatz. Der Inhalt wird beim Freigeben überschrieben.
+/// Decrypted record. The content is overwritten when dropped.
 #[derive(Debug)]
 pub struct Record {
     pub id: Id,
@@ -146,14 +146,14 @@ pub struct Record {
     pub data: Zeroizing<Vec<u8>>,
 }
 
-/// Ergebnis des Lesens: was sich öffnen ließ und was nicht. Ein beschädigter Datensatz sperrt nicht den Rest aus.
+/// Result of reading: what could be opened and what not. A damaged record does not lock out the rest.
 #[derive(Debug, Default)]
 pub struct Listing {
     pub records: Vec<Record>,
     pub damaged: Vec<Vec<u8>>,
 }
 
-/// Ein Datensatz so, wie er in der Datei liegt und zum Server geht: verschlüsselt und signiert.
+/// A record as stored in the file and sent to the server: encrypted and signed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Envelope {
     pub id: Id,
@@ -167,8 +167,8 @@ pub struct Envelope {
 }
 
 impl Envelope {
-    /// Trägt der Umschlag die Signatur seines Autors für diesen Tresor? Das lässt sich ohne einen Schlüssel
-    /// des Tresors prüfen, also auch vom Server.
+    /// Does the envelope carry its author's signature for this vault? That can be checked without a key
+    /// of the vault, so also by the server.
     pub fn signed(&self, vault: &Id) -> bool {
         let aad = record_aad(vault, &self.id, self.revision, self.deleted);
         let message = [aad.as_slice(), &self.nonce, &self.ciphertext].concat();
@@ -187,15 +187,15 @@ pub struct VaultInfo {
     pub id: Id,
     pub kind: Kind,
     pub epoch: u64,
-    /// Bis zu welcher Nummer des Servers alles geholt ist.
+    /// Up to which server number everything has been fetched.
     pub cursor: u64,
-    /// Die eigene Rolle; im persönlichen Tresor immer Besitzer.
+    /// Own role; always owner in the personal vault.
     pub role: Role,
     pub roster: Option<Roster>,
 }
 
-/// Alles, was ein neues Gerät vom Server braucht, um diesen Tresor mit dem Master-Passwort zu öffnen.
-/// Jedes Stück ist schon verschlüsselt oder öffentlich.
+/// Everything a new device needs from the server to open this vault with the master password.
+/// Every piece is already encrypted or public.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Account {
     pub salt: [u8; SALT_LEN],
@@ -213,7 +213,7 @@ pub struct Account {
     pub personal_wrapped: Vec<u8>,
 }
 
-/// Die öffentlichen Schlüssel, unter denen ein anderes Konto zuletzt gesehen wurde.
+/// The public keys under which another account was last seen.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Contact {
     pub name: String,
@@ -222,7 +222,7 @@ pub struct Contact {
     pub seen_at: i64,
 }
 
-/// Ein Hinweis aus dem Abgleich, wie er in der Datei liegt: laufende Nummer, Zeitpunkt, Inhalt.
+/// A notice from syncing as stored in the file: sequence number, time, content.
 #[derive(Debug)]
 pub struct StoredNotice {
     pub id: i64,
@@ -230,24 +230,24 @@ pub struct StoredNotice {
     pub data: Zeroizing<Vec<u8>>,
 }
 
-/// Was beim Übernehmen von Datensätzen des Servers geschah.
+/// What happened when taking over records from the server.
 #[derive(Debug, Default)]
 pub struct Applied {
-    /// Übernommen, wie geliefert.
+    /// Taken over as delivered.
     pub taken: Vec<Id>,
-    /// Mit einer wartenden eigenen Änderung zusammengeführt.
+    /// Merged with a waiting own change.
     pub merged: Vec<(Id, Merge)>,
-    /// Abgelehnt: falsche Signatur, Autor ohne Schreibrecht, nicht zu entschlüsseln oder älter als bekannt.
+    /// Rejected: wrong signature, author without write permission, cannot be decrypted or older than known.
     pub rejected: Vec<Id>,
 }
 
-/// Ein vorbereiteter Schlüsseltausch: alles, was als ein Paket zum Server geht. Lokal ändert sich erst mit
-/// [`Vault::commit_rotation`] etwas, also nachdem der Server angenommen hat.
+/// A prepared key rotation: everything that goes to the server as one package. Locally nothing changes until
+/// [`Vault::commit_rotation`], i.e. after the server accepted it.
 pub struct Rotation {
     pub vault: Id,
     pub epoch: u64,
     pub roster: Vec<u8>,
-    /// Je Mitglied (Signaturschlüssel) der für es verpackte neue Tresor-Schlüssel.
+    /// Per member (signing key) the new vault key wrapped for them.
     pub keys: Vec<([u8; 32], Vec<u8>)>,
     pub records: Vec<Envelope>,
     key: Key,
@@ -262,7 +262,7 @@ struct VaultKeys {
 }
 
 impl VaultKeys {
-    /// Darf der Inhaber von `author` hier Datensätze schreiben? Im persönlichen Tresor nur man selbst.
+    /// May the holder of `author` write records here? In the personal vault only oneself.
     fn allows(&self, author: &[u8; 32], me: &[u8; 32]) -> bool {
         match &self.roster {
             Some(roster) => roster.may_write(author),
@@ -279,12 +279,12 @@ impl VaultKeys {
 }
 
 struct Unlocked {
-    /// Bleibt im Speicher, solange der Tresor offen ist: Aus ihm folgen ohnehin alle anderen Schlüssel.
-    /// Gebraucht wird er für das Entsperren beim Start ohne Master-Passwort (`device_key`).
+    /// Stays in memory while the vault is open: all other keys follow from it anyway.
+    /// It is needed for unlocking at startup without the master password (`device_key`).
     account_key: Key,
     signing: SigningKey,
     public: [u8; 32],
-    /// Empfängt die Schlüssel geteilter Tresore.
+    /// Receives the keys of shared vaults.
     exchange: StaticSecret,
     personal: Id,
     vaults: BTreeMap<Id, VaultKeys>,
@@ -294,7 +294,7 @@ pub struct Vault {
     conn: Connection,
     path: PathBuf,
     unlocked: Option<Unlocked>,
-    /// Zählt, was sich an Datensätzen und Tresoren ändert (siehe [`Vault::writes`]).
+    /// Counts changes to records and vaults (see [`Vault::writes`]).
     writes: Cell<u64>,
 }
 
@@ -325,7 +325,7 @@ impl Row {
         })
     }
 
-    /// Als Umschlag, sofern jedes Stück die richtige Länge hat.
+    /// As an envelope, provided every piece has the right length.
     fn envelope(&self) -> Option<Envelope> {
         Some(Envelope {
             id: self.id.as_slice().try_into().ok()?,
@@ -340,7 +340,7 @@ impl Row {
     }
 }
 
-/// Stand eines Datensatzes in der Datei, wie ihn das Schreiben braucht.
+/// State of a record in the file, as writing needs it.
 struct State {
     vault: Id,
     revision: u64,
@@ -357,8 +357,8 @@ fn array<const N: usize>(bytes: &[u8], what: &'static str) -> Result<[u8; N]> {
     bytes.try_into().map_err(|_| VaultError::Corrupt(what))
 }
 
-/// Liest eine Spalte als Bytes, egal welchen Typ SQLite ihr gibt. Eine von außen veränderte Datei kann aus einem
-/// Blob einen Text machen; das soll als „beschädigt“ auffallen und nicht das ganze Lesen abbrechen.
+/// Reads a column as bytes, whatever type SQLite gives it. A file altered from outside can turn a
+/// blob into text; that should show up as “damaged” and not abort the whole read.
 fn blob(row: &rusqlite::Row, index: usize) -> rusqlite::Result<Vec<u8>> {
     Ok(match row.get_ref(index)? {
         ValueRef::Blob(bytes) | ValueRef::Text(bytes) => bytes.to_vec(),
@@ -373,8 +373,8 @@ fn integer(row: &rusqlite::Row, index: usize) -> rusqlite::Result<i64> {
     })
 }
 
-/// Keine SQLite-Datei oder ein fremder Aufbau: für den Nutzer ist beides „beschädigt“. Andere Fehler
-/// (gesperrte Datei, fehlende Rechte) bleiben, was sie sind.
+/// Not an SQLite file or a foreign structure: for the user both are “damaged”. Other errors
+/// (locked file, missing permissions) stay what they are.
 fn as_corrupt(error: VaultError) -> VaultError {
     match &error {
         VaultError::Db(rusqlite::Error::SqliteFailure(failure, message))
@@ -400,11 +400,11 @@ fn account_aad(salt: &[u8], kdf: KdfParams) -> Vec<u8> {
     crypto::aad(AAD_ACCOUNT, &[&FORMAT_1.to_le_bytes(), salt, &kdf.to_bytes()])
 }
 
-/// Der verpackte Kontoschlüssel bleibt an die Fassung gebunden, mit der die Schlüsselkette festgelegt wurde.
-/// Sonst öffnete nach der Umstellung der Datei kein Master-Passwort mehr.
+/// The wrapped account key stays bound to the version that defined the key chain.
+/// Otherwise no master password would open the file after it was converted.
 const FORMAT_1: u32 = 1;
 
-/// Der Kontoschlüssel, verpackt unter einem Master-Passwort: das, was sich bei einer Passwortänderung ändert.
+/// The account key wrapped under a master password: what changes on a password change.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Wrapping {
     pub salt: [u8; SALT_LEN],
@@ -413,14 +413,14 @@ pub struct Wrapping {
     pub account_wrapped: Vec<u8>,
 }
 
-/// Aus dem Passwort: der Schlüssel, der den Kontoschlüssel entsperrt, und der für die Anmeldung am Sync-Server.
-/// Aus dem zweiten lässt sich nichts entschlüsseln.
+/// From the password: the key that unlocks the account key, and the one for signing in to the sync server.
+/// Nothing can be decrypted with the second one.
 fn password_keys(password: &str, salt: &[u8; SALT_LEN], kdf: KdfParams) -> Result<(Key, Key)> {
     let master = crypto::derive_master_key(password.as_bytes(), salt, kdf).map_err(|_| VaultError::Kdf)?;
     Ok((crypto::derive_subkey(&master, INFO_KEK), crypto::derive_subkey(&master, INFO_AUTH)))
 }
 
-/// Verpackt den Kontoschlüssel unter einem Passwort. Liefert dazu den Anmeldeschlüssel dieses Passworts.
+/// Wraps the account key under a password. Also returns this password's sign-in key.
 fn wrap_account(password: &str, kdf: KdfParams, account_key: &Key) -> Result<(Wrapping, Key)> {
     let salt: [u8; SALT_LEN] = crypto::random();
     let (kek, auth) = password_keys(password, &salt, kdf)?;
@@ -428,7 +428,7 @@ fn wrap_account(password: &str, kdf: KdfParams, account_key: &Key) -> Result<(Wr
     Ok((Wrapping { salt, kdf, account_nonce: sealed.nonce.to_vec(), account_wrapped: sealed.ciphertext }, auth))
 }
 
-/// Schreibt eine Verpackung: als die geltende (`prefix` leer) oder als vorgemerkte (`next_`).
+/// Writes a wrapping: as the current one (`prefix` empty) or as a pending one (`next_`).
 fn write_wrapping(conn: &Connection, wrapping: &Wrapping, prefix: &str) -> Result<()> {
     meta_set(conn, &format!("{prefix}salt"), &wrapping.salt)?;
     meta_set(conn, &format!("{prefix}kdf"), &wrapping.kdf.to_bytes())?;
@@ -441,15 +441,15 @@ fn clear_staged(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-/// Der Schlüssel, mit dem sich ein Gerät am Sync-Server ausweist. Aus ihm lässt sich nichts entschlüsseln.
+/// The key a device identifies itself with at the sync server. Nothing can be decrypted with it.
 pub fn auth_key(password: &str, salt: &[u8; SALT_LEN], kdf: KdfParams) -> Result<Key> {
     Ok(password_keys(password, salt, kdf)?.1)
 }
 
-/// Prüfsumme über den Stand eines Tresors: Kennung und Revision jedes lebenden Datensatzes, nach Kennung
-/// geordnet. Der Server rechnet sie über das, was er hat, ein Gerät über das, was es für dessen Stand hält.
-/// Stimmen beide nicht überein, hat das Gerät etwas verpasst oder der Server etwas verloren; Nummern allein
-/// zeigen das nicht sicher, etwa nach dem Zurückholen des Servers aus einer Sicherung.
+/// Checksum over a vault's state: ID and revision of every live record, ordered by
+/// ID. The server computes it over what it has, a device over what it believes the server's state to be.
+/// If they do not match, the device missed something or the server lost something; numbers alone
+/// do not reliably show that, e.g. after restoring the server from a backup.
 pub fn state_digest(entries: impl IntoIterator<Item = (Id, u64)>) -> [u8; 32] {
     let mut hasher = Sha256::new();
     for (id, revision) in entries {
@@ -459,7 +459,7 @@ pub fn state_digest(entries: impl IntoIterator<Item = (Id, u64)>) -> [u8; 32] {
     hasher.finalize().into()
 }
 
-/// Ein kleines Stück unter dem Kontoschlüssel: Nonce, dahinter der Schlüsseltext.
+/// A small piece under the account key: nonce, followed by the ciphertext.
 fn seal_small(key: &Key, label: &str, context: &[u8], data: &[u8]) -> Vec<u8> {
     let sealed = crypto::seal(key, &crypto::aad(label, &[context]), data);
     [sealed.nonce.as_slice(), &sealed.ciphertext].concat()
@@ -473,7 +473,7 @@ fn open_small(key: &Key, label: &str, context: &[u8], stored: &[u8]) -> Option<Z
     crypto::open(key, nonce, &crypto::aad(label, &[context]), ciphertext).ok()
 }
 
-/// Prüft Signatur und Autor eines Umschlags und entschlüsselt ihn.
+/// Checks an envelope's signature and author and decrypts it.
 fn unseal(vault_id: &Id, vault: &VaultKeys, me: &[u8; 32], envelope: &Envelope) -> Option<Zeroizing<Vec<u8>>> {
     if !vault.allows(&envelope.author, me) || !envelope.signed(vault_id) {
         return None;
@@ -482,7 +482,7 @@ fn unseal(vault_id: &Id, vault: &VaultKeys, me: &[u8; 32], envelope: &Envelope) 
     crypto::open(&vault.key, &envelope.nonce, &aad, &envelope.ciphertext).ok()
 }
 
-/// Verschlüsselt und signiert einen Datensatz als man selbst.
+/// Encrypts and signs a record as oneself.
 fn seal(keys: &Unlocked, vault_id: &Id, key: &Key, id: Id, revision: u64, deleted: bool, plaintext: &[u8]) -> Envelope {
     let aad = record_aad(vault_id, &id, revision, deleted);
     let sealed = crypto::seal(key, &aad, plaintext);
@@ -503,8 +503,8 @@ impl Vault {
         self.unlocked.is_some()
     }
 
-    /// Steigt mit jeder Änderung an Datensätzen, Tresoren oder Mitgliederlisten. Wer den Inhalt im Speicher
-    /// hält (das Verzeichnis), liest neu ein, wenn sich die Zahl geändert hat, etwa nach einem Abgleich.
+    /// Rises with every change to records, vaults or member lists. Whoever keeps the content in memory
+    /// (the directory) reads again when the number has changed, e.g. after a sync.
     pub fn writes(&self) -> u64 {
         self.writes.get()
     }
@@ -519,7 +519,7 @@ impl Vault {
         Ok(conn)
     }
 
-    /// Legt einen neuen Tresor an und lässt ihn offen. Scheitert das Anlegen, bleibt keine halbe Datei zurück.
+    /// Creates a new vault and leaves it open. If creating fails, no half-written file is left behind.
     pub fn create(path: &Path, password: &str, kdf: KdfParams) -> Result<Self> {
         if path.exists() {
             return Err(VaultError::AlreadyExists);
@@ -578,15 +578,15 @@ impl Vault {
         Ok(Unlocked { account_key, signing, public, exchange, personal: vault_id, vaults })
     }
 
-    /// Wohin [`Vault::open`] die Kopie einer Datei der Fassung 1 legt, bevor es sie umstellt.
+    /// Where [`Vault::open`] puts the copy of a version 1 file before converting it.
     pub fn migration_copy(path: &Path) -> PathBuf {
         let mut name = path.file_name().unwrap_or_default().to_os_string();
         name.push(".format1");
         path.with_file_name(name)
     }
 
-    /// Öffnet die Datei, ohne sie zu entsperren. Eine Datei der Fassung 1 wird dabei umgestellt; vorher
-    /// entsteht daneben eine Kopie (siehe [`Vault::migration_copy`]).
+    /// Opens the file without unlocking it. A version 1 file is converted on the way; beforehand
+    /// a copy is created next to it (see [`Vault::migration_copy`]).
     pub fn open(path: &Path) -> Result<Self> {
         let vault = Self { conn: Self::connect(path).map_err(as_corrupt)?, path: path.into(), unlocked: None, writes: Cell::new(0) };
         let version = vault.meta("format_version").map_err(as_corrupt)?;
@@ -622,20 +622,20 @@ impl Vault {
         Ok(<[u8; SALT_LEN]>::try_from(salt.as_slice()).ok().zip(KdfParams::from_bytes(&kdf)).map(|(salt, kdf)| Wrapping { salt, kdf, account_nonce, account_wrapped }))
     }
 
-    /// Entpackt den Kontoschlüssel aus einer Verpackung. Scheitert am Passwort oder an veränderten Kopfdaten;
-    /// beides lässt sich nicht unterscheiden.
+    /// Unwraps the account key from a wrapping. Fails on the password or on altered header data;
+    /// the two cannot be told apart.
     fn try_wrapping(password: &str, wrapping: &Wrapping) -> Result<(Key, Key)> {
         let (kek, auth) = password_keys(password, &wrapping.salt, wrapping.kdf)?;
         let account = crypto::open(&kek, &wrapping.account_nonce, &account_aad(&wrapping.salt, wrapping.kdf), &wrapping.account_wrapped).map_err(|_| VaultError::WrongPassword)?;
         Ok((Zeroizing::new(array(&account, "Kontoschlüssel")?), auth))
     }
 
-    /// Leitet aus dem Passwort die Schlüssel ab und entpackt den Kontoschlüssel; liefert dazu den
-    /// Anmeldeschlüssel für den Sync-Server.
+    /// Derives the keys from the password and unwraps the account key; also returns the
+    /// sign-in key for the sync server.
     ///
-    /// Wurde das Master-Passwort auf einem anderen Gerät geändert, liegt dessen Verpackung vorgemerkt daneben
-    /// (`stage_wrapping`). Sie kommt vom Server und ist ungeprüft; deshalb gilt sie erst, wenn ein Passwort sie
-    /// öffnet und der Schlüssel darin wirklich der dieses Kontos ist. Bis dahin öffnet das bisherige Passwort.
+    /// If the master password was changed on another device, its wrapping is stored next to it as pending
+    /// (`stage_wrapping`). It comes from the server and is unverified; it therefore only applies once a password
+    /// opens it and the key inside really is this account's. Until then the previous password opens.
     fn open_account(&self, password: &str) -> Result<(Key, Key)> {
         let current = self.wrapping("")?.ok_or(VaultError::Corrupt("Kontoschlüssel"))?;
         match Self::try_wrapping(password, &current) {
@@ -653,7 +653,7 @@ impl Vault {
         Ok((account_key, auth))
     }
 
-    /// Entpackt einen privaten Schlüssel und liefert seine 32 Byte.
+    /// Unwraps a private key and returns its 32 bytes.
     fn open_private(&self, account_key: &Key, label: &str, name: &'static str, public: &[u8]) -> Result<Zeroizing<[u8; KEY_LEN]>> {
         let (nonce, wrapped) = match name {
             "ed25519" => (self.meta("ed25519_nonce")?, self.meta("ed25519_wrapped")?),
@@ -668,21 +668,21 @@ impl Vault {
         self.unlock_with(account_key)
     }
 
-    /// Kennung dieser Tresor-Datei auf diesem Gerät. Kein Geheimnis; bindet den Geräteschlüssel an genau diesen Tresor.
+    /// ID of this vault file on this device. Not a secret; binds the device key to exactly this vault.
     pub fn device_id(&self) -> Result<Vec<u8>> {
         self.meta("device_id")
     }
 
-    /// Der Kontoschlüssel des offenen Tresors. Wer ihn hat, öffnet den Tresor ohne Master-Passwort;
-    /// er darf den Kern nur verlassen, um vom Betriebssystem geschützt abgelegt zu werden.
+    /// The account key of the open vault. Whoever has it opens the vault without the master password;
+    /// it may only leave the core to be stored under the operating system's protection.
     pub fn device_key(&self) -> Result<Key> {
         Ok(self.keys()?.account_key.clone())
     }
 
-    /// Entsperrt mit einem zuvor über `device_key` hinterlegten Schlüssel statt mit dem Master-Passwort.
+    /// Unlocks with a key stored earlier via `device_key` instead of with the master password.
     pub fn unlock_with_key(&mut self, account_key: &Key) -> Result<()> {
         self.unlock_with(account_key.clone()).map_err(|e| match e {
-            // Mit dem falschen Schlüssel scheitert schon das Entpacken der privaten Schlüssel.
+            // With the wrong key, unwrapping the private keys already fails.
             VaultError::Corrupt(_) => VaultError::StaleDeviceKey,
             other => other,
         })
@@ -707,8 +707,8 @@ impl Vault {
         let rows = statement.query_map([], |row| Ok((blob(row, 0)?, blob(row, 1)?, blob(row, 2)?, integer(row, 3)?, integer(row, 4)?, blob(row, 5)?)))?;
         for row in rows {
             let (id, nonce, wrapped, kind, epoch, roster_blob) = row?;
-            // Ein geteilter Tresor, der sich nicht öffnen lässt, sperrt nicht den Rest aus: Er fehlt dann,
-            // und seine Datensätze zählen als beschädigt.
+            // A shared vault that cannot be opened does not lock out the rest: it is then missing,
+            // and its records count as damaged.
             let Ok(id) = Id::try_from(id.as_slice()) else { continue };
             let Some(key) = crypto::open(&account_key, &nonce, &crypto::aad(AAD_VAULT, &[&id]), &wrapped).ok().and_then(|k| <[u8; KEY_LEN]>::try_from(k.as_slice()).ok()).map(Zeroizing::new) else { continue };
             let entry = match (id == personal, kind) {
@@ -730,7 +730,7 @@ impl Vault {
         Ok(())
     }
 
-    /// Verwirft alle Schlüssel. Die Typen überschreiben ihren Speicher beim Freigeben selbst.
+    /// Discards all keys. The types overwrite their memory themselves when dropped.
     pub fn lock(&mut self) {
         self.unlocked = None;
     }
@@ -744,7 +744,7 @@ impl Vault {
         Ok((keys, keys.vaults.get(vault).ok_or(VaultError::NotFound)?))
     }
 
-    /// Wie `vault_keys`, verlangt aber das Recht zu schreiben.
+    /// Like `vault_keys`, but requires write permission.
     fn writable(&self, vault: &Id) -> Result<(&Unlocked, &VaultKeys)> {
         let (keys, vault) = self.vault_keys(vault)?;
         match vault.role(&keys.public) {
@@ -754,22 +754,22 @@ impl Vault {
         }
     }
 
-    /// Neues Passwort: Nur der Kontoschlüssel wird neu verpackt, die Datensätze bleiben unangetastet.
+    /// New password: only the account key is wrapped anew, the records stay untouched.
     pub fn change_password(&mut self, old: &str, new: &str, kdf: KdfParams) -> Result<()> {
         let (wrapping, _, _) = self.rewrap(old, new, kdf)?;
         self.install_wrapping(&wrapping)
     }
 
-    /// Verpackt den Kontoschlüssel unter einem neuen Passwort, ohne etwas zu schreiben. Liefert dazu den
-    /// bisherigen und den neuen Anmeldeschlüssel. Mit Abgleich geht die Verpackung erst zum Server und wird
-    /// danach mit [`Vault::install_wrapping`] übernommen; so kennt nie nur dieses Gerät das neue Passwort.
+    /// Wraps the account key under a new password without writing anything. Also returns the
+    /// previous and the new sign-in key. With sync, the wrapping first goes to the server and is
+    /// then taken over with [`Vault::install_wrapping`]; so it never happens that only this device knows the new password.
     pub fn rewrap(&self, old: &str, new: &str, kdf: KdfParams) -> Result<(Wrapping, Key, Key)> {
         let (account_key, old_auth) = self.open_account(old)?;
         let (wrapping, new_auth) = wrap_account(new, kdf, &account_key)?;
         Ok((wrapping, old_auth, new_auth))
     }
 
-    /// Macht eine mit [`Vault::rewrap`] erzeugte Verpackung zur geltenden.
+    /// Makes a wrapping created with [`Vault::rewrap`] the current one.
     pub fn install_wrapping(&mut self, wrapping: &Wrapping) -> Result<()> {
         let tx = self.conn.unchecked_transaction()?;
         write_wrapping(&tx, wrapping, "")?;
@@ -777,19 +777,19 @@ impl Vault {
         Ok(tx.commit()?)
     }
 
-    /// Die geltende Verpackung, zum Vergleich mit der des Servers.
+    /// The current wrapping, for comparison with the server's.
     pub fn current_wrapping(&self) -> Result<Wrapping> {
         self.wrapping("")?.ok_or(VaultError::Corrupt("Kontoschlüssel"))
     }
 
-    /// Merkt die Verpackung vor, die der Server nach einer Passwortänderung auf einem anderen Gerät liefert.
-    /// Sie ersetzt die geltende erst, wenn sich mit ihr entsperren lässt (siehe `open_account`): Ein Server,
-    /// der hier Unsinn schickt, sperrt niemanden aus.
+    /// Stores as pending the wrapping the server delivers after a password change on another device.
+    /// It only replaces the current one once it unlocks (see `open_account`): a server
+    /// that sends nonsense here locks nobody out.
     pub fn stage_wrapping(&mut self, wrapping: &Wrapping) -> Result<()> {
         write_wrapping(&self.conn, wrapping, "next_")
     }
 
-    /// Führt mehrere Änderungen als eine aus: entweder alle oder keine.
+    /// Runs several changes as one: either all or none.
     pub fn batch<T>(&mut self, work: impl FnOnce(&mut Self) -> Result<T>) -> Result<T> {
         self.begin()?;
         match work(self) {
@@ -804,17 +804,17 @@ impl Vault {
         }
     }
 
-    /// Beginnt eine Sammeländerung. Jedem `begin` muss genau ein `end` folgen.
+    /// Starts a batch change. Every `begin` must be followed by exactly one `end`.
     pub fn begin(&mut self) -> Result<()> {
         Ok(self.conn.execute_batch("BEGIN IMMEDIATE")?)
     }
 
-    /// Schließt eine Sammeländerung ab: übernehmen oder alles verwerfen.
+    /// Finishes a batch change: commit or discard everything.
     pub fn end(&mut self, commit: bool) -> Result<()> {
         Ok(self.conn.execute_batch(if commit { "COMMIT" } else { "ROLLBACK" })?)
     }
 
-    /// Führt `work` ganz oder gar nicht aus, auch innerhalb einer Sammeländerung.
+    /// Runs `work` completely or not at all, also inside a batch change.
     fn atomic<T>(&self, work: impl FnOnce() -> Result<T>) -> Result<T> {
         self.conn.execute_batch("SAVEPOINT schritt")?;
         match work() {
@@ -829,7 +829,7 @@ impl Vault {
         }
     }
 
-    /// Schreibt einen Umschlag an die Stelle seines Datensatzes.
+    /// Writes an envelope in place of its record.
     fn store(&self, vault: &Id, envelope: &Envelope, dirty: bool, synced: u64) -> Result<()> {
         self.touch();
         self.conn.execute(
@@ -898,11 +898,11 @@ impl Vault {
         Ok(row.and_then(|row| row.envelope()))
     }
 
-    /// Ändert oder löscht einen lebenden Datensatz.
+    /// Changes or deletes a live record.
     ///
-    /// Kennt der Server ihn schon, wird sein Stand vor der ersten wartenden Änderung als Ausgangsstand
-    /// aufgehoben, und weitere Änderungen erhöhen die Revision nicht noch einmal: Der Server nimmt nur genau
-    /// „eins über dem, was er hat“ an (`docs/sync.md`, „Abgleich“).
+    /// If the server already knows it, its state before the first waiting change is kept as the base,
+    /// and further changes do not raise the revision again: the server only accepts exactly
+    /// “one above what it has” (`docs/sync.md`, “Syncing”).
     fn change(&mut self, id: &Id, deleted: bool, plaintext: &[u8]) -> Result<()> {
         let state = self.state(id)?.filter(|s| !s.deleted).ok_or(VaultError::NotFound)?;
         let (keys, vault) = self.writable(&state.vault)?;
@@ -918,8 +918,8 @@ impl Vault {
         })
     }
 
-    /// Legt einen Datensatz im persönlichen Tresor an (`id` = None) oder ersetzt einen bestehenden, in welchem
-    /// Tresor er auch liegt. Liefert die Kennung.
+    /// Creates a record in the personal vault (`id` = None) or replaces an existing one, whichever
+    /// vault it lives in. Returns the ID.
     pub fn put(&mut self, id: Option<Id>, plaintext: &[u8]) -> Result<Id> {
         match id {
             Some(id) => {
@@ -931,7 +931,7 @@ impl Vault {
         }
     }
 
-    /// Legt einen neuen Datensatz in einem bestimmten Tresor an.
+    /// Creates a new record in a specific vault.
     pub fn put_in(&mut self, vault: &Id, plaintext: &[u8]) -> Result<Id> {
         let (keys, vault_keys) = self.writable(vault)?;
         let id: Id = crypto::random();
@@ -939,7 +939,7 @@ impl Vault {
         Ok(id)
     }
 
-    /// Löscht, indem ein Grabstein hinterlassen wird. So kommt das Löschen auch auf anderen Geräten an.
+    /// Deletes by leaving a tombstone. That way the deletion also reaches other devices.
     pub fn delete(&mut self, id: &Id) -> Result<()> {
         self.keys()?;
         self.change(id, true, &[])
@@ -950,8 +950,8 @@ impl Vault {
         unseal(&vault_id, keys.vaults.get(&vault_id)?, &keys.public, &row.envelope()?)
     }
 
-    /// Liest und prüft alle Datensätze aller Tresore. Grabsteine werden mitgeprüft, damit sich das Löschen
-    /// nicht fälschen lässt.
+    /// Reads and checks all records of all vaults. Tombstones are checked too, so that deletion
+    /// cannot be forged.
     pub fn list(&self) -> Result<Listing> {
         let keys = self.keys()?;
         let mut statement = self.conn.prepare(&format!("SELECT {ROW} FROM records ORDER BY id"))?;
@@ -975,8 +975,8 @@ impl Vault {
         Ok(listing)
     }
 
-    /// Entfernt Grabsteine, die älter sind als `max_age_ms`. Mit eingerichtetem Abgleich bleiben die, von
-    /// denen der Server noch nichts weiß: Sonst käme das Gelöschte von dort zurück.
+    /// Removes tombstones older than `max_age_ms`. With sync set up, those the server does
+    /// not know about yet stay: otherwise the deleted entry would come back from there.
     pub fn purge_tombstones(&mut self, max_age_ms: i64) -> Result<usize> {
         let linked = self.meta_opt("link")?.is_some();
         Ok(self.conn.execute("DELETE FROM records WHERE deleted = 1 AND modified_at < ?1 AND (dirty = 0 OR ?2 = 0)", params![now_ms() - max_age_ms, linked])?)
@@ -990,9 +990,9 @@ impl Vault {
         Ok(())
     }
 
-    /// Schreibt eine folgerichtige Kopie. Sie ist genauso verschlüsselt und braucht dasselbe Master-Passwort.
-    /// Die Anmeldung am Sync-Server geht nicht mit: Wer eine Sicherung einspielt, meldet sich neu an und
-    /// gleicht von vorn ab.
+    /// Writes a consistent copy. It is encrypted the same way and needs the same master password.
+    /// The sign-in to the sync server does not go along: whoever restores a backup signs in again and
+    /// syncs from scratch.
     pub fn backup(&self, dest: &Path) -> Result<()> {
         self.copy_to(dest)?;
         let copy = Connection::open(dest)?;
