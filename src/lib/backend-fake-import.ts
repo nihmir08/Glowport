@@ -89,7 +89,7 @@ export function sampleDraft(source: ImportSource, vault: Snapshot): Omit<ImportD
         ],
         keys: [
           { name: 'arbeit.ppk', path: `${HOME}\\.ssh\\arbeit.ppk` },
-          { name: 'alt.ppk', path: `${HOME}\\Documents\\alt.ppk`, kind: 'rsa', bits: 2048, state: 'encrypted', fingerprint: null },
+          { name: 'old.ppk', path: `${HOME}\\Documents\\old.ppk`, kind: 'rsa', bits: 2048, state: 'encrypted', fingerprint: null },
         ],
         forwards: [{ name: 'gitlab · 8080', host: 'h3', bindPort: 8080, destPort: 80 }],
         known: 6,
@@ -99,7 +99,7 @@ export function sampleDraft(source: ImportSource, vault: Snapshot): Omit<ImportD
         groups: [
           ['g0', 'Kunden', null],
           ['g1', 'Meier GmbH', 'g0'],
-          ['g2', 'Schulz & Söhne', 'g0'],
+          ['g2', 'Smith & Sons', 'g0'],
           ['g3', 'Privat', null],
         ],
         hosts: [
@@ -135,7 +135,7 @@ export function sampleDraft(source: ImportSource, vault: Snapshot): Omit<ImportD
         skipped: [['alter-ftp (FTP)', 'protocol_ftp']],
       });
     case 'knownhosts':
-      return draft(source, `${HOME}\\.ssh\\known_hosts`, vault, { known: 23, skipped: [['4 Einträge mit verdecktem Namen', 'hashed']] });
+      return draft(source, `${HOME}\\.ssh\\known_hosts`, vault, { known: 23, skipped: [['4 entries with a hashed name', 'hashed']] });
     case 'csv':
       return draft(source, `${HOME}\\Downloads\\hosts.csv`, vault, {
         groups: [

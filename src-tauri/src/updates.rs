@@ -40,7 +40,7 @@ fn failed(error: impl ToString) -> CmdError {
 
 async fn newest(app: &AppHandle) -> CmdResult<Option<Update>> {
     let (Some(url), Some(key), true) = (URL, PUBKEY, enabled()) else {
-        return Err(CmdError::new("update_unavailable", "Diese Fassung sucht nicht nach Updates"));
+        return Err(CmdError::new("update_unavailable", "This version does not look for updates"));
     };
     let endpoint = url.parse().map_err(failed)?;
     let updater = app.updater_builder().endpoints(vec![endpoint]).map_err(failed)?.pubkey(key).build().map_err(failed)?;
@@ -57,7 +57,7 @@ pub async fn update_check(app: AppHandle) -> CmdResult<Option<Info>> {
 /// afterwards; until then `progress` reports how far the download is.
 #[tauri::command]
 pub async fn update_install(app: AppHandle, progress: Channel<Progress>) -> CmdResult<()> {
-    let update = newest(&app).await?.ok_or_else(|| failed("keine neuere Version"))?;
+    let update = newest(&app).await?.ok_or_else(|| failed("no newer version"))?;
     let mut done = 0u64;
     update
         .download_and_install(

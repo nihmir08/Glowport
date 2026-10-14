@@ -128,16 +128,18 @@ pub struct Changed {
 }
 
 /// What [`Session::wipe`] deletes besides the vault: SQLite's rollback journal, the intermediate files of
-/// restoring and converting, and the backups created when signing in with an account.
+/// restoring and converting, and the backups created when signing in with an account. Up to version 1.0.1
+/// these files had German names (`db.alt`, `db.neu`, `glowport-vor-konto-…`); they go too.
 fn wipe_targets(path: &Path) -> Vec<PathBuf> {
-    let mut targets = vec![path.to_path_buf(), Vault::migration_copy(path), path.with_extension("db.alt"), path.with_extension("db.neu")];
+    let mut targets = vec![path.to_path_buf(), Vault::migration_copy(path)];
+    targets.extend(["db.old", "db.new", "db.alt", "db.neu"].map(|extension| path.with_extension(extension)));
     let mut journal = path.as_os_str().to_os_string();
     journal.push("-journal");
     targets.push(journal.into());
     if let Some(entries) = path.parent().and_then(|dir| std::fs::read_dir(dir).ok()) {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().into_owned();
-            if name.starts_with("glowport-vor-konto-") && name.ends_with(".gpvault") {
+            if (name.starts_with("glowport-before-account-") || name.starts_with("glowport-vor-konto-")) && name.ends_with(".gpvault") {
                 targets.push(entry.path());
             }
         }
@@ -147,7 +149,7 @@ fn wipe_targets(path: &Path) -> Vec<PathBuf> {
 
 pub(crate) fn check_password(password: &str) -> CmdResult<()> {
     if password.chars().count() < MIN_PASSWORD_CHARS {
-        return Err(CmdError::new("weak_password", "Master-Passwort ist zu kurz"));
+        return Err(CmdError::new("weak_password", "The master password is too short"));
     }
     Ok(())
 }
@@ -320,7 +322,7 @@ impl Session {
             return Err(VaultError::AlreadyExists.into());
         }
         // Check first, then put it in place: a file that is not a vault never ends up there.
-        let staged = self.path.with_extension("db.neu");
+        let staged = self.path.with_extension("db.new");
         if let Some(dir) = self.path.parent() {
             std::fs::create_dir_all(dir).map_err(|e| CmdError::new("internal", e.to_string()))?;
         }
@@ -330,7 +332,7 @@ impl Session {
         let _ = std::fs::remove_file(Vault::migration_copy(&staged));
         if !opened {
             let _ = std::fs::remove_file(&staged);
-            return Err(CmdError::new("restore_invalid", "Keine Sicherung von Glowport"));
+            return Err(CmdError::new("restore_invalid", "Not a Glowport backup"));
         }
         std::fs::rename(&staged, &self.path).map_err(|e| CmdError::new("internal", e.to_string()))?;
         self.phase = Self::probe(&self.path);
@@ -406,7 +408,7 @@ impl Session {
                 return Err(VaultError::Locked.into());
             }
         };
-        let backup = self.path.with_file_name(format!("glowport-vor-konto-{stamp}.gpvault"));
+        let backup = self.path.with_file_name(format!("glowport-before-account-{stamp}.gpvault"));
         let prepared = (|| -> CmdResult<()> {
             old.backup(&backup)?;
             let mut new = Vault::open(staged)?;
@@ -422,7 +424,7 @@ impl Session {
         }
         // Both files are closed before they swap places.
         drop(old);
-        let parked = self.path.with_extension("db.alt");
+        let parked = self.path.with_extension("db.old");
         let _ = std::fs::remove_file(&parked);
         std::fs::rename(&self.path, &parked).map_err(internal)?;
         if let Err(error) = std::fs::rename(staged, &self.path) {
@@ -686,21 +688,21 @@ pub(crate) mod tests {
         let mut fresh = target.session();
         // What is not a backup never ends up in the vault's place.
         let junk = Temp::new("restore-unsinn");
-        std::fs::write(&junk.0, b"kein Tresor").unwrap();
+        std::fs::write(&junk.0, b"not a vault").unwrap();
         assert_eq!(fresh.restore(&junk.0).err().unwrap().code(), "restore_invalid");
         assert!(!target.0.exists());
         assert_eq!(fresh.status().state, "missing");
 
         // The backup becomes the vault: locked, and it opens with its own master password.
         assert_eq!(fresh.restore(&backup.0).unwrap().state, "locked");
-        assert_eq!(fresh.unlock("falsch-und-lang").err().unwrap().code(), "wrong_password");
+        assert_eq!(fresh.unlock("wrong-and-long").err().unwrap().code(), "wrong_password");
         let opened = fresh.unlock("richtig-lang").unwrap();
         assert_eq!(opened.data.unwrap().hosts[0].name, "web");
-        let _ = std::fs::remove_file(target.0.with_extension("db.neu"));
+        let _ = std::fs::remove_file(target.0.with_extension("db.new"));
     }
 
     fn code<T>(result: CmdResult<T>) -> &'static str {
-        result.err().map_or("kein Fehler", |e| e.code)
+        result.err().map_or("no error", |e| e.code)
     }
 
     #[test]
@@ -711,33 +713,33 @@ pub(crate) mod tests {
         assert_eq!(code(session.create("kurz")), "weak_password");
         assert_eq!(code(session.directory().map(drop)), "locked");
 
-        let created = as_json(&session.create("lang genug").unwrap());
+        let created = as_json(&session.create("long enough").unwrap());
         // A new vault is empty except for itself: the personal vault in which everything else lives.
         let personal = json!({ "id": created["data"]["vaults"][0]["id"], "kind": "personal", "name": "", "role": "owner", "members": [], "rolledBack": false, "orphaned": false });
-        assert!(created["data"]["seq"].as_u64().is_some_and(|seq| seq > 0), "jeder Stand trägt seine laufende Nummer");
+        assert!(created["data"]["seq"].as_u64().is_some_and(|seq| seq > 0), "every state carries its sequence number");
         let empty = json!({ "seq": created["data"]["seq"], "groups": [], "hosts": [], "damaged": 0, "knownHosts": [], "keys": [], "identities": [], "authorities": [], "workspaces": [], "forwards": [], "snippets": [], "proxmox": [], "vaults": [personal], "homes": {} });
         assert_eq!(created, json!({ "state": "open", "data": empty, "startUnlock": false }));
-        assert_eq!(code(session.create("lang genug")), "exists");
+        assert_eq!(code(session.create("long enough")), "exists");
 
         session.lock();
         assert_eq!(as_json(&session.status()), json!({ "state": "locked", "startUnlock": false }));
         assert_eq!(code(session.unlock("falsch")), "wrong_password");
-        assert_eq!(as_json(&session.status())["state"], "locked", "nach falschem Passwort bleibt der Tresor gesperrt");
-        assert_eq!(as_json(&session.unlock("lang genug").unwrap())["state"], "open");
-        assert_eq!(as_json(&session.unlock("egal").unwrap())["state"], "open", "offener Tresor bleibt offen");
+        assert_eq!(as_json(&session.status())["state"], "locked", "after a wrong password the vault stays locked");
+        assert_eq!(as_json(&session.unlock("long enough").unwrap())["state"], "open");
+        assert_eq!(as_json(&session.unlock("egal").unwrap())["state"], "open", "an open vault stays open");
 
         // A new program start finds the file and asks for the password.
         drop(session);
         let mut session = temp.session();
         assert_eq!(as_json(&session.status())["state"], "locked");
-        assert_eq!(code(session.change_password("lang genug", "neues passwort")), "locked");
-        session.unlock("lang genug").unwrap();
-        assert_eq!(code(session.change_password("falsch", "neues passwort")), "wrong_password");
-        assert_eq!(code(session.change_password("lang genug", "kurz")), "weak_password");
-        session.change_password("lang genug", "neues passwort").unwrap();
+        assert_eq!(code(session.change_password("long enough", "new password")), "locked");
+        session.unlock("long enough").unwrap();
+        assert_eq!(code(session.change_password("falsch", "new password")), "wrong_password");
+        assert_eq!(code(session.change_password("long enough", "short")), "weak_password");
+        session.change_password("long enough", "new password").unwrap();
         session.lock();
-        assert_eq!(code(session.unlock("lang genug")), "wrong_password");
-        session.unlock("neues passwort").unwrap();
+        assert_eq!(code(session.unlock("long enough")), "wrong_password");
+        session.unlock("new password").unwrap();
     }
 
     /// Exactly the shapes the interface sends and expects (see src/lib/types.ts).
@@ -745,7 +747,7 @@ pub(crate) mod tests {
     fn messages_match_what_the_interface_sends_and_expects() {
         let temp = Temp::new("shapes");
         let mut session = temp.session();
-        session.create("lang genug").unwrap();
+        session.create("long enough").unwrap();
 
         let group: GroupInput = serde_json::from_value(json!({ "name": "Produktiv", "parent": null, "color": "#FF5D6C", "defs": { "user": "deploy", "port": 2200 } })).unwrap();
         let group_id = session.directory().unwrap().save_group(group).unwrap();
@@ -766,7 +768,7 @@ pub(crate) mod tests {
             })
         );
         assert_eq!(changed["data"]["groups"][0], json!({ "id": group_id, "name": "Produktiv", "parent": null, "color": "#FF5D6C", "defs": { "user": "deploy", "port": 2200 }, "hasProxyPassword": false }));
-        assert!(!changed.to_string().contains("geheim"), "das Passwort darf den Kern nicht verlassen");
+        assert!(!changed.to_string().contains("geheim"), "the password must not leave the core");
 
         // A workspace as the interface builds it from a tab, and the message to the other windows.
         let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
@@ -780,14 +782,14 @@ pub(crate) mod tests {
         let changed = as_json(&session.changed(Some(workspace_id.clone())).unwrap());
         assert_eq!(changed["data"]["workspaces"], json!([{ "id": workspace_id, "name": "Deploy-Runde", "multi": true, "layout": layout }]));
         session.lock();
-        session.unlock("lang genug").unwrap();
-        assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 3, "Änderung, Sperren und Entsperren melden sich bei den Fenstern");
+        session.unlock("long enough").unwrap();
+        assert_eq!(calls.load(std::sync::atomic::Ordering::Relaxed), 3, "change, lock and unlock report to the windows");
 
         let rejected: HostInput = serde_json::from_value(json!({ "name": "", "address": "x", "group": null, "color": null, "os": null, "own": {} })).unwrap();
         let error: CmdError = session.directory().unwrap().save_host(rejected).unwrap_err().into();
         assert_eq!(as_json(&error)["code"], "invalid");
         assert_eq!(as_json(&error)["reason"], "name_required");
-        assert_eq!(as_json(&CmdError::from(VaultError::WrongPassword)), json!({ "code": "wrong_password", "message": "Falsches Master-Passwort" }));
+        assert_eq!(as_json(&CmdError::from(VaultError::WrongPassword)), json!({ "code": "wrong_password", "message": "Wrong master password" }));
     }
 
     /// Storage that outlasts several program starts, like the real file.
@@ -814,8 +816,8 @@ pub(crate) mod tests {
         let launch = || Session::new(temp.0.clone(), FAST, Box::new(Shared(store.clone())));
 
         let mut session = launch();
-        assert_eq!(code(session.set_start_unlock(true)), "locked", "ohne offenen Tresor gibt es nichts zu hinterlegen");
-        session.create("lang genug").unwrap();
+        assert_eq!(code(session.set_start_unlock(true)), "locked", "without an open vault there is nothing to store");
+        session.create("long enough").unwrap();
         assert_eq!(as_json(&session.set_start_unlock(true).unwrap())["startUnlock"], true);
         drop(session);
 
@@ -826,9 +828,9 @@ pub(crate) mod tests {
         session.lock();
         assert_eq!(as_json(&session.status())["state"], "locked");
         assert_eq!(code(session.unlock("falsch")), "wrong_password");
-        session.unlock("lang genug").unwrap();
+        session.unlock("long enough").unwrap();
         // A new master password leaves the stored key valid.
-        session.change_password("lang genug", "neues passwort").unwrap();
+        session.change_password("long enough", "new password").unwrap();
         drop(session);
         assert_eq!(as_json(&launch().initial_status())["state"], "open");
 
@@ -848,10 +850,10 @@ pub(crate) mod tests {
         let path = dir.join("vault.db");
         let store = Arc::new(MemoryStore::default());
         let mut session = Session::new(path.clone(), FAST, Box::new(Shared(store.clone())));
-        session.create("lang genug").unwrap();
+        session.create("long enough").unwrap();
         session.set_start_unlock(true).unwrap();
-        let copies = [dir.join("vault.db.format1"), dir.join("vault.db.alt"), dir.join("glowport-vor-konto-20261014-1200.gpvault")];
-        let kept = [dir.join("settings.json"), dir.join("glowport-vor-konto.txt"), dir.join("eigene.gpvault")];
+        let copies = [dir.join("vault.db.format1"), dir.join("vault.db.old"), dir.join("vault.db.alt"), dir.join("glowport-before-account-20261014-1200.gpvault"), dir.join("glowport-vor-konto-20261013-0900.gpvault")];
+        let kept = [dir.join("settings.json"), dir.join("glowport-before-account.txt"), dir.join("own.gpvault")];
         for file in copies.iter().chain(&kept) {
             std::fs::write(file, b"x").unwrap();
         }
@@ -862,13 +864,13 @@ pub(crate) mod tests {
         assert_eq!(as_json(&session.status()), json!({ "state": "missing", "startUnlock": false }));
         assert!(!path.exists());
         for file in &copies {
-            assert!(!file.exists(), "{} ist noch da", file.display());
+            assert!(!file.exists(), "{} is still there", file.display());
         }
         for file in &kept {
-            assert!(file.exists(), "{} fehlt", file.display());
+            assert!(file.exists(), "{} missing", file.display());
         }
         // After that it continues as at the first start.
-        session.create("ein neues").unwrap();
+        session.create("a new one").unwrap();
         drop(session);
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -878,7 +880,7 @@ pub(crate) mod tests {
         let temp = Temp::new("stalekey");
         let store = Arc::new(MemoryStore::default());
         let mut session = Session::new(temp.0.clone(), FAST, Box::new(Shared(store.clone())));
-        session.create("lang genug").unwrap();
+        session.create("long enough").unwrap();
         session.set_start_unlock(true).unwrap();
         let context = session.directory().unwrap().vault().device_id().unwrap();
         drop(session);
@@ -892,29 +894,29 @@ pub(crate) mod tests {
     #[test]
     fn broken_file_is_reported_not_overwritten() {
         let temp = Temp::new("broken");
-        std::fs::write(&temp.0, b"das ist keine Tresor-Datei, nur etwas Text").unwrap();
+        std::fs::write(&temp.0, b"this is not a vault file, just some text").unwrap();
         let mut session = temp.session();
         let status = as_json(&session.status());
         assert_eq!((status["state"].as_str(), status["error"]["code"].as_str()), (Some("broken"), Some("corrupt")));
-        assert_eq!(code(session.create("lang genug")), "exists");
-        assert_eq!(as_json(&session.unlock("lang genug").unwrap())["state"], "broken");
-        assert_eq!(std::fs::read(&temp.0).unwrap(), b"das ist keine Tresor-Datei, nur etwas Text");
+        assert_eq!(code(session.create("long enough")), "exists");
+        assert_eq!(as_json(&session.unlock("long enough").unwrap())["state"], "broken");
+        assert_eq!(std::fs::read(&temp.0).unwrap(), b"this is not a vault file, just some text");
     }
 
     #[test]
     fn auto_lock_fires_only_when_open_and_idle() {
         let temp = Temp::new("autolock");
         let mut session = temp.session();
-        session.create("lang genug").unwrap();
-        assert!(!session.auto_lock_due(), "ohne Einstellung nie");
+        session.create("long enough").unwrap();
+        assert!(!session.auto_lock_due(), "never without the setting");
         session.auto_lock = Some(Duration::from_millis(30));
-        assert!(!session.auto_lock_due(), "gerade erst benutzt");
+        assert!(!session.auto_lock_due(), "just used");
         std::thread::sleep(Duration::from_millis(40));
         assert!(session.auto_lock_due());
         session.directory().unwrap();
-        assert!(!session.auto_lock_due(), "jede Benutzung setzt die Uhr zurück");
+        assert!(!session.auto_lock_due(), "every use resets the clock");
         std::thread::sleep(Duration::from_millis(40));
         session.lock();
-        assert!(!session.auto_lock_due(), "gesperrt gibt es nichts zu sperren");
+        assert!(!session.auto_lock_due(), "locked, there is nothing to lock");
     }
 }

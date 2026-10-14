@@ -152,7 +152,7 @@ function fakeKey(name: string, kind: KeyKind, bits: number, origin: SshKey['orig
   return { id: newId(), name, kind, bits, fingerprint: `SHA256:${random(43)}`, publicKey: `${algorithm} ${body} ${name}`, origin, addedAt };
 }
 
-const ENCRYPTED_SAMPLE = '-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jdHIAAAAGYmNyeXB0 (Beispiel aus der Vorschau)\n-----END OPENSSH PRIVATE KEY-----\n';
+const ENCRYPTED_SAMPLE = '-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jdHIAAAAGYmNyeXB0 (sample from the preview)\n-----END OPENSSH PRIVATE KEY-----\n';
 
 function inspect(text: string, passphrase?: string): KeyInfo {
   const format = text.includes('PuTTY-User-Key-File') ? 'ppk' : text.includes('BEGIN OPENSSH PRIVATE KEY') ? 'openssh' : text.includes('PRIVATE KEY-----') ? 'pem' : fail('key_unreadable');

@@ -311,5 +311,5 @@ pub fn run() {
             updates::update_install,
         ])
         .run(tauri::generate_context!())
-        .expect("Glowport konnte nicht starten");
+        .expect("Glowport could not start");
 }

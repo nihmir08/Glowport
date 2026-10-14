@@ -60,7 +60,7 @@ pub enum Done {
 
 /// Runs an action: as the user, and if they lack the permissions, with `sudo -n`.
 async fn act(app: &AppHandle, session: u64, command: impl Fn(As) -> Option<String>, typed: Option<String>) -> CmdResult<Done> {
-    let invalid = || CmdError::new("manage_failed", "Ungültige Angabe");
+    let invalid = || CmdError::new("manage_failed", "Invalid value");
     let typed = typed.ok_or_else(invalid)?;
     for how in [As::User, As::Sudo] {
         let (ok, text) = run(app, session, &command(how).ok_or_else(invalid)?).await?;
@@ -180,7 +180,7 @@ pub fn docker_line(container: String, kind: DockerTab, sudo: bool) -> CmdResult<
         DockerTab::Logs => docker::logs_line(&container, sudo),
         DockerTab::Shell => docker::shell_line(&container, sudo),
     }
-    .ok_or_else(|| failed("Ungültige Kennung".into()))
+    .ok_or_else(|| failed("Invalid ID".into()))
 }
 
 // ── Dienste ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -237,14 +237,14 @@ pub async fn service_action(app: AppHandle, session: u64, unit: String, action: 
 /// State and latest messages of a service as text. A service that is not running is not an error here.
 #[tauri::command]
 pub async fn service_status(app: AppHandle, session: u64, unit: String) -> CmdResult<String> {
-    let command = services::status_command(&unit, As::User).ok_or_else(|| failed("Ungültiger Name".into()))?;
+    let command = services::status_command(&unit, As::User).ok_or_else(|| failed("Invalid name".into()))?;
     Ok(run(&app, session, &command).await?.1.trim_end().to_string())
 }
 
 /// What is typed into a new tab so the service's journal follows along there.
 #[tauri::command]
 pub fn service_line(unit: String, sudo: bool) -> CmdResult<String> {
-    services::journal_line(&unit, sudo).ok_or_else(|| failed("Ungültiger Name".into()))
+    services::journal_line(&unit, sudo).ok_or_else(|| failed("Invalid name".into()))
 }
 
 // ── Prozesse ─────────────────────────────────────────────────────────────────────────────────────────────

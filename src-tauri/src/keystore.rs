@@ -42,7 +42,7 @@ impl KeyStore for ProtectedFile {
             fs::create_dir_all(dir)?;
         }
         // Write next to it first, then rename: never a half-written file.
-        let temp = self.path.with_extension("neu");
+        let temp = self.path.with_extension("new");
         fs::write(&temp, protected)?;
         fs::rename(&temp, &self.path)
     }
@@ -160,7 +160,7 @@ mod tests {
         store.store(b"tresor-a", &key).unwrap();
         assert!(store.is_set());
         assert_eq!(store.load(b"tresor-a").unwrap().as_ref(), key.as_ref());
-        assert!(store.load(b"tresor-b").is_none(), "ein anderer Tresor bekommt den Schlüssel nicht");
+        assert!(store.load(b"vault-b").is_none(), "another vault does not get the key");
 
         // The file does not contain the key in plain text, and a changed byte makes it unusable.
         let mut bytes = fs::read(&path).unwrap();

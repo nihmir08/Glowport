@@ -230,9 +230,9 @@ mod tests {
     fn output_is_shown_without_colours_and_control_characters() {
         assert_eq!(readable(b"eins\r\nzwei\n"), "eins\nzwei\n");
         assert_eq!(readable(b"\x1b[1;32mgr\xc3\xbcn\x1b[0m ok\x07\n"), "grün ok\n");
-        assert_eq!(readable(b"10 %\r50 %\r100 %\n"), "10 %\n50 %\n100 %\n", "eine neu gezeichnete Zeile wird zu mehreren");
+        assert_eq!(readable(b"10 %\r50 %\r100 %\n"), "10 %\n50 %\n100 %\n", "a redrawn line becomes several");
         assert_eq!(readable(b"a\tb\x00c\x1bXd"), "a\tbcXd");
-        assert_eq!(readable(&[0xff, b'x']), "\u{fffd}x", "kein UTF-8: das Zeichen wird ersetzt, der Rest bleibt");
+        assert_eq!(readable(&[0xff, b'x']), "\u{fffd}x", "not UTF-8: the character is replaced, the rest stays");
     }
 
     #[test]

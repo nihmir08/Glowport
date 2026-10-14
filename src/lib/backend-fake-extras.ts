@@ -84,8 +84,8 @@ function localShell(shell: LocalShell, host: DeviceHost): Device {
   };
   const banner = {
     pwsh: 'PowerShell 7.5.3\r\n',
-    powershell: 'Windows PowerShell\r\nCopyright (C) Microsoft Corporation. Alle Rechte vorbehalten.\r\n\r\nInstallieren Sie die neueste PowerShell für neue Funktionen und Verbesserungen! https://aka.ms/PSWindows\r\n\r\n',
-    cmd: 'Microsoft Windows [Version 10.0.26200.6899]\r\n(c) Microsoft Corporation. Alle Rechte vorbehalten.\r\n\r\n',
+    powershell: 'Windows PowerShell\r\nCopyright (C) Microsoft Corporation. All rights reserved.\r\n\r\nInstall the latest PowerShell for new features and improvements! https://aka.ms/PSWindows\r\n\r\n',
+    cmd: 'Microsoft Windows [Version 10.0.26200.6899]\r\n(c) Microsoft Corporation. All rights reserved.\r\n\r\n',
     gitbash: '',
     wsl: `Welcome to ${shell.detail} (GNU/Linux 6.6.87.2-microsoft-standard-WSL2 x86_64)\r\n\r\n`,
   }[shell.kind];
@@ -124,11 +124,11 @@ function localShell(shell: LocalShell, host: DeviceHost): Device {
         return 'v23.9.0\r\n';
       case 'ping':
         return windows
-          ? `\r\nPing wird ausgeführt für ${arg || '10.0.10.11'} mit 32 Bytes Daten:\r\nAntwort von ${arg || '10.0.10.11'}: Bytes=32 Zeit=11ms TTL=57\r\nAntwort von ${arg || '10.0.10.11'}: Bytes=32 Zeit=12ms TTL=57\r\nAntwort von ${arg || '10.0.10.11'}: Bytes=32 Zeit=11ms TTL=57\r\n\r\n`
+          ? `\r\nPinging ${arg || '10.0.10.11'} with 32 bytes of data:\r\nReply from ${arg || '10.0.10.11'}: bytes=32 time=11ms TTL=57\r\nReply from ${arg || '10.0.10.11'}: bytes=32 time=12ms TTL=57\r\nReply from ${arg || '10.0.10.11'}: bytes=32 time=11ms TTL=57\r\n\r\n`
           : `PING ${arg || '10.0.10.11'} 56(84) bytes of data.\r\n64 bytes from ${arg || '10.0.10.11'}: icmp_seq=1 ttl=57 time=11.2 ms\r\n64 bytes from ${arg || '10.0.10.11'}: icmp_seq=2 ttl=57 time=11.6 ms\r\n`;
       default:
-        if (shell.kind === 'cmd') return `Der Befehl "${name}" ist entweder falsch geschrieben oder\r\nkonnte nicht gefunden werden.\r\n`;
-        if (windows) return `\x1b[31m${name}: Die Benennung "${name}" wurde nicht als Name eines Cmdlet, einer Funktion oder eines Programms erkannt.${R}\r\n`;
+        if (shell.kind === 'cmd') return `'${name}' is not recognized as an internal or external command,\r\noperable program or batch file.\r\n`;
+        if (windows) return `\x1b[31m${name}: The term '${name}' is not recognized as a name of a cmdlet, function, script file, or executable program.${R}\r\n`;
         return `${name}: command not found\r\n`;
     }
   };
@@ -252,7 +252,7 @@ function serialDevice(name: string, port: string, settings: SerialSettings, host
   );
   timers.push(
     setTimeout(() => {
-      if (!FAKE_PORTS.some((p) => p.name.toLowerCase() === port.toLowerCase())) return host.end('connect_failed', `${port}: Das System kann die angegebene Datei nicht finden.`);
+      if (!FAKE_PORTS.some((p) => p.name.toLowerCase() === port.toLowerCase())) return host.end('connect_failed', `${port}: The system cannot find the file specified.`);
       host.connected();
       // At a different speed only garbage would arrive; the sample device speaks 115200.
       if (settings.baud !== 115200) return host.out('\x00\ufffd\ufffdx\ufffd\x18\ufffd\ufffd\x00x\ufffd\ufffd\ufffd\x80x\ufffd\r\n');

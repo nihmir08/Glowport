@@ -465,7 +465,7 @@ pub async fn session_open(app: AppHandle, window: Window, target: Target, column
         }
         Target::Local { shell } => {
             // Only what was found as a shell on this machine is started; the interface never names a program.
-            let shell = local::shell(&shell).ok_or_else(|| CmdError::new("shell_missing", "Diese Shell gibt es auf diesem Rechner nicht"))?;
+            let shell = local::shell(&shell).ok_or_else(|| CmdError::new("shell_missing", "This shell does not exist on this computer"))?;
             let label = shell.name.clone();
             (local::open(shell, size), None, None, label)
         }
@@ -848,7 +848,7 @@ pub struct Attached {
 pub fn session_attach(app: AppHandle, window: Window, sessions: State<'_, Sessions>, id: u64, columns: u32, rows: u32, output: Channel<InvokeResponseBody>) -> CmdResult<Attached> {
     let (phase, asking, mosh) = {
         let mut live = sessions.live();
-        let session = live.get_mut(&id).ok_or_else(|| CmdError::new("session_gone", "Die Sitzung gibt es nicht mehr"))?;
+        let session = live.get_mut(&id).ok_or_else(|| CmdError::new("session_gone", "The session no longer exists"))?;
         session.window = window.label().to_string();
         let backlog = std::mem::take(&mut session.backlog);
         // What the old window no longer acknowledged counts as drawn; only what was collected is open.
@@ -908,7 +908,7 @@ pub fn log_delete(app: AppHandle, sessions: State<'_, Sessions>, id: String) -> 
     let dir = crate::data_dir(&app).map_err(|e| CmdError::new("io", e))?;
     let running = recording_now(&sessions);
     if running.contains(&id) {
-        return Err(CmdError::new("log_running", "Der Mitschnitt läuft noch"));
+        return Err(CmdError::new("log_running", "The recording is still running"));
     }
     recordings::delete(&dir, &id).map_err(|e| CmdError::new(if e.kind() == std::io::ErrorKind::NotFound { "not_found" } else { "io" }, e.to_string()))?;
     Ok(recordings::list(&dir, &running))
@@ -927,7 +927,7 @@ pub fn log_rename(app: AppHandle, sessions: State<'_, Sessions>, id: String, tit
     let dir = crate::data_dir(&app).map_err(|e| CmdError::new("io", e))?;
     let running = recording_now(&sessions);
     if running.contains(&id) {
-        return Err(CmdError::new("log_running", "Der Mitschnitt läuft noch"));
+        return Err(CmdError::new("log_running", "The recording is still running"));
     }
     let id = recordings::rename(&dir, &id, &title).map_err(|e| CmdError::new(if e.kind() == std::io::ErrorKind::NotFound { "not_found" } else { "io" }, e.to_string()))?;
     Ok(Renamed { id, list: recordings::list(&dir, &running) })
@@ -962,7 +962,7 @@ mod tests {
     fn other_character_sets_are_converted_both_ways() {
         assert!(charset_of("utf-8").is_none() && charset_of("UTF-8").is_none() && charset_of("klingonisch").is_none());
         for label in model::CHARSETS.iter().skip(1) {
-            assert!(charset_of(label).is_some(), "{label} steht zur Wahl, also muss die Umwandlung ihn kennen");
+            assert!(charset_of(label).is_some(), "{label} can be chosen, so the conversion must know it");
         }
 
         let latin = charset_of("iso-8859-1").unwrap();

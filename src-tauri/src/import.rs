@@ -33,8 +33,8 @@ impl From<ImportError> for CmdError {
     fn from(error: ImportError) -> Self {
         match error {
             ImportError::Unreadable(why) => CmdError::new("import_unreadable", why),
-            ImportError::Unknown => CmdError::new("import_unknown", "Format nicht erkannt"),
-            ImportError::Protected => CmdError::new("import_protected", "Datei ist mit einem Passwort geschützt"),
+            ImportError::Unknown => CmdError::new("import_unknown", "Format not recognised"),
+            ImportError::Protected => CmdError::new("import_protected", "The file is protected with a password"),
         }
     }
 }
@@ -89,7 +89,7 @@ fn home() -> String {
 
 fn read_bytes(path: &Path, max: u64) -> CmdResult<Vec<u8>> {
     if fs::metadata(path).map_err(unreadable)?.len() > max {
-        return Err(CmdError::new("import_too_large", "Die Datei ist zu groß"));
+        return Err(CmdError::new("import_too_large", "The file is too large"));
     }
     fs::read(path).map_err(unreadable)
 }
@@ -213,7 +213,7 @@ fn location(source: Source) -> Option<PathBuf> {
 
 /// Reads a source from its place on this PC.
 fn load(source: Source) -> CmdResult<(String, Draft)> {
-    let place = location(source).ok_or_else(|| CmdError::new("not_found", "Quelle nicht gefunden"))?;
+    let place = location(source).ok_or_else(|| CmdError::new("not_found", "Source not found"))?;
     let origin = place.display().to_string();
     let home = home();
     let draft = match source {
@@ -702,7 +702,7 @@ fn apply(directory: &mut Directory, entry: &Entry, options: &Options) -> CmdResu
     let twins: HashMap<usize, String> = chosen_hosts.iter().filter_map(|at| Some((*at, twin(directory, draft.hosts.get(*at)?)?))).collect();
     if let Some(Into::Existing { id }) = &options.into {
         if !directory.snapshot().groups.iter().any(|g| &g.id == id) {
-            return Err(CmdError::new("not_found", "Zielgruppe nicht gefunden"));
+            return Err(CmdError::new("not_found", "Target group not found"));
         }
     }
 
@@ -1033,7 +1033,7 @@ fn ssh_config_text(export: &format::Export) -> String {
     // An OpenSSH configuration only knows SSH: Telnet and serial lines are left out.
     let mut hosts: Vec<&format::Host> = export.hosts.iter().filter(|h| h.protocol.is_none()).collect();
     hosts.sort_by_key(|h| (group_path(export, h.group.as_deref()), h.name.to_lowercase()));
-    let mut out = String::from("# Geschrieben von Glowport. Passwörter und Schlüssel aus dem Tresor stehen nicht darin.\n");
+    let mut out = String::from("# Written by Glowport. Passwords and keys from the vault are not in it.\n");
     let mut last_group: Option<Vec<String>> = None;
     for host in hosts {
         let path = group_path(export, host.group.as_deref());
@@ -1128,7 +1128,7 @@ fn export_text(directory: &Directory, request: &ExportRequest, app_version: &str
 
 fn hold(imports: &Imports, state: &AppState, source: Source, origin: String, mut draft: Draft, base: Option<&Path>) -> CmdResult<DraftView> {
     if draft.is_empty() {
-        return Err(CmdError::new("import_empty", "Nichts zu übernehmen"));
+        return Err(CmdError::new("import_empty", "Nothing to take over"));
     }
     let keys = resolve_keys(&mut draft, base);
     let entry = Entry { source, origin, draft, keys };
@@ -1197,7 +1197,7 @@ pub struct Applied {
 
 #[tauri::command(async)]
 pub fn import_apply(imports: State<'_, Imports>, state: State<'_, AppState>, token: u64, options: Options) -> CmdResult<Applied> {
-    let entry = imports.held().entries.remove(&token).ok_or_else(|| CmdError::new("not_found", "Entwurf nicht mehr vorhanden"))?;
+    let entry = imports.held().entries.remove(&token).ok_or_else(|| CmdError::new("not_found", "Draft no longer exists"))?;
     let mut session = state.session();
     let report = apply(session.directory()?, &entry, &options)?;
     Ok(Applied { report, changed: session.changed(None)? })
@@ -1256,9 +1256,9 @@ mod tests {
             let keys = resolve_keys(&mut draft, None);
             let state = |wanted: fn(&KeyState) -> bool| keys.iter().filter(|k| wanted(k)).count();
             println!(
-                "{:<10} Ort: {:<9} gezählt {:?} | Hosts {} · Gruppen {} · Port-Regeln {} · Snippets {} · bekannte Hosts {} · ausgelassen {} | Passwörter gelesen {} · nicht lesbar {} | Schlüssel: bereit {} · Passphrase {} · fehlt {} · unlesbar {} | Sprünge {}",
+                "{:<10} location: {:<9} counted {:?} | hosts {} · groups {} · port rules {} · snippets {} · known hosts {} · skipped {} | passwords read {} · unreadable {} | keys: ready {} · passphrase {} · missing {} · unreadable {} | jumps {}",
                 found.source,
-                if origin.is_empty() { "Registry" } else { "Datei" },
+                if origin.is_empty() { "Registry" } else { "file" },
                 found.count,
                 draft.hosts.len(),
                 draft.groups.len(),
@@ -1279,7 +1279,7 @@ mod tests {
                 map
             });
             if !reasons.is_empty() {
-                println!("           ausgelassen nach Grund: {reasons:?}");
+                println!("           skipped by reason: {reasons:?}");
             }
         }
     }
@@ -1344,8 +1344,8 @@ mod tests {
         assert!(matches!(entry.keys[0], KeyState::Ready(_)));
         let shown = view(7, &entry, session.directory().unwrap());
         assert_eq!((shown.hosts[0].auth, shown.hosts[1].auth, shown.keys[0].state, shown.keys[0].uses), ("password", "key", "ready", 1));
-        assert!(!serde_json::to_string(&shown).unwrap().contains("geheim"), "die Vorschau trägt kein Passwort");
-        assert!(!serde_json::to_string(&shown).unwrap().contains("PRIVATE KEY"), "und keinen privaten Schlüssel");
+        assert!(!serde_json::to_string(&shown).unwrap().contains("geheim"), "the preview carries no password");
+        assert!(!serde_json::to_string(&shown).unwrap().contains("PRIVATE KEY"), "and no private key");
 
         let report = apply(session.directory().unwrap(), &entry, &options(&entry)).unwrap();
         assert_eq!((report.hosts, report.groups, report.keys, report.key_files), (2, 2, 1, 0));
@@ -1448,7 +1448,7 @@ mod tests {
         let again = held_entry(Source::Csv, reader::csv::parse(table).unwrap());
         let twins: Vec<_> = again.draft.hosts.iter().map(|host| twin(directory, host)).collect();
         assert!(twins.iter().all(Option::is_some));
-        assert_ne!(twins[0], twins[3], "gleiche Adresse und gleicher Benutzer, anderes Protokoll");
+        assert_ne!(twins[0], twins[3], "same address and same user, different protocol");
         // The same server on another port is another host.
         let other = reader::csv::parse("Label,Hostname/IP,Protocol,Port,Username\nwebspace-2,ftp.example.org,ftps,2121,web1\n").unwrap();
         assert!(twin(directory, &other.hosts[0]).is_none());

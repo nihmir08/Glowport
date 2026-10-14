@@ -400,7 +400,7 @@ mod tests {
     #[test]
     fn ends_become_codes_the_interface_knows() {
         let code = |end: End| reason(&end).0;
-        assert_eq!(code(End::User), "needs_prompt", "eine abgebrochene Rückfrage beim stillen Neuverbinden");
+        assert_eq!(code(End::User), "needs_prompt", "a cancelled prompt during a silent reconnect");
         assert_eq!(code(End::AuthFailed), "auth_failed");
         assert_eq!(code(End::HostKeyRejected), "host_key_rejected");
         assert_eq!(reason(&End::ConnectFailed("timed out".into())), ("connect_failed".into(), "timed out".into()));
@@ -423,7 +423,7 @@ mod tests {
         let view = |kind, bind_port| ForwardView { id: "x".into(), name: "n".into(), kind, host: "h".into(), bind_address: "127.0.0.1".into(), bind_port, dest_host: "127.0.0.1".into(), dest_port: 80 };
         assert_eq!(listen(&view(ForwardKind::Local, port)).await.unwrap_err().code(), "port_in_use");
         assert_eq!(listen(&view(ForwardKind::Dynamic, port)).await.unwrap_err().code(), "port_in_use");
-        assert!(listen(&view(ForwardKind::Remote, port)).await.unwrap().is_none(), "bei einer Remote-Regel lauscht der Server");
+        assert!(listen(&view(ForwardKind::Remote, port)).await.unwrap().is_none(), "for a remote rule the server listens");
         drop(taken);
         assert!(listen(&view(ForwardKind::Local, port)).await.unwrap().is_some());
     }
@@ -432,7 +432,7 @@ mod tests {
     fn only_the_current_turn_changes_a_rule() {
         let forwards = Forwards::default();
         forwards.rules().insert("regel".into(), Running { turn: 2, phase: Phase::Starting, error: None, counters: Arc::default(), since: None, retry_in: None, connecting: None, stop: None });
-        assert!(!forwards.update("regel", 1, |rule| rule.phase = Phase::Failed), "ein überholter Vorgang ändert nichts");
+        assert!(!forwards.update("regel", 1, |rule| rule.phase = Phase::Failed), "an outdated operation changes nothing");
         assert!(forwards.update("regel", 2, |rule| (rule.phase, rule.error) = (Phase::Retrying, Some(("connection_lost".into(), String::new())))));
         assert!(!forwards.update("andere", 2, |_| {}));
         let list = forwards.list();

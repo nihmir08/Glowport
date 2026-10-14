@@ -43,7 +43,7 @@ pub struct Staged {
 #[tauri::command]
 pub fn drag_stage(app: AppHandle, queue: State<'_, Queue>, place: Place, paths: Vec<String>) -> CmdResult<Staged> {
     if place == Place::Local || paths.is_empty() {
-        return Err(CmdError::new("not_supported", "Bereitlegen gibt es nur für Dateien eines Servers"));
+        return Err(CmdError::new("not_supported", "Preparing only exists for a server's files"));
     }
     // Every drag gets its own folder, so equal names from different drags do not overwrite each other.
     let dir = staging(&app)?.join(format!("{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed) + 1));
@@ -76,7 +76,7 @@ fn button_down() -> bool {
 pub async fn drag_out(window: Window, paths: Vec<String>) -> CmdResult<bool> {
     let files: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
     if files.is_empty() || files.iter().any(|file| !file.is_absolute() || !file.exists()) {
-        return Err(CmdError::new("no_such_file", "Die Datei gibt es auf diesem Rechner nicht"));
+        return Err(CmdError::new("no_such_file", "The file does not exist on this computer"));
     }
     let (done, outcome) = oneshot::channel::<Result<bool, String>>();
     let done = std::sync::Arc::new(Mutex::new(Some(done)));

@@ -14,7 +14,7 @@ export async function loadShells() {
   try {
     local.shells = await localShells();
   } catch (e) {
-    console.error('Shells nicht lesbar', e);
+    console.error('Shells not readable', e);
   }
   local.loaded = true;
 }

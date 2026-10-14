@@ -67,13 +67,13 @@ export const fakeProxmox = {
   probe: (input: ProxmoxInput): Promise<ProxmoxProbe> =>
     later(() => {
       if (!/^https:\/\/[^/\s]+$/.test(input.address.trim().replace(/\/$/, ''))) fail('address_invalid');
-      if (input.address.includes('gibt-es-nicht')) fail('offline');
+      if (input.address.includes('does-not-exist')) fail('offline');
       if (!/^[^@\s]+@[^!\s]+![^\s]+$/.test(input.tokenId.trim())) fail('proxmox_token');
       // An address with a trusted certificate needs no fingerprint. Otherwise the first step only names
       // the fingerprint; only with the confirmed one does the token go out.
       const trusted = input.address.includes('letsencrypt');
       if (!trusted && input.fingerprint !== FINGERPRINT) return { version: '', trusted, fingerprint: FINGERPRINT, missing: [], changed: !!input.fingerprint };
-      return { version: '9.0.11', trusted, fingerprint: FINGERPRINT, missing: input.tokenId.includes('nur-lesen') ? ['power'] : [] };
+      return { version: '9.0.11', trusted, fingerprint: FINGERPRINT, missing: input.tokenId.includes('read-only') ? ['power'] : [] };
     }, 500),
   save: (input: ProxmoxInput): Promise<Changed> =>
     later(() => {

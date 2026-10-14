@@ -43,7 +43,7 @@
   <div class="sec">{t('kit.controls')}</div>
   <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
     <Switch label="an" bind:checked={on} />
-    <Switch label="aus" bind:checked={off} />
+    <Switch label="off" bind:checked={off} />
     <Segmented
       label="Auswahl"
       bind:value={choice}
@@ -63,7 +63,7 @@
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;max-width:720px">
     <TextField label={t('kit.field.name')} bind:value={name} />
     <TextField label={t('kit.field.addr')} bind:value={addr} placeholder="203.0.113.10" hint={t('kit.field.addr.hint')} mono />
-    <TextField label="Passwort" value="geheim123" password />
+    <TextField label="Password" value="secret123" password />
   </div>
 
   <div class="sec">{t('kit.chips')}</div>

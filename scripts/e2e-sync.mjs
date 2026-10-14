@@ -168,8 +168,8 @@ try {
     let least = 2; const end = Date.now()+3000;
     while (Date.now()<end) { least = Math.min(least, qa('.host').length); await wait(20); }
     return { gone, opened, arrived, least, names: await hostNames() }`);
-  ok('m9 Sign in with account: the second device's vault is created from the account', joined.opened && joined.gone, J(joined));
-  ok('m9 The second device shows the first one's hosts, and they stay', joined.arrived && joined.least === 2 && J(joined.names) === J(['db-01', 'web-01']), J(joined));
+  ok('m9 Sign in with account: the vault of the second device is created from the account', joined.opened && joined.gone, J(joined));
+  ok('m9 The second device shows the hosts of the first one, and they stay', joined.arrived && joined.least === 2 && J(joined.names) === J(['db-01', 'web-01']), J(joined));
   ok('m9 Its interface shows the open vault', await b.run(`return !!(await until(()=>q('.nav')))`));
 
   // ── Changes arrive by themselves ──────────────────────────────────────────────────────────────────────
@@ -207,58 +207,58 @@ try {
   // ── Geteilter Tresor: einladen, annehmen, Rollen ──────────────────────────────────────────────────────
   const team = await a.run(`return await invoke('shared_create',{name:'Team Infra'})`);
   const candidate = await a.run(`return await invoke('shared_lookup',{username:'bert'})`);
-  ok('m9 Looking up an account shows the other's safety code', candidate.username === 'bert' && candidate.known === 'new' && candidate.code === bert.code, J(candidate));
+  ok('m9 Looking up an account shows the safety code of the other one', candidate.username === 'bert' && candidate.known === 'new' && candidate.code === bert.code, J(candidate));
   await a.run(`await invoke('shared_invite',{vault:${J(team)},account:${J(candidate.account)},role:'read'})`);
   const invited = await a.run(`const v=(await snapshot()).vaults.find(v=>v.id===${J(team)}); return v && [v.name, v.role, v.members.map(m=>[m.name,m.role,m.invited,m.me])]`);
-  ok('m9 Der Tresor nennt die Mitglieder; der Eingeladene gilt als eingeladen', J(invited) === J(['Team Infra', 'owner', [['anna', 'owner', false, true], ['bert', 'read', true, false]]]), J(invited));
+  ok('m9 The vault names its members; the invitee counts as invited', J(invited) === J(['Team Infra', 'owner', [['anna', 'owner', false, true], ['bert', 'read', true, false]]]), J(invited));
 
   const invitation = await c.run(`return await until(async()=>(await invoke('sync_state')).invitations[0], 15000)`);
-  ok('m9 Die Einladung kommt an: Name, Besitzerin, Rolle und ihr Sicherheitscode', invitation && invitation.name === 'Team Infra' && invitation.owner === 'anna' && invitation.role === 'read' && invitation.code === registered.code, J(invitation));
+  ok('m9 The invitation arrives: name, owner, role and her safety code', invitation && invitation.name === 'Team Infra' && invitation.owner === 'anna' && invitation.role === 'read' && invitation.code === registered.code, J(invitation));
   ok('m9 Die Statusleiste meldet die Einladung', await c.run(`return !!(await until(()=>qa('.st .st-x').find(e=>e.textContent.includes('Einladung'))))`));
   await c.run(`await invoke('invitation_accept',{vault:${J(team)}})`);
-  ok('m9 Nach dem Annehmen hat der Eingeladene den Tresor, mit Leserecht', (await c.run(`return await until(async()=>(await snapshot()).vaults.find(v=>v.id===${J(team)})?.role, 15000)`)) === 'read');
+  ok('m9 After accepting, the invitee has the vault, with read access', (await c.run(`return await until(async()=>(await snapshot()).vaults.find(v=>v.id===${J(team)})?.role, 15000)`)) === 'read');
 
   const teamHost = await a.run(`return (await invoke('host_save',{host:host('team-host',{address:'10.9.9.9'}),vault:${J(team)}})).id`);
-  ok('m9 Ein Host, im Tresor angelegt, liegt dort', (await a.run(`return (await snapshot()).homes[${J(teamHost)}]`)) === team);
-  ok('m9 Das Mitglied sieht ihn im geteilten Tresor', (await c.run(`return await until(async()=>(await snapshot()).homes[${J(teamHost)}], 15000)`)) === team);
-  ok('m9 Mit Leserecht lässt er sich nicht ändern', (await c.run(`return await fails(invoke('host_save',{host:host('umbenannt',{id:${J(teamHost)}})}))`)) === 'read_only');
-  ok('m9 … nicht löschen', (await c.run(`return await fails(invoke('host_delete',{id:${J(teamHost)}}))`)) === 'read_only');
-  ok('m9 … und nichts hineinlegen', (await c.run(`return await fails(invoke('host_save',{host:host('eigener'),vault:${J(team)}}))`)) === 'read_only');
+  ok('m9 A host created in the vault lives there', (await a.run(`return (await snapshot()).homes[${J(teamHost)}]`)) === team);
+  ok('m9 The member sees it in the shared vault', (await c.run(`return await until(async()=>(await snapshot()).homes[${J(teamHost)}], 15000)`)) === team);
+  ok('m9 With read access it cannot be changed', (await c.run(`return await fails(invoke('host_save',{host:host('renamed',{id:${J(teamHost)}})}))`)) === 'read_only');
+  ok('m9 … not deleted', (await c.run(`return await fails(invoke('host_delete',{id:${J(teamHost)}}))`)) === 'read_only');
+  ok('m9 … and nothing put into it', (await c.run(`return await fails(invoke('host_save',{host:host('own'),vault:${J(team)}}))`)) === 'read_only');
   const badges = await c.run(`
     qa('.nv')[0].click(); await until(()=>q('.vsw'));
     return { tabs: qa('.vsw button').map(b=>b.textContent.trim()), badge: qa('.host').find(h=>h.querySelector('.h-name')?.textContent.trim()==='team-host')?.querySelector('.chip.vault')?.textContent.trim() };
   `);
-  ok('m9 Seite „Hosts“: Umschalter mit allen Tresoren, der Host trägt die Marke seines Tresors', J(badges) === J({ tabs: ['Alle', 'Persönlich', 'Team Infra'], badge: 'Team Infra' }), J(badges));
+  ok('m9 Hosts page: switcher with all vaults, the host carries its vault\'s badge', J(badges) === J({ tabs: ['Alle', 'Persönlich', 'Team Infra'], badge: 'Team Infra' }), J(badges));
 
   // ── Moving, more permissions, second own device ───────────────────────────────────────────────────────
   const web = await a.run(`return (await snapshot()).hosts.find(h=>h.name==='web-01').id`);
   const moved = await a.run(`return (await invoke('host_move',{id:${J(web)},vault:${J(team)},carry:true})).id`);
-  ok('m9 Ein vorhandener Host zieht in den geteilten Tresor um', moved !== web && (await a.run(`return (await snapshot()).homes[${J(moved)}]`)) === team);
-  ok('m9 … und kommt beim Mitglied an', (await c.run(`return await until(async()=>(await hostNames()).includes('web-01'), 15000)`)) === true);
+  ok('m9 An existing host moves into the shared vault', moved !== web && (await a.run(`return (await snapshot()).homes[${J(moved)}]`)) === team);
+  ok('m9 … and arrives at the member', (await c.run(`return await until(async()=>(await hostNames()).includes('web-01'), 15000)`)) === true);
   await a.run(`await invoke('shared_set_role',{vault:${J(team)},account:${J(candidate.account)},role:'write'})`);
-  ok('m9 Mehr Rechte gelten beim Mitglied ohne Schlüsseltausch', (await c.run(`return await until(async()=>(await snapshot()).vaults.find(v=>v.id===${J(team)})?.role==='write', 15000)`)) === true);
+  ok('m9 More rights apply at the member without a key rotation', (await c.run(`return await until(async()=>(await snapshot()).vaults.find(v=>v.id===${J(team)})?.role==='write', 15000)`)) === true);
   await c.run(`await invoke('host_save',{host:host('team-host',{id:${J(teamHost)},address:'10.9.9.10'})})`);
-  ok('m9 Jetzt ändert das Mitglied, und die Besitzerin sieht es', (await a.run(`return await until(async()=>(await snapshot()).hosts.find(h=>h.id===${J(teamHost)})?.address==='10.9.9.10', 15000)`)) === true);
+  ok('m9 Now the member changes it, and the owner sees it', (await a.run(`return await until(async()=>(await snapshot()).hosts.find(h=>h.id===${J(teamHost)})?.address==='10.9.9.10', 15000)`)) === true);
   const onLaptop = await b.run(`return await until(async()=>{const s=await snapshot(); const v=s.vaults.find(v=>v.id===${J(team)}); return v && s.hosts.some(h=>h.name==='team-host') ? [v.name,v.role] : null}, 15000)`);
-  ok('m9 Das zweite Gerät der Besitzerin hat den Tresor von selbst, als Besitzerin', J(onLaptop) === J(['Team Infra', 'owner']), J(onLaptop));
+  ok('m9 The owner\'s second device has the vault on its own, as owner', J(onLaptop) === J(['Team Infra', 'owner']), J(onLaptop));
 
   // ── Removing rotates the key ──────────────────────────────────────────────────────────────────────────
   await a.run(`await invoke('shared_remove',{vault:${J(team)},account:${J(candidate.account)}})`);
-  ok('m9 Nach dem Entfernen verschwindet der Tresor beim Mitglied', (await c.run(`return await until(async()=>(await snapshot()).vaults.length===1, 15000)`)) === true);
+  ok('m9 After removal the vault disappears at the member', (await c.run(`return await until(async()=>(await snapshot()).vaults.length===1, 15000)`)) === true);
   const leftover = await c.run(`return [await hostNames(), (await invoke('sync_notices')).map(n=>n.kind)]`);
-  ok('m9 … samt seinen Hosts, mit einem Hinweis; die eigenen bleiben', J(leftover) === J([['berts-server'], ['vault_removed']]), J(leftover));
-  ok('m9 Die Besitzerin arbeitet mit dem neuen Schlüssel weiter', (await a.run(`await invoke('host_save',{host:host('nach-dem-tausch'),vault:${J(team)}}); return (await snapshot()).vaults.find(v=>v.id===${J(team)}).members.length`)) === 1);
-  ok('m9 … und ihr zweites Gerät folgt', (await b.run(`return await until(async()=>(await hostNames()).includes('nach-dem-tausch'), 15000)`)) === true);
+  ok('m9 … with its hosts, with a notice; their own ones stay', J(leftover) === J([['berts-server'], ['vault_removed']]), J(leftover));
+  ok('m9 The owner keeps working with the new key', (await a.run(`await invoke('host_save',{host:host('after-the-rotation'),vault:${J(team)}}); return (await snapshot()).vaults.find(v=>v.id===${J(team)}).members.length`)) === 1);
+  ok('m9 … and her second device follows', (await b.run(`return await until(async()=>(await hostNames()).includes('after-the-rotation'), 15000)`)) === true);
 
   // ── Changing the master password ──────────────────────────────────────────────────────────────────────
   await a.run(`await invoke('vault_change_password',{old:${J(PW_ANNA)},new:${J(PW_ANNA_NEU)},logoutOthers:false})`);
-  ok('m9 Passwort geändert: Das andere Gerät erfährt es', (await b.run(`return await until(async()=>(await invoke('sync_now')).passwordChanged, 15000)`)) === true);
+  ok('m9 Password changed: the other device learns about it', (await b.run(`return await until(async()=>(await invoke('sync_now')).passwordChanged, 15000)`)) === true);
   const unlocks = await b.run(`
     const tryUnlock=async p=>{await invoke('vault_lock'); return await fails(invoke('vault_unlock',{password:p}))};
     return [await tryUnlock(${J(PW_ANNA)}), await tryUnlock(${J(PW_ANNA_NEU)}), await tryUnlock(${J(PW_ANNA)}), await tryUnlock(${J(PW_ANNA_NEU)})];
   `);
-  ok('m9 Dort öffnet das alte, bis das neue einmal benutzt wurde; danach nur noch das neue', J(unlocks) === J([null, null, 'wrong_password', null]), J(unlocks));
-  ok('m9 Nach dem Entsperren läuft der Abgleich wieder', (await b.run(`return await until(async()=>{const s=await invoke('sync_state'); return s.linked && s.phase==='synced'}, 15000)`)) === true);
+  ok('m9 There the old one opens until the new one was used once; after that only the new one', J(unlocks) === J([null, null, 'wrong_password', null]), J(unlocks));
+  ok('m9 After unlocking, syncing runs again', (await b.run(`return await until(async()=>{const s=await invoke('sync_state'); return s.linked && s.phase==='synced'}, 15000)`)) === true);
 
   // ── Sign out and delete data (open and connected) ──────────────────────────────────────────────────────
   const wipeAsk = await c.run(`
@@ -273,24 +273,24 @@ try {
     confirm.click();
     return { linked: text.includes(${J(SERVER)}), blocked, freed };
   `).catch((e) => ({ error: e.message }));
-  ok('Löschen: Die Rückfrage nennt den Sync-Server und verlangt das Häkchen', wipeAsk.linked && wipeAsk.blocked && wipeAsk.freed, J(wipeAsk));
+  ok('Delete: the prompt names the sync server and requires the checkbox', wipeAsk.linked && wipeAsk.blocked && wipeAsk.freed, J(wipeAsk));
   // The old program ends with the restart; only afterwards does the debug interface belong to the new one.
   const ended = await Promise.race([new Promise((done) => (c.child.exitCode !== null ? done(true) : c.child.once('exit', () => done(true)))), sleep(20_000).then(() => false)]);
-  ok('Löschen: Das Programm beendet sich zum Neustart', ended);
+  ok('Delete: the program quits to restart', ended);
   await c.attach();
   const wiped = await c.run(`await until(()=>q('.lock-card')); return [(await invoke('vault_status')).state, q('.lock-card h1')?.textContent, (await invoke('sync_state')).linked]`);
-  ok('Löschen: Glowport startet neu, ohne Tresor und ohne Anmeldung', J(wiped) === J(['missing', 'Tresor anlegen', false]), J(wiped));
+  ok('Delete: Glowport restarts without a vault and without a sign-in', J(wiped) === J(['missing', 'Tresor anlegen', false]), J(wiped));
   const bertDevices = await a.run(`return (await invoke('admin_accounts')).find(x=>x.username==='bert')?.devices`);
-  ok('Löschen: Das Gerät ist beim Server abgemeldet', bertDevices === 0, J(bertDevices));
+  ok('Delete: the device is signed out at the server', bertDevices === 0, J(bertDevices));
   // Without vault and sessions the window closes without asking; the restarted program does not belong to the test.
   await c.run(`q('.wc .cl').click()`).catch(() => {});
 
   // ── Sign out device, disconnect ───────────────────────────────────────────────────────────────────────
   const laptop = await a.run(`return (await invoke('sync_devices')).find(d=>!d.current).id`);
   await a.run(`await invoke('sync_device_remove',{id:${J(laptop)}})`);
-  ok('m9 Ein abgemeldetes Gerät merkt es und behält seinen Tresor', (await b.run(`return await until(async()=>(await invoke('sync_now').catch(()=>invoke('sync_state'))).phase==='signedOut', 15000)`)) === true && (await b.run(`return (await hostNames()).length`)) > 0);
+  ok('m9 A signed-out device notices and keeps its vault', (await b.run(`return await until(async()=>(await invoke('sync_now').catch(()=>invoke('sync_state'))).phase==='signedOut', 15000)`)) === true && (await b.run(`return (await hostNames()).length`)) > 0);
   const unlinked = await a.run(`return [(await invoke('sync_unlink')).linked, (await hostNames()).length > 0, (await snapshot()).vaults.length]`);
-  ok('m9 Vom Server trennen: Der Tresor bleibt, auch der geteilte', J(unlinked) === J([false, true, 2]), J(unlinked));
+  ok('m9 Unlink from the server: the vault stays, the shared one too', J(unlinked) === J([false, true, 2]), J(unlinked));
 } finally {
   for (const instance of [a, b, c]) instance.stop();
   server.child?.kill();
@@ -298,5 +298,5 @@ try {
 }
 
 const failed = results.filter((line) => line.startsWith('FEHLER')).length;
-console.log(`\n${results.length - failed} von ${results.length} bestanden`);
+console.log(`\n${results.length - failed} of ${results.length} passed`);
 process.exit(failed ? 1 : 0);

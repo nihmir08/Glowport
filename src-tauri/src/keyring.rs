@@ -258,7 +258,7 @@ pub fn key_export(app: AppHandle, state: State<'_, AppState>, id: String, passph
         let directory = session.directory()?;
         // With read permission a key can be used, but not handed out (`docs/sync.md`, “Roles”).
         if directory.role_of(&id) == glowport_core::roster::Role::Read {
-            return Err(CmdError::new("read_only", "Mit Leserecht lässt sich der private Schlüssel nicht exportieren"));
+            return Err(CmdError::new("read_only", "With read access the private key cannot be exported"));
         }
         directory.key_private(&id)?
     };
@@ -397,7 +397,7 @@ mod tests {
     const FINGERPRINT: &str = "SHA256:+mcbLMkgoIlEAnnSBVbTyfVSZUNm5w/PZWj1l+QQtwg";
 
     fn code<T>(result: CmdResult<T>) -> &'static str {
-        result.err().map_or("kein Fehler", |e| e.code())
+        result.err().map_or("no error", |e| e.code())
     }
 
     fn data(changed: &Changed) -> Value {
@@ -417,16 +417,16 @@ mod tests {
         let file = concat!(env!("CARGO_MANIFEST_DIR"), "/../crates/net/tests/keys/openssh_ed25519_enc");
 
         assert_eq!(code(adopt_file(&state, file, "falsch", &first)), "wrong_passphrase");
-        assert_eq!(code(adopt_file(&state, "Z:/gibt/es/nicht", "geheim", &first)), "key_unreadable");
+        assert_eq!(code(adopt_file(&state, "Z:/does/not/exist", "geheim", &first)), "key_unreadable");
         adopt_file(&state, file, "geheim", &first).unwrap();
         adopt_file(&state, file, "geheim", &second).unwrap();
 
         let snapshot = serde_json::to_value(state.session().directory().unwrap().snapshot()).unwrap();
         let keys = snapshot["keys"].as_array().unwrap();
-        assert_eq!(keys.len(), 1, "derselbe Schlüssel wird nicht doppelt angelegt");
+        assert_eq!(keys.len(), 1, "the same key is not created twice");
         assert_eq!((keys[0]["name"].as_str(), keys[0]["fingerprint"].as_str(), keys[0]["origin"].as_str()), (Some("openssh_ed25519_enc"), Some(FINGERPRINT), Some("imported")));
         for host in snapshot["hosts"].as_array().unwrap() {
-            assert_eq!(host["own"]["key"], keys[0]["id"], "beide Hosts melden sich mit dem Schlüssel aus dem Tresor an");
+            assert_eq!(host["own"]["key"], keys[0]["id"], "both hosts sign in with the key from the vault");
         }
         assert!(!snapshot.to_string().contains("PRIVATE KEY"));
     }
@@ -438,10 +438,10 @@ mod tests {
         assert_eq!(code(generate(&state, Generate { name: "x".into(), kind: KeyKind::Ed25519, bits: 256 })), "locked");
         state.session().create("lang genug").unwrap();
 
-        let made = generate(&state, Generate { name: "arbeit".into(), kind: KeyKind::Ed25519, bits: 256 }).unwrap();
+        let made = generate(&state, Generate { name: "work".into(), kind: KeyKind::Ed25519, bits: 256 }).unwrap();
         let keys = data(&made)["keys"].clone();
-        assert_eq!((keys[0]["name"].as_str(), keys[0]["kind"].as_str(), keys[0]["bits"].as_u64(), keys[0]["origin"].as_str()), (Some("arbeit"), Some("ed25519"), Some(256), Some("generated")));
-        assert!(keys[0]["publicKey"].as_str().unwrap().starts_with("ssh-ed25519 ") && keys[0]["publicKey"].as_str().unwrap().ends_with(" arbeit"));
+        assert_eq!((keys[0]["name"].as_str(), keys[0]["kind"].as_str(), keys[0]["bits"].as_u64(), keys[0]["origin"].as_str()), (Some("work"), Some("ed25519"), Some(256), Some("generated")));
+        assert!(keys[0]["publicKey"].as_str().unwrap().starts_with("ssh-ed25519 ") && keys[0]["publicKey"].as_str().unwrap().ends_with(" work"));
         assert!(!serde_json::to_string(&made).unwrap().contains("PRIVATE"));
         assert_eq!(code(generate(&state, Generate { name: "x".into(), kind: KeyKind::Rsa, bits: 1024 })), "key_size");
         assert_eq!(code(generate(&state, Generate { name: " ".into(), kind: KeyKind::Ed25519, bits: 256 })), "invalid");
@@ -450,26 +450,26 @@ mod tests {
         let locked = inspect(ENCRYPTED, None).unwrap();
         assert_eq!(serde_json::to_value(&locked).unwrap(), json!({ "kind": "ed25519", "bits": 256, "fingerprint": FINGERPRINT, "encrypted": true, "format": "openssh", "comment": "" }));
         assert_eq!(code(inspect("Hallo", None)), "key_unreadable");
-        let import_with = |passphrase: Option<&str>| import(&state, Import { name: "alt".into(), text: ENCRYPTED.into(), passphrase: passphrase.map(Into::into) });
+        let import_with = |passphrase: Option<&str>| import(&state, Import { name: "old".into(), text: ENCRYPTED.into(), passphrase: passphrase.map(Into::into) });
         assert_eq!(code(import_with(None)), "passphrase_required");
         assert_eq!(code(import_with(Some("falsch"))), "wrong_passphrase");
         let imported = import_with(Some("geheim")).unwrap();
         let keys = data(&imported)["keys"].clone();
-        assert_eq!((keys[0]["name"].as_str(), keys[0]["fingerprint"].as_str(), keys[0]["origin"].as_str()), (Some("alt"), Some(FINGERPRINT), Some("imported")));
+        assert_eq!((keys[0]["name"].as_str(), keys[0]["fingerprint"].as_str(), keys[0]["origin"].as_str()), (Some("old"), Some(FINGERPRINT), Some("imported")));
         assert_eq!(keys.as_array().unwrap().len(), 2);
 
         // In the vault the imported key is stored without passphrase, the export can set a new one.
         let id = keys[0]["id"].as_str().unwrap().to_string();
         let (name, private) = state.session().directory().unwrap().key_private(&id).unwrap();
         assert!(!keys::inspect(private.expose(), None).unwrap().encrypted);
-        let exported = keys::export(private.expose(), &name, Some("neu")).unwrap();
-        assert_eq!(keys::import(&exported, Some("neu")).unwrap().fingerprint, FINGERPRINT);
+        let exported = keys::export(private.expose(), &name, Some("new")).unwrap();
+        assert_eq!(keys::import(&exported, Some("new")).unwrap().fingerprint, FINGERPRINT);
     }
 
     #[test]
     fn export_file_names_are_harmless() {
-        assert_eq!(file_name("arbeit-2026"), "arbeit-2026");
-        assert_eq!(file_name("Mein Schlüssel / Büro"), "Mein_Schl_ssel___B_ro");
+        assert_eq!(file_name("work-2026"), "work-2026");
+        assert_eq!(file_name("My key / Büro"), "My_key___B_ro");
         assert_eq!(file_name("../.."), ".._..");
         assert_eq!(file_name("///"), "id_glowport");
     }

@@ -96,7 +96,7 @@ export const forwardName = (id: string) => forwardById(id)?.name ?? '';
 export function initForwards(): () => void {
   forwardList()
     .then((list) => (forwards.states = list))
-    .catch((e) => console.error('Port-Regeln nicht lesbar', e));
+    .catch((e) => console.error('Port rules not readable', e));
   return onForwards((list) => {
     forwards.states = list;
     // A rule that is no longer switched on is not waiting for an answer any more either.

@@ -89,7 +89,7 @@ pub async fn watch_open(app: AppHandle, place: Place, path: String, program: Opt
     let remote = files::remote(&app, &place).await?;
     let (bytes, longer) = remote.read(&path, MAX_EDITED).await?;
     if longer {
-        return Err(CmdError::new("file_too_large", "Die Datei ist zu groß"));
+        return Err(CmdError::new("file_too_large", "The file is too large"));
     }
     let name = path.rsplit('/').next().filter(|name| !name.is_empty() && !name.contains(['\\', ':'])).ok_or_else(|| CmdError::invalid("name_required"))?.to_string();
     let watches = app.state::<Watches>();

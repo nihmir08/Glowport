@@ -365,7 +365,7 @@ impl Shared {
             .collect();
         let result = if saved.is_empty() { std::fs::remove_file(path).or_else(|e| if e.kind() == std::io::ErrorKind::NotFound { Ok(()) } else { Err(e) }) } else { serde_json::to_vec(&saved).map_err(std::io::Error::other).and_then(|bytes| std::fs::write(path, bytes)) };
         if let Err(error) = result {
-            eprintln!("Transfers nicht vorgemerkt: {error}");
+            eprintln!("Transfers not noted: {error}");
         }
     }
 }
@@ -860,7 +860,7 @@ pub(crate) fn stage(app: &AppHandle, queue: &Queue, from: &Place, paths: Vec<Str
 #[tauri::command]
 pub fn transfer_start(app: AppHandle, queue: tauri::State<'_, Queue>, request: Request) -> CmdResult<Vec<u64>> {
     if request.from == request.to && request.paths.iter().any(|path| join(&request.from, &request.dest, &base_name(&request.from, path)) == *path) {
-        return Err(CmdError::new("same_place", "Quelle und Ziel sind derselbe Ort"));
+        return Err(CmdError::new("same_place", "Source and destination are the same location"));
     }
     if let Some(parallel) = request.parallel {
         queue.0.set_parallel(parallel);
@@ -1074,7 +1074,7 @@ mod tests {
             }
             tokio::time::sleep(Duration::from_millis(25)).await;
         }
-        panic!("Zustand nicht erreicht: {:?}", engine.list());
+        panic!("State not reached: {:?}", engine.list());
     }
 
     fn all(state: &'static str) -> impl Fn(&[TransferView]) -> bool {
@@ -1097,44 +1097,44 @@ mod tests {
         assert_eq!(bench.read("ziel/einzeln.txt").as_deref(), Some(&b"hallo"[..]));
         assert_eq!(bench.read("ziel/ordner/a.txt").as_deref(), Some(&b"aaa"[..]));
         assert_eq!(bench.read("ziel/ordner/tief/b.bin").map(|b| b.len()), Some(600_000));
-        assert!(bench.root.join("ziel/ordner/leer").is_dir(), "auch leere Ordner kommen mit");
+        assert!(bench.root.join("ziel/ordner/leer").is_dir(), "empty folders come along too");
         let folder = &views[1];
         assert_eq!((folder.name.as_str(), folder.files, folder.files_done, folder.bytes, folder.done, folder.direction), ("ordner", 2, 2, 600_003, 600_003, "upload"));
         // The copy is as old as the original.
         let age = |path: &str| std::fs::metadata(bench.root.join(path)).unwrap().modified().unwrap().duration_since(UNIX_EPOCH).unwrap().as_secs();
         assert_eq!(age("ziel/einzeln.txt"), age("quelle/einzeln.txt"));
-        assert!(bench.seen.lock().unwrap().len() >= 2, "der Stand wird gemeldet");
+        assert!(bench.seen.lock().unwrap().len() >= 2, "the progress is reported");
         assert!(!bench.root.join("transfers.json").exists(), "nichts Unfertiges, nichts vorgemerkt");
     }
 
     #[tokio::test]
     async fn skips_overwrites_or_puts_next_to_what_is_already_there() {
         let bench = Bench::new();
-        bench.put("quelle/plan.txt", b"neu");
-        bench.put("quelle/web/index.html", b"neu");
-        bench.put("quelle/web/neu.css", b"css");
-        bench.put("ziel/plan.txt", b"alt");
-        bench.put("ziel/web/index.html", b"alt");
+        bench.put("quelle/plan.txt", b"new");
+        bench.put("quelle/web/index.html", b"new");
+        bench.put("quelle/web/new.css", b"css");
+        bench.put("ziel/plan.txt", b"old");
+        bench.put("ziel/web/index.html", b"old");
         let engine = bench.engine();
 
         engine.start(vec![bench.order("plan.txt", Policy::Skip), bench.order("web", Policy::Skip)], named);
         until(&engine, all("done")).await;
-        assert_eq!(bench.read("ziel/plan.txt").as_deref(), Some(&b"alt"[..]));
-        assert_eq!(bench.read("ziel/web/index.html").as_deref(), Some(&b"alt"[..]), "Vorhandenes im Ordner bleibt");
-        assert_eq!(bench.read("ziel/web/neu.css").as_deref(), Some(&b"css"[..]), "Fehlendes kommt dazu");
+        assert_eq!(bench.read("ziel/plan.txt").as_deref(), Some(&b"old"[..]));
+        assert_eq!(bench.read("ziel/web/index.html").as_deref(), Some(&b"old"[..]), "what exists in the folder stays");
+        assert_eq!(bench.read("ziel/web/new.css").as_deref(), Some(&b"css"[..]), "what is missing is added");
 
         engine.clear();
         engine.start(vec![bench.order("plan.txt", Policy::Rename), bench.order("web", Policy::Rename)], named);
         until(&engine, all("done")).await;
-        assert_eq!(bench.read("ziel/plan.txt").as_deref(), Some(&b"alt"[..]));
-        assert_eq!(bench.read("ziel/plan (2).txt").as_deref(), Some(&b"neu"[..]));
-        assert_eq!(bench.read("ziel/web (2)/index.html").as_deref(), Some(&b"neu"[..]));
+        assert_eq!(bench.read("ziel/plan.txt").as_deref(), Some(&b"old"[..]));
+        assert_eq!(bench.read("ziel/plan (2).txt").as_deref(), Some(&b"new"[..]));
+        assert_eq!(bench.read("ziel/web (2)/index.html").as_deref(), Some(&b"new"[..]));
 
         engine.clear();
         engine.start(vec![bench.order("plan.txt", Policy::Overwrite), bench.order("web", Policy::Overwrite)], named);
         until(&engine, all("done")).await;
-        assert_eq!(bench.read("ziel/plan.txt").as_deref(), Some(&b"neu"[..]));
-        assert_eq!(bench.read("ziel/web/index.html").as_deref(), Some(&b"neu"[..]));
+        assert_eq!(bench.read("ziel/plan.txt").as_deref(), Some(&b"new"[..]));
+        assert_eq!(bench.read("ziel/web/index.html").as_deref(), Some(&b"new"[..]));
     }
 
     #[tokio::test]
@@ -1153,9 +1153,9 @@ mod tests {
         until(&engine, |_| engine.shared.active.load(Ordering::Relaxed) == 0).await;
         let halfway = engine.list()[0].done;
         assert!(halfway > 0 && halfway < content.len() as u64, "mittendrin angehalten: {halfway} (gemeldet {})", paused[0].done);
-        assert_eq!(bench.read("ziel/gross.bin").map(|b| b.len() as u64), Some(halfway), "am Ziel steht genau das Übertragene");
+        assert_eq!(bench.read("ziel/gross.bin").map(|b| b.len() as u64), Some(halfway), "exactly what was transferred is at the destination");
         tokio::time::sleep(TICK * 2).await;
-        assert!(bench.root.join("transfers.json").exists(), "der unfertige Auftrag ist vorgemerkt");
+        assert!(bench.root.join("transfers.json").exists(), "the unfinished job is noted");
 
         // Restart: a new queue reads what was noted and offers it paused.
         drop(engine);
@@ -1165,9 +1165,9 @@ mod tests {
         again.control(None, "resume");
         let views = until(&again, all("done")).await;
         assert_eq!(views[0].done, content.len() as u64);
-        assert!(bench.read("ziel/gross.bin").is_some_and(|copy| copy == content), "die fortgesetzte Datei ist vollständig und unverändert");
+        assert!(bench.read("ziel/gross.bin").is_some_and(|copy| copy == content), "the resumed file is complete and unchanged");
         tokio::time::sleep(TICK * 2).await;
-        assert!(!bench.root.join("transfers.json").exists(), "nach dem Ende ist nichts mehr vorgemerkt");
+        assert!(!bench.root.join("transfers.json").exists(), "after the end nothing is noted any more");
     }
 
     #[tokio::test]
@@ -1185,7 +1185,7 @@ mod tests {
         engine.shared.brake.store(0, Ordering::Relaxed);
         engine.control(None, "resume");
         until(&engine, all("done")).await;
-        assert!(bench.read("ziel/daten.bin").is_some_and(|copy| copy == vec![2u8; 1_000_000]), "kein Gemisch aus altem Anfang und neuem Ende");
+        assert!(bench.read("ziel/daten.bin").is_some_and(|copy| copy == vec![2u8; 1_000_000]), "no mix of an old beginning and a new end");
     }
 
     #[tokio::test]
@@ -1198,7 +1198,7 @@ mod tests {
         until(&engine, |views| views[0].done > 0).await;
         engine.control(Some(&ids), "cancel");
         until(&engine, |views| views[0].state == "cancelled" && engine.shared.active.load(Ordering::Relaxed) == 0).await;
-        assert!(bench.read("ziel/film.bin").is_none(), "die halbe Datei ist weggeräumt");
+        assert!(bench.read("ziel/film.bin").is_none(), "the half file is cleared away");
 
         engine.shared.brake.store(0, Ordering::Relaxed);
         engine.control(Some(&ids), "retry");
@@ -1291,11 +1291,11 @@ mod tests {
         };
         let megabytes = BIG as f64 / (1024.0 * 1024.0);
 
-        println!("\nGlowport gegen den eigenen Testserver auf diesem Rechner (127.0.0.1, optimiert gebaut)");
+        println!("\nGlowport against our own test server on this computer (127.0.0.1, optimised build)");
         let up = run(order(&Place::Local, text(&local.join("gross.bin")), &server_place, "/srv".into()), 4).await;
-        println!("  große Datei hoch      {megabytes:.0} MB in {up:5.2} s = {:6.1} MB/s", megabytes / up);
+        println!("  large file up        {megabytes:.0} MB in {up:5.2} s = {:6.1} MB/s", megabytes / up);
         let down = run(order(&server_place, "/srv/gross.bin".into(), &Place::Local, text(&local.join("zurueck"))), 4).await;
-        println!("  große Datei herunter  {megabytes:.0} MB in {down:5.2} s = {:6.1} MB/s", megabytes / down);
+        println!("  large file down      {megabytes:.0} MB in {down:5.2} s = {:6.1} MB/s", megabytes / down);
         for parallel in [1, 4, 8] {
             let _ = std::fs::remove_dir_all(files.join("srv").join("viele"));
             let seconds = run(order(&Place::Local, text(&local.join("viele")), &server_place, "/srv".into()), parallel).await;
@@ -1320,19 +1320,19 @@ mod tests {
             command.arg(from).arg(to).status().ok().filter(|status| status.success()).map(|_| started.elapsed().as_secs_f64())
         };
         if keyed {
-            println!("scp von OpenSSH gegen denselben Server");
+            println!("OpenSSH's scp against the same server");
             let target = |path: &str| format!("tester@127.0.0.1:{path}");
             match tokio::task::block_in_place(|| scp("gross.bin".into(), target("/srv/scp-gross.bin"), false)) {
-                Some(seconds) => println!("  große Datei hoch      {megabytes:.0} MB in {seconds:5.2} s = {:6.1} MB/s", megabytes / seconds),
-                None => println!("  große Datei hoch: scp ließ sich nicht messen"),
+                Some(seconds) => println!("  large file up        {megabytes:.0} MB in {seconds:5.2} s = {:6.1} MB/s", megabytes / seconds),
+                None => println!("  large file up: scp could not be measured"),
             }
             std::fs::create_dir_all(files.join("srv").join("scp")).unwrap();
             match tokio::task::block_in_place(|| scp("viele".into(), target("/srv/scp"), true)) {
                 Some(seconds) => println!("  {SMALL} kleine hoch                       {seconds:5.2} s = {:6.0} Dateien/s", SMALL as f64 / seconds),
-                None => println!("  kleine Dateien hoch: scp ließ sich nicht messen"),
+                None => println!("  small files up: scp could not be measured"),
             }
         } else {
-            println!("scp: ohne ssh-keygen kein Vergleich");
+            println!("scp: no comparison without ssh-keygen");
         }
         drop(running);
         let _ = std::fs::remove_dir_all(&root);

@@ -151,8 +151,8 @@ fn remote_parent(path: &str) -> Option<String> {
 
 fn connect_error(end: End) -> CmdError {
     match end {
-        End::AuthFailed => CmdError::new("files_auth", "Die gespeicherten Zugangsdaten reichen nicht"),
-        End::HostKeyRejected => CmdError::new("files_host_key", "Der Schlüssel des Servers ist nicht bestätigt"),
+        End::AuthFailed => CmdError::new("files_auth", "The saved credentials are not enough"),
+        End::HostKeyRejected => CmdError::new("files_host_key", "The server's key is not confirmed"),
         End::ConnectFailed(reason) if reason.starts_with("sftp:") => CmdError::new("no_sftp", reason),
         End::ConnectFailed(reason) | End::ConnectionLost(reason) => CmdError::new("connect_failed", reason),
         other => CmdError::new("connect_failed", format!("{other:?}")),
@@ -166,10 +166,10 @@ pub(crate) async fn remote(app: &AppHandle, place: &Place) -> CmdResult<Arc<Remo
         return Ok(found.clone());
     }
     let made = match place {
-        Place::Local => return Err(CmdError::new("not_supported", "Dieser PC braucht kein SFTP")),
+        Place::Local => return Err(CmdError::new("not_supported", "This PC needs no SFTP")),
         Place::Session { id } => {
-            let opened = sessions::extra_channel(app, *id).await.ok_or_else(|| CmdError::new("not_connected", "Die Sitzung ist nicht verbunden"))?;
-            Remote::Sftp(glowport_net::files::Remote::on(opened).await.map_err(|error| if error == FileError::Unsupported { CmdError::new("no_sftp", "Der Server bietet kein SFTP an") } else { error.into() })?)
+            let opened = sessions::extra_channel(app, *id).await.ok_or_else(|| CmdError::new("not_connected", "The session is not connected"))?;
+            Remote::Sftp(glowport_net::files::Remote::on(opened).await.map_err(|error| if error == FileError::Unsupported { CmdError::new("no_sftp", "The server does not offer SFTP") } else { error.into() })?)
         }
         Place::Ftp { .. } => crate::ftp::silent(app, &crate::ftp::Who::of(app, place).ok_or_else(|| CmdError::invalid("protocol_invalid"))?).await?,
         Place::Host { id } if app.state::<AppState>().session().directory()?.is_ftp(id) => crate::ftp::silent(app, &crate::ftp::Who::Host(id.clone())).await?,
@@ -371,7 +371,7 @@ fn local_list(path: &str) -> CmdResult<Listing> {
     let dir = PathBuf::from(text(&dir).trim_start_matches(r"\\?\"));
     let meta = std::fs::metadata(&dir).map_err(io_error)?;
     if !meta.is_dir() {
-        return Err(CmdError::new("not_a_directory", "Das ist kein Ordner"));
+        return Err(CmdError::new("not_a_directory", "That is not a folder"));
     }
     let mut entries = Vec::new();
     for item in std::fs::read_dir(&dir).map_err(io_error)? {
@@ -547,7 +547,7 @@ pub async fn fs_remove(app: AppHandle, place: Place, paths: Vec<String>) -> CmdR
 #[tauri::command]
 pub async fn fs_chmod(app: AppHandle, place: Place, request: ChmodRequest) -> CmdResult<()> {
     if place == Place::Local {
-        return Err(CmdError::new("not_supported", "Rechte gibt es nur am Server"));
+        return Err(CmdError::new("not_supported", "Permissions only exist on the server"));
     }
     let change = Change { mode: request.mode, owner: request.owner.filter(|o| !o.trim().is_empty()), group: request.group.filter(|g| !g.trim().is_empty()) };
     with_remote(&app, &place, |remote| async move {
@@ -575,7 +575,7 @@ async fn read_bytes(app: &AppHandle, place: Place, path: String, limit: u64) -> 
             use std::io::Read;
             let file = std::fs::File::open(&path).map_err(io_error)?;
             if file.metadata().map_err(io_error)?.is_dir() {
-                return Err(CmdError::new("is_a_directory", "Das ist ein Ordner"));
+                return Err(CmdError::new("is_a_directory", "That is a folder"));
             }
             let mut bytes = Vec::new();
             file.take(limit + 1).read_to_end(&mut bytes).map_err(io_error)?;
@@ -594,7 +594,7 @@ async fn read_bytes(app: &AppHandle, place: Place, path: String, limit: u64) -> 
 pub async fn fs_read_bytes(app: AppHandle, place: Place, path: String) -> CmdResult<Response> {
     let (bytes, longer) = read_bytes(&app, place, path, MAX_IMAGE).await?;
     if longer {
-        return Err(CmdError::new("file_too_large", "Die Datei ist zu groß"));
+        return Err(CmdError::new("file_too_large", "The file is too large"));
     }
     Ok(Response::new(bytes))
 }
@@ -685,9 +685,9 @@ fn content_hit(line: &str) -> Option<Hit> {
 /// Runs a command on a place's server: on the session's connection or the host's own.
 pub(crate) async fn run_at(app: &AppHandle, place: &Place, command: &str) -> CmdResult<glowport_net::Output> {
     match place {
-        Place::Local => Err(CmdError::new("not_supported", "Befehle laufen nur am Server")),
+        Place::Local => Err(CmdError::new("not_supported", "Commands only run on the server")),
         Place::Session { id } => {
-            let opened = sessions::extra_channel(app, *id).await.ok_or_else(|| CmdError::new("not_connected", "Die Sitzung ist nicht verbunden"))?;
+            let opened = sessions::extra_channel(app, *id).await.ok_or_else(|| CmdError::new("not_connected", "The session is not connected"))?;
             glowport_net::files::run(opened, command).await.map_err(Into::into)
         }
         place => with_remote(app, place, |remote| async move { remote.run(command).await }).await,
@@ -732,7 +732,7 @@ pub async fn fs_search(app: AppHandle, place: Place, dir: String, query: String,
         .await;
     }
     if unusable {
-        return output.map(|_| ()).and(Err(CmdError::new("search_unavailable", "Am Server fehlt grep")));
+        return output.map(|_| ()).and(Err(CmdError::new("search_unavailable", "grep is missing on the server")));
     }
     if content {
         for hit in lines.lines().filter_map(content_hit) {
@@ -804,7 +804,7 @@ mod tests {
         let hit = content_hit("/var/www/app/config.yaml:3:  port: 3000").unwrap();
         assert_eq!((hit.path.as_str(), hit.name.as_str(), hit.dir.as_str(), hit.line, hit.text.as_deref()), ("/var/www/app/config.yaml", "config.yaml", "/var/www/app", Some(3), Some("port: 3000")));
         assert!(content_hit("Binary file matches").is_none());
-        assert!(content_hit("/etc/hosts:keine-zahl:text").is_none());
+        assert!(content_hit("/etc/hosts:not-a-number:text").is_none());
     }
 
     #[test]
@@ -846,7 +846,7 @@ mod tests {
             assert!(local_list(&crumb.path).is_ok(), "{:?}", crumb.path);
         }
         assert_eq!(local_list(&text(&dir.join("a.txt"))).err().map(|e| e.code()), Some("not_a_directory"));
-        assert_eq!(local_list(&text(&dir.join("fehlt"))).err().map(|e| e.code()), Some("no_such_file"));
+        assert_eq!(local_list(&text(&dir.join("missing"))).err().map(|e| e.code()), Some("no_such_file"));
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

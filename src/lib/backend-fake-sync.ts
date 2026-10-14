@@ -189,14 +189,14 @@ export const fakeSync = {
     later((): SyncServerInfo => {
       const fixed = address(server);
       if (/offline|nirgends/.test(fixed)) fail('offline');
-      return { server: fixed, fresh: /neu|frisch|fresh/.test(fixed) };
+      return { server: fixed, fresh: /new|fresh/.test(fixed) };
     }, 500),
   register: (request: SyncRegister) =>
     later(() => {
       if (stored) fail('already_linked');
       const server = address(request.server);
       checkAccount(request.username, request.password);
-      const fresh = /neu|frisch|fresh/.test(server);
+      const fresh = /new|fresh/.test(server);
       if (!/^[A-Za-z0-9]{4}(-[A-Za-z0-9]{4}){2}$/.test(request.code.trim())) fail('code_invalid');
       stored = demo(server, request.username, fresh || request.username === 'alex', request.device.trim() || 'PC');
       phase = 'synced';

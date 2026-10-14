@@ -59,7 +59,7 @@
       terminal.loadAddon(addon);
       ligatures = addon;
     } catch (e) {
-      console.warn('Ligaturen lassen sich nicht einschalten', e);
+      console.warn('Ligatures cannot be switched on', e);
     }
   }
 

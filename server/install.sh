@@ -14,15 +14,15 @@ set -eu
 cd "$(dirname "$0")"
 unit=/etc/systemd/system/glowport-sync.service
 
-[ "$(id -u)" = 0 ] || { echo "Bitte als root ausführen."; exit 1; }
-[ -f glowport-sync ] && [ -f glowport-sync.service ] || { echo "In diesem Ordner fehlen glowport-sync und glowport-sync.service."; exit 1; }
-command -v systemctl >/dev/null 2>&1 || { echo "Dieses System hat kein systemd. Siehe docs/sync-server.md, Weg B."; exit 1; }
+[ "$(id -u)" = 0 ] || { echo "Please run as root."; exit 1; }
+[ -f glowport-sync ] && [ -f glowport-sync.service ] || { echo "glowport-sync and glowport-sync.service are missing in this folder."; exit 1; }
+command -v systemctl >/dev/null 2>&1 || { echo "This system has no systemd. See docs/sync-server.md, option B."; exit 1; }
 
 install -m 755 glowport-sync /usr/local/bin/glowport-sync
 id glowport-sync >/dev/null 2>&1 || useradd --system --home-dir /var/lib/glowport-sync --shell /usr/sbin/nologin glowport-sync
 
 if [ -f "$unit" ]; then
-    echo "Die Dienst-Datei gibt es schon; sie bleibt, wie sie ist."
+    echo "The service file already exists; it stays as it is."
 else
     install -m 644 glowport-sync.service "$unit"
     if [ -n "${PROXY:-}" ]; then
@@ -38,16 +38,16 @@ systemctl restart glowport-sync
 sleep 2
 
 if ! systemctl is-active --quiet glowport-sync; then
-    echo "Der Dienst ist nicht gestartet. Seine letzten Meldungen:"
+    echo "The service did not start. Its latest messages:"
     journalctl -u glowport-sync -n 15 --no-pager -o cat
     if systemctl status glowport-sync --no-pager 2>/dev/null | grep -q NAMESPACE; then
         echo
-        echo "Das liegt an der Abschottung des Dienstes. In einem Container unter Proxmox:"
-        echo "Container → Optionen → Features → „Nesting“ einschalten, Container neu starten, noch einmal versuchen."
+        echo "This is caused by the service's sandboxing. In a container under Proxmox:"
+        echo "Container → Options → Features → switch on “Nesting”, restart the container, try again."
     fi
     exit 1
 fi
 
 # Only this start's output: a setup code from earlier is no longer valid.
-echo "Der Dienst läuft:"
+echo "The service is running:"
 journalctl "_SYSTEMD_INVOCATION_ID=$(systemctl show -p InvocationID --value glowport-sync)" --no-pager -o cat

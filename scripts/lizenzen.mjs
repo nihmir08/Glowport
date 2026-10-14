@@ -47,5 +47,5 @@ affiliated with or endorsed by them.
 `;
 
 writeFileSync('THIRD-PARTY-LICENSES.md', [head, rust, '', '## User interface', '', web].join('\n'));
-console.log(`THIRD-PARTY-LICENSES.md: ${groups.size} Lizenztexte der Oberfläche, Rust aus cargo about`);
-if (!existsSync('LICENSE')) throw new Error('LICENSE fehlt');
+console.log(`THIRD-PARTY-LICENSES.md: ${groups.size} license texts of the interface, Rust from cargo about`);
+if (!existsSync('LICENSE')) throw new Error('LICENSE missing');

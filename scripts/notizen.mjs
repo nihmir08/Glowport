@@ -8,5 +8,5 @@ const start = lines.findIndex((line) => line.trim() === `## ${version}`);
 if (start < 0) throw new Error(`CHANGELOG.md hat keinen Abschnitt „## ${version}“`);
 const end = lines.findIndex((line, i) => i > start && line.startsWith('## '));
 const text = lines.slice(start + 1, end < 0 ? undefined : end).join('\n').trim();
-if (!text) throw new Error(`Der Abschnitt „## ${version}“ in CHANGELOG.md ist leer`);
+if (!text) throw new Error(`The section “## ${version}” in CHANGELOG.md is empty`);
 process.stdout.write(`${text}\n`);

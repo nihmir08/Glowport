@@ -11,7 +11,7 @@ use std::{
 use serde_json::Value;
 
 const FILE: &str = "settings.json";
-const TEMP: &str = "settings.json.neu";
+const TEMP: &str = "settings.json.new";
 const BROKEN: &str = "settings.json.defekt";
 
 /// Reads the settings. `None` if there are none yet or the file was unreadable.
@@ -121,7 +121,7 @@ mod tests {
     /// Reads what is really stored on this PC and only prints the IDs.
     /// `cargo test -p glowport reads_the_languages_of_this_pc -- --ignored --nocapture`
     #[test]
-    #[ignore = "liest Registry und Sprache dieses PCs"]
+    #[ignore = "reads this PC's registry and language"]
     fn reads_the_languages_of_this_pc() {
         let installer = installer_language("Glowport", "Glowport");
         let system = system_language();
@@ -141,7 +141,7 @@ mod tests {
         let value = json!({ "mode": "light", "accent": "#FF2E63", "autoLockMinutes": 15 });
         save(&dir, &value).unwrap();
         assert_eq!(load(&dir).unwrap(), Some(value));
-        assert!(!dir.join(TEMP).exists(), "Nachbardatei muss nach dem Speichern weg sein");
+        assert!(!dir.join(TEMP).exists(), "the neighbouring file must be gone after saving");
         fs::remove_dir_all(&dir).unwrap();
     }
 

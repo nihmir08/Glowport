@@ -22,7 +22,7 @@ const FOLDER: &str = "logs";
 const EXTENSION: &str = "log";
 const HEADER: &str = "# Glowport-Mitschnitt";
 const TITLE: &str = "# Titel: ";
-const TEMP: &str = "umbenennen.neu";
+const TEMP: &str = "rename.tmp";
 /// The interface shows no more text than this at once; for larger files the end.
 const MAX_READ: u64 = 4 * 1024 * 1024;
 /// A single line without an end (e.g. a binary stream) is wrapped here at the latest.
@@ -212,7 +212,7 @@ impl Recorder {
                 let id = if n == 0 { format!("{base}.{EXTENSION}") } else { format!("{base}_{n}.{EXTENSION}") };
                 fs::OpenOptions::new().write(true).create_new(true).open(dir.join(&id)).ok().map(|file| (id, file))
             })
-            .ok_or_else(|| io::Error::new(io::ErrorKind::AlreadyExists, "kein freier Dateiname"))?;
+            .ok_or_else(|| io::Error::new(io::ErrorKind::AlreadyExists, "no free file name"))?;
         let mut file = BufWriter::new(file);
         writeln!(file, "{HEADER}")?;
         writeln!(file, "# Host: {}", one_line(name))?;
@@ -328,7 +328,7 @@ pub fn rename(data_dir: &Path, id: &str, title: &str) -> io::Result<String> {
     let path = path_of(data_dir, id).ok_or(io::ErrorKind::NotFound)?;
     let modified = fs::metadata(&path)?.modified()?;
     let bytes = fs::read(&path)?;
-    let invalid = || io::Error::new(io::ErrorKind::InvalidData, "kein Mitschnitt von Glowport");
+    let invalid = || io::Error::new(io::ErrorKind::InvalidData, "not a Glowport recording");
     let split = bytes.windows(2).position(|pair| pair == b"\n\n").filter(|_| bytes.starts_with(HEADER.as_bytes())).ok_or_else(invalid)?;
     let head = String::from_utf8_lossy(&bytes[..split]);
     let host = head.lines().find_map(|line| line.strip_prefix("# Host: ")).ok_or_else(invalid)?.to_string();
@@ -345,7 +345,7 @@ pub fn rename(data_dir: &Path, id: &str, title: &str) -> io::Result<String> {
     let new_id = (0..100)
         .map(|n| if n == 0 { format!("{base}.{EXTENSION}") } else { format!("{base}_{n}.{EXTENSION}") })
         .find(|candidate| candidate == id || !dir.join(candidate).exists())
-        .ok_or_else(|| io::Error::new(io::ErrorKind::AlreadyExists, "kein freier Dateiname"))?;
+        .ok_or_else(|| io::Error::new(io::ErrorKind::AlreadyExists, "no free file name"))?;
 
     let temp = dir.join(TEMP);
     let mut file = File::create(&temp)?;
@@ -398,7 +398,7 @@ mod tests {
         let shell = b"\x1b]0;deploy@web-01: ~\x07\x1b[1;32mdeploy@web-01\x1b[0m:\x1b[1;34m~\x1b[0m$ ls\r\n\x1b[01;34mapp\x1b[0m  notes.md\r\n";
         assert_eq!(plain(&[shell]), ["deploy@web-01:~$ ls", "app  notes.md"]);
         assert_eq!(plain(&[b"a\x07b\x1b(Bc\x1b=d\x1b[?2004h\r\n"]), ["abcd"]);
-        assert_eq!(plain(&[b"\x1bP1$r0m\x1b\\sichtbar\n"]), ["sichtbar"], "auch Folgen, die mit ESC \\ enden");
+        assert_eq!(plain(&[b"\x1bP1$r0m\x1b\\visible\n"]), ["visible"], "also sequences that end with ESC \\");
     }
 
     #[test]
@@ -412,8 +412,8 @@ mod tests {
     #[test]
     fn redrawn_lines_keep_only_their_last_state() {
         assert_eq!(plain(&[b"10 %\r50 %\r100 %\r\nfertig\r\n"]), ["100 %", "fertig"]);
-        assert_eq!(plain(&[b"lss\x08 \x08 -la\r\n"]), ["ls -la"], "Rueckschritt entfernt das vertippte Zeichen");
-        assert_eq!(plain(&["gr\u{f6}\x08\x08\u{fc}n\n".as_bytes()]), ["g\u{fc}n"], "auch Zeichen aus mehreren Bytes");
+        assert_eq!(plain(&[b"lss\x08 \x08 -la\r\n"]), ["ls -la"], "backspace removes the mistyped character");
+        assert_eq!(plain(&["gr\u{f6}\x08\x08\u{fc}n\n".as_bytes()]), ["g\u{fc}n"], "characters of several bytes too");
     }
 
     #[test]
@@ -426,7 +426,7 @@ mod tests {
     fn recordings_are_written_listed_read_and_deleted() {
         let dir = std::env::temp_dir().join(format!("glowport-rec-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
-        assert!(list(&dir, &[]).is_empty(), "ohne Ordner gibt es keine Mitschnitte");
+        assert!(list(&dir, &[]).is_empty(), "without a folder there are no recordings");
 
         let mut recorder = Recorder::start(&dir, "web/01: prod", "deploy@10.0.10.11").unwrap();
         let id = recorder.id().to_string();
@@ -436,7 +436,7 @@ mod tests {
 
         let running = list(&dir, std::slice::from_ref(&id));
         assert_eq!((running.len(), running[0].ended_at, running[0].name.as_str(), running[0].address.as_str()), (1, None, "web/01: prod", "deploy@10.0.10.11"));
-        assert_eq!(read(&dir, &id).unwrap(), "deploy@web-01:~$ uptime\n 17:42 up 13 days\n", "fertige Zeilen stehen sofort in der Datei");
+        assert_eq!(read(&dir, &id).unwrap(), "deploy@web-01:~$ uptime\n 17:42 up 13 days\n", "finished lines are in the file right away");
 
         drop(recorder);
         let done = list(&dir, &[]);
@@ -444,7 +444,7 @@ mod tests {
         assert_eq!(read(&dir, &id).unwrap(), "deploy@web-01:~$ uptime\n 17:42 up 13 days\ndeploy@web-01:~$\n");
 
         // Foreign files in the folder and paths outside do not count.
-        fs::write(folder(&dir).join("notiz.log"), "kein Mitschnitt").unwrap();
+        fs::write(folder(&dir).join("notiz.log"), "not a recording").unwrap();
         assert_eq!(list(&dir, &[]).len(), 1);
         assert!(read(&dir, "../vault.db").is_err() && read(&dir, "..\\vault.db").is_err() && delete(&dir, "C:\\Windows\\win.ini").is_err());
         assert_eq!(reveal_target(&dir, Some(&id)).unwrap(), folder(&dir).join(&id));
@@ -452,18 +452,18 @@ mod tests {
 
         // Renaming: the name is in the list and in the file name, content and times stay.
         let before = list(&dir, &[]).remove(0);
-        let renamed = rename(&dir, &id, "  Deploy vor dem Release: Größe prüfen  ").unwrap();
-        assert!(renamed.starts_with(&id[..19]) && renamed.ends_with("_Deploy_vor_dem_Release__Größe_prüfen.log"), "{renamed}");
+        let renamed = rename(&dir, &id, "  Deploy before the release: check Größe").unwrap();
+        assert!(renamed.starts_with(&id[..19]) && renamed.ends_with("_Deploy_before_the_release__check_Größe.log"), "{renamed}");
         assert!(!folder(&dir).join(&id).exists() && !folder(&dir).join(TEMP).exists());
         let after = list(&dir, &[]).remove(0);
-        assert_eq!((after.id.as_str(), after.title.as_deref(), after.name.as_str()), (renamed.as_str(), Some("Deploy vor dem Release: Größe prüfen"), "web/01: prod"));
-        assert_eq!((after.started_at, after.ended_at), (before.started_at, before.ended_at), "Beginn und Ende bleiben");
+        assert_eq!((after.id.as_str(), after.title.as_deref(), after.name.as_str()), (renamed.as_str(), Some("Deploy before the release: check Größe"), "web/01: prod"));
+        assert_eq!((after.started_at, after.ended_at), (before.started_at, before.ended_at), "start and end stay");
         assert_eq!(read(&dir, &renamed).unwrap(), "deploy@web-01:~$ uptime\n 17:42 up 13 days\ndeploy@web-01:~$\n");
         // A second time with the same name changes nothing; an empty name gives the file the host's name again.
-        assert_eq!(rename(&dir, &renamed, "Deploy vor dem Release: Größe prüfen").unwrap(), renamed);
+        assert_eq!(rename(&dir, &renamed, "Deploy before the release: check Größe").unwrap(), renamed);
         let plain = rename(&dir, &renamed, " ").unwrap();
         assert_eq!((plain.as_str(), list(&dir, &[])[0].title.as_deref()), (id.as_str(), None));
-        assert!(rename(&dir, "../vault.db", "x").is_err() && rename(&dir, "notiz.log", "x").is_err(), "nur Mitschnitte lassen sich umbenennen");
+        assert!(rename(&dir, "../vault.db", "x").is_err() && rename(&dir, "notiz.log", "x").is_err(), "only recordings can be renamed");
 
         delete(&dir, &id).unwrap();
         assert!(list(&dir, &[]).is_empty() && delete(&dir, &id).is_err());

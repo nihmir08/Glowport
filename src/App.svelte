@@ -136,7 +136,7 @@
     if (inRange(s.updateChecked, 0, Number.MAX_SAFE_INTEGER)) settings.updateChecked = s.updateChecked;
     if (typeof s.lastVersion === 'string' && s.lastVersion.length <= 40) settings.lastVersion = s.lastVersion;
     // Settings of a version that did not remember its version yet: that is an update too.
-    else if (typeof s.updateCheck === 'boolean') settings.lastVersion = 'älter';
+    else if (typeof s.updateCheck === 'boolean') settings.lastVersion = 'older';
   }
 
   // The core learns about input at most every 15 seconds; the auto-lock does not need to know more precisely.
@@ -220,7 +220,7 @@
   async function confirmQuit() {
     if (closingNever && settings.closePrompt) {
       settings.closePrompt = false;
-      await saveSettings($state.snapshot(settings)).catch((e) => console.error('Einstellungen nicht speicherbar', e));
+      await saveSettings($state.snapshot(settings)).catch((e) => console.error('Settings could not be saved', e));
     }
     quit();
   }
@@ -275,7 +275,7 @@
   const syncVault = () =>
     void vaultStatus()
       .then(applyStatus)
-      .catch((e) => console.error('Tresor-Zustand nicht lesbar', e));
+      .catch((e) => console.error('Vault state not readable', e));
 
   function restore(open: boolean) {
     const saved = crashed ?? [];
@@ -291,7 +291,7 @@
     systemQuery.addEventListener('change', onSystem);
     const settingsLoaded = loadSettings()
       .then((s) => s && merge(s))
-      .catch((e) => console.error('Einstellungen nicht lesbar', e))
+      .catch((e) => console.error('Settings not readable', e))
       .finally(() => {
         ui.ready = true;
         // Only the main window looks for updates, and only once the settings say whether it should.
@@ -299,7 +299,7 @@
       });
     const vaultLoaded = vaultStatus()
       .then(applyStatus)
-      .catch((e) => console.error('Tresor-Zustand nicht lesbar', e))
+      .catch((e) => console.error('Vault state not readable', e))
       // The tab of a window of its own names hosts from the vault; it is opened as soon as the vault's state is there.
       .then(() => (detached ? takeDetachedTab() : null))
       .then((tab) => {
@@ -307,7 +307,7 @@
         if (tab) openSaved(tab);
         tracking = true;
       })
-      .catch((e) => console.error('Tab nicht übernommen', e));
+      .catch((e) => console.error('Tab not taken over', e));
     if (!detached) {
       restoreLoad()
         .then((saved) => (saved?.length ? (crashed = saved) : (tracking = true)))
@@ -389,7 +389,7 @@
     const snapshot = $state.snapshot(settings);
     if (!ui.ready) return;
     // Wait briefly: the color picker fires many changes while dragging.
-    const timer = setTimeout(() => saveSettings(snapshot).catch((e) => console.error('Einstellungen nicht speicherbar', e)), 250);
+    const timer = setTimeout(() => saveSettings(snapshot).catch((e) => console.error('Settings could not be saved', e)), 250);
     return () => clearTimeout(timer);
   });
 
@@ -422,7 +422,7 @@
   $effect(() => {
     const open = tabs.map(savedTab);
     if (!tracking) return;
-    const timer = setTimeout(() => restoreSave(open).catch((e) => console.error('Offene Tabs nicht speicherbar', e)), 400);
+    const timer = setTimeout(() => restoreSave(open).catch((e) => console.error('Open tabs could not be saved', e)), 400);
     return () => clearTimeout(timer);
   });
 

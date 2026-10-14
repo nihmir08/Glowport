@@ -29,7 +29,7 @@
   onMount(() => {
     agentList()
       .then((found) => (agents = found))
-      .catch((e) => console.error('Agenten nicht lesbar', e));
+      .catch((e) => console.error('Agents not readable', e));
   });
 
   // If the entry shown disappears (deleted, vault reloaded), the panel closes.

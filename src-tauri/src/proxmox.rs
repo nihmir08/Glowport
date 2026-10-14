@@ -359,7 +359,7 @@ pub struct GuestRef {
 /// Start, shut down, hard stop, restart. Returns when Proxmox has carried out the task.
 #[tauri::command]
 pub async fn proxmox_action(app: AppHandle, id: String, guest: GuestRef, action: String) -> CmdResult<()> {
-    let invalid = || CmdError::new("proxmox_failed", "Ungültige Angabe");
+    let invalid = || CmdError::new("proxmox_failed", "Invalid value");
     let kind = match guest.kind.as_str() {
         "qemu" => Kind::Qemu,
         "lxc" => Kind::Lxc,

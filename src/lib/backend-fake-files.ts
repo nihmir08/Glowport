@@ -103,7 +103,7 @@ const SITE = `server {
 }
 `;
 
-const CONFIG = `# Einstellungen der Anwendung
+const CONFIG = `# Application settings
 server:
   port: 3000
   host: 127.0.0.1
@@ -131,15 +131,15 @@ set -euo pipefail
 TARGET="/srv/backup/$(date +%F)"
 mkdir -p "$TARGET"
 
-echo "Sichere Datenbank ..."
+echo "Backing up the database ..."
 pg_dump app_production | gzip > "$TARGET/db.sql.gz"
 
-echo "Sichere Dateien ..."
+echo "Backing up the files ..."
 tar -czf "$TARGET/www.tar.gz" -C /var/www app
 
-# Alles löschen, was älter als 14 Tage ist
+# Delete everything older than 14 days
 find /srv/backup -maxdepth 1 -type d -mtime +14 -exec rm -rf {} +
-echo "Fertig: $TARGET"
+echo "Done: $TARGET"
 `;
 
 const APPLOG = Array.from({ length: 60 }, (_, i) => {
@@ -161,17 +161,17 @@ const config = await loadConfig('config.yaml');
 const server = createServer(config);
 
 server.listen(config.server.port, config.server.host, () => {
-  console.log(\`Läuft auf \${config.server.host}:\${config.server.port}\`);
+  console.log(\`Running on \${config.server.host}:\${config.server.port}\`);
 });
 `;
 
 const README = `# app
 
-Kleine Beispielanwendung der Vorschau.
+Small sample application of the preview.
 
-- \`config.yaml\` – Einstellungen
-- \`public/\` – ausgelieferte Dateien
-- \`storage/logs\` – Protokolle
+- \`config.yaml\` – settings
+- \`public/\` – served files
+- \`storage/logs\` – logs
 `;
 
 const LOGO = `data:image/svg+xml;utf8,${encodeURIComponent(
@@ -205,7 +205,7 @@ function appTree(): Node[] {
     dir('public', [file('index.html', 2 * KB + 310), file('style.css', 14 * KB), file('logo.png', 48 * KB), file('favicon.ico', 15 * KB)]),
     dir('releases', [dir('2026-09-18', []), dir('2026-09-29', []), dir('2026-10-04', [])]),
     dir('storage', [dir('logs', [file('app.log', APPLOG), file('app.log.1', 3 * MB + 420 * KB), file('worker.log', 812 * KB)]), dir('uploads', [])]),
-    file('.env', 'APP_ENV=production\nAPP_KEY=nur-ein-beispiel\nDB_PASSWORD=nur-ein-beispiel\n', { mode: 0o600 }),
+    file('.env', 'APP_ENV=production\nAPP_KEY=just-an-example\nDB_PASSWORD=just-an-example\n', { mode: 0o600 }),
     file('app.js', APPJS, { modified: now - 3 * HOUR }),
     file('config.yaml', CONFIG, { modified: now - 6 * DAY }),
     file('package.json', '{\n  "name": "app",\n  "version": "2.4.1",\n  "type": "module",\n  "scripts": { "start": "node app.js" }\n}\n'),
@@ -267,13 +267,13 @@ function localTree(): Node {
   config.size = config.text.length;
   config.modified = now - 40 * MIN;
   mine.find((n) => n.name === 'app.js')!.modified = now - 9 * DAY;
-  (mine.find((n) => n.name === 'public')!.children ??= []).push(file('neu.css', 3 * KB + 40, { modified: now - 25 * MIN }));
+  (mine.find((n) => n.name === 'public')!.children ??= []).push(file('new.css', 3 * KB + 40, { modified: now - 25 * MIN }));
   const pc = dir('', [
     dir('C:', [
       dir('Users', [
         dir('ich', [
           dir('Desktop', [file('Rechnung-0931.pdf', 184 * KB), file('server-liste.xlsx', 22 * KB)]),
-          dir('Documents', [dir('Verträge', []), file('notizen.txt', 'Einkaufen\nServer aufräumen\n')]),
+          dir('Documents', [dir('Contracts', []), file('notes.txt', 'Groceries\nClean up the server\n')]),
           dir('Downloads', [file('debian-13.1-amd64-netinst.iso', 702 * MB), file('glowport-logo.png', 96 * KB), file('putty-export.reg', 9 * KB), file('ubuntu-24.04-live-server-amd64.iso', 2610 * MB)]),
           dir('Projekte', [dir('app', mine), dir('dotfiles', [file('.vimrc', 1220), file('.tmux.conf', 2204)]), dir('website', [dir('bilder', Array.from({ length: 48 }, (_, i) => file(`foto-${String(i + 1).padStart(3, '0')}.jpg`, 180 * KB + ((i * 7919) % (240 * KB))))), file('index.html', 5 * KB)])]),
         ]),
@@ -368,7 +368,7 @@ const TEXTLIKE = /\.(txt|md|log|conf|cfg|ini|ya?ml|json|js|ts|css|html?|sh|env|p
 const IMAGE = /\.(png|jpe?g|gif|webp|svg|ico|bmp)$/i;
 
 function sample(node: Node): string {
-  return node.text ?? `# ${node.name}\n# Beispielinhalt der Vorschau (${node.size} Bytes).\n`;
+  return node.text ?? `# ${node.name}\n# Sample content of the preview (${node.size} bytes).\n`;
 }
 
 // ---------- Transfers ----------

@@ -28,7 +28,7 @@
       "icons/icon.ico"
     ],
     "publisher": "Glowport",
-    "shortDescription": "SSH-Client mit Tresor, Dateien und Port-Regeln",
+    "shortDescription": "SSH client with vault, files and port rules",
     "category": "DeveloperTool",
     "windows": {
       "nsis": {

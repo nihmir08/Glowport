@@ -282,7 +282,7 @@ pub fn poke(app: &AppHandle) {
 
 fn engine(app: &AppHandle) -> CmdResult<Arc<Engine<Gate>>> {
     ensure(app);
-    lock(app).engine.clone().ok_or_else(|| CmdError::new("not_linked", "Der Abgleich ist nicht eingerichtet"))
+    lock(app).engine.clone().ok_or_else(|| CmdError::new("not_linked", "Syncing is not set up"))
 }
 
 /// A round right away, so the interface sees the result of a change immediately.
@@ -443,7 +443,7 @@ pub async fn vault_wipe(app: AppHandle, force: bool) -> CmdResult<()> {
             Ok(Ok(())) => {}
             _ if force => {}
             Ok(Err(error)) => return Err(error.into()),
-            Err(_) => return Err(SyncError::Offline("keine Antwort".into()).into()),
+            Err(_) => return Err(SyncError::Offline("no answer".into()).into()),
         }
     }
     *lock(&app) = Inner::default();
@@ -565,7 +565,7 @@ pub async fn shared_lookup(app: AppHandle, username: String) -> CmdResult<Candid
 pub async fn shared_invite(app: AppHandle, vault: String, account: String, role: Role) -> CmdResult<()> {
     let engine = engine(&app)?;
     // Exactly the account is invited whose keys' safety code was just shown.
-    let candidate = lock(&app).candidates.get(&account).cloned().ok_or_else(|| CmdError::new("not_found", "Konto nicht gesucht"))?;
+    let candidate = lock(&app).candidates.get(&account).cloned().ok_or_else(|| CmdError::new("not_found", "Account not looked up"))?;
     engine.invite(&id(&vault)?, &candidate, role).await?;
     round(&app, &engine).await;
     Ok(())

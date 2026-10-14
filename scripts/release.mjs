@@ -10,17 +10,17 @@ const next = process.argv[2] ?? '';
 if (!/^\d+\.\d+\.\d+$/.test(next)) throw new Error('Aufruf: node scripts/release.mjs <Version>, etwa 1.0.1');
 const current = JSON.parse(readFileSync('package.json', 'utf8')).version;
 const order = (v) => v.split('.').map(Number).reduce((sum, part) => sum * 100_000 + part, 0);
-if (order(next) <= order(current)) throw new Error(`${next} ist nicht neuer als ${current}`);
+if (order(next) <= order(current)) throw new Error(`${next} is not newer than ${current}`);
 
 const dirty = run('git', ['status', '--porcelain']).split('\n').filter(Boolean).filter((line) => !line.endsWith('CHANGELOG.md'));
 if (dirty.length) throw new Error(`Erst committen:\n${dirty.join('\n')}`);
-if (run('git', ['branch', '--show-current']).trim() !== 'main') throw new Error('Veröffentlicht wird nur vom Zweig main');
+if (run('git', ['branch', '--show-current']).trim() !== 'main') throw new Error('Releases are only made from the main branch');
 run('node', ['scripts/notizen.mjs', next]);
 
 const edit = (file, fn) => {
   const before = readFileSync(file, 'utf8');
   const after = fn(before);
-  if (after === before) throw new Error(`${file}: Version ${current} nicht gefunden`);
+  if (after === before) throw new Error(`${file}: version ${current} not found`);
   writeFileSync(file, after);
 };
 const quoted = (s) => s.replaceAll('.', '\\.');
@@ -41,4 +41,4 @@ run('git', ['add', '-A']);
 run('git', ['commit', '-m', `Glowport ${next}`], { stdio: 'inherit' });
 run('git', ['tag', `v${next}`]);
 run('git', ['push', 'origin', 'main', `v${next}`], { stdio: 'inherit' });
-console.log(`\nv${next} ist gepusht. GitHub baut jetzt (gut 15 Minuten); danach sehen installierte Fassungen das Update binnen einer Stunde.`);
+console.log(`\nv${next} is pushed. GitHub is building now (a good 15 minutes); after that, installed versions see the update within an hour.`);

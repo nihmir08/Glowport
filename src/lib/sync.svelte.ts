@@ -19,7 +19,7 @@ export function applySync(next: SyncState) {
 export function initSync(): () => void {
   void syncState()
     .then(applySync)
-    .catch((e) => console.error('Stand des Abgleichs nicht lesbar', e));
+    .catch((e) => console.error('Sync state not readable', e));
   return onSyncState(applySync);
 }
 

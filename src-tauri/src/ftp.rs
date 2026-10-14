@@ -121,7 +121,7 @@ fn security(security: FtpSecurity) -> Security {
 /// then sets up the connection with prompts.
 pub(crate) async fn silent(app: &AppHandle, who: &Who) -> CmdResult<Store> {
     let info = who.info(app)?;
-    let ask = || CmdError::new("files_auth", "Die Verbindung braucht eine Rückfrage");
+    let ask = || CmdError::new("files_auth", "The connection needs a prompt");
     if (info.security == FtpSecurity::None && !info.plain_ok) || (info.password.is_none() && !info.user.is_empty()) {
         return Err(ask());
     }

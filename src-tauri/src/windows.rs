@@ -31,7 +31,7 @@ use crate::{
 pub const MAIN: &str = "main";
 const TAB_PREFIX: &str = "tab-";
 const RESTORE_FILE: &str = "open-tabs.json";
-const RESTORE_TEMP: &str = "open-tabs.json.neu";
+const RESTORE_TEMP: &str = "open-tabs.json.new";
 /// Background of the window until the interface has loaded: the same color as its dark base.
 const BACKDROP: Color = Color(7, 7, 12, 255);
 /// This long the interface may take until it reports ready. After that the window shows itself:
@@ -320,7 +320,7 @@ pub fn pick_text_file(app: AppHandle, accept: String) -> CmdResult<Option<TextFi
     }
     let Some(path) = dialog.blocking_pick_file().and_then(|chosen| chosen.into_path().ok()) else { return Ok(None) };
     if fs::metadata(&path).map_err(io_error)?.len() > MAX_TEXT_FILE {
-        return Err(CmdError::new("file_too_large", "Die Datei ist zu groß"));
+        return Err(CmdError::new("file_too_large", "The file is too large"));
     }
     let text = String::from_utf8_lossy(&fs::read(&path).map_err(io_error)?).into_owned();
     Ok(Some(TextFile { name: path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(), text }))
@@ -337,9 +337,9 @@ fn is_background(name: &str) -> bool {
 pub fn pick_background(app: AppHandle) -> CmdResult<Option<String>> {
     let extensions: Vec<&str> = IMAGE_TYPES.iter().map(|(extension, _)| *extension).collect();
     let Some(path) = app.dialog().file().add_filter("Bild", &extensions).blocking_pick_file().and_then(|chosen| chosen.into_path().ok()) else { return Ok(None) };
-    let extension = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).filter(|e| extensions.contains(&e.as_str())).ok_or_else(|| CmdError::new("image_unsupported", "Kein unterstütztes Bildformat"))?;
+    let extension = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).filter(|e| extensions.contains(&e.as_str())).ok_or_else(|| CmdError::new("image_unsupported", "Not a supported image format"))?;
     if fs::metadata(&path).map_err(io_error)?.len() > MAX_IMAGE {
-        return Err(CmdError::new("file_too_large", "Das Bild ist zu groß"));
+        return Err(CmdError::new("file_too_large", "The image is too large"));
     }
     let dir = data_dir(&app)?;
     fs::create_dir_all(&dir).map_err(io_error)?;
@@ -372,23 +372,23 @@ mod tests {
     fn open_tabs_are_remembered_per_window_and_forgotten_when_none_are_left() {
         let dir = std::env::temp_dir().join(format!("glowport-restore-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
-        assert!(read_restore(&dir).is_empty(), "ohne Datei gibt es nichts wiederherzustellen");
+        assert!(read_restore(&dir).is_empty(), "without a file there is nothing to restore");
 
         let mut open = BTreeMap::new();
         open.insert("tab-2".to_string(), vec![json!({ "name": "eigenes Fenster" })]);
         open.insert(MAIN.to_string(), vec![json!({ "name": "erster" }), json!({ "name": "zweiter" })]);
         write_restore(&dir, &open).unwrap();
         let names: Vec<String> = read_restore(&dir).iter().map(|tab| tab["name"].as_str().unwrap().to_string()).collect();
-        assert_eq!(names, ["erster", "zweiter", "eigenes Fenster"], "das Hauptfenster zuerst");
+        assert_eq!(names, ["erster", "zweiter", "eigenes Fenster"], "the main window first");
         assert!(!dir.join(RESTORE_TEMP).exists());
 
         open.insert(MAIN.to_string(), Vec::new());
         open.remove("tab-2");
         write_restore(&dir, &open).unwrap();
-        assert!(!dir.join(RESTORE_FILE).exists(), "ohne offene Tabs verschwindet die Datei");
+        assert!(!dir.join(RESTORE_FILE).exists(), "without open tabs the file disappears");
         write_restore(&dir, &open).unwrap();
 
-        fs::write(dir.join(RESTORE_FILE), "kein json").unwrap();
+        fs::write(dir.join(RESTORE_FILE), "not json").unwrap();
         assert!(read_restore(&dir).is_empty());
         fs::remove_dir_all(&dir).unwrap();
     }

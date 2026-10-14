@@ -245,11 +245,11 @@ export const overallSpeed = () => transfers.list.reduce((n, x) => n + (x.state =
 export function initFiles(): () => void {
   transferList()
     .then((list) => (transfers.list = list))
-    .catch((e) => console.error('Transfers nicht lesbar', e))
+    .catch((e) => console.error('Transfers not readable', e))
     .finally(() => (transfers.loaded = true));
   watchList()
     .then((list) => (transfers.watched = list))
-    .catch((e) => console.error('Geöffnete Dateien nicht lesbar', e));
+    .catch((e) => console.error('Open files not readable', e));
   const stops = [
     onTransfers((list) => {
       const finished = list.filter((x) => x.state === 'done').length > transfers.list.filter((x) => x.state === 'done').length;

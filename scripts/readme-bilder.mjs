@@ -26,7 +26,7 @@ const tr = (text) => {
 };
 const s = (text) => JSON.stringify(tr(text));
 
-if (!EDGE) throw new Error('Microsoft Edge nicht gefunden');
+if (!EDGE) throw new Error('Microsoft Edge not found');
 rmSync(profile, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
@@ -86,7 +86,7 @@ async function connect() {
     } catch {}
     await sleep(250);
   }
-  throw new Error('Edge nicht erreichbar. Läuft die Vorschau auf Port 1420?');
+  throw new Error('Edge not reachable. Is the preview running on port 1420?');
 }
 
 // See scripts/mockups.mjs: scaling by the browser itself so xterm.js draws sharply; `--guest` without a Microsoft account.
@@ -98,7 +98,7 @@ try {
   const settled = async (selector) => {
     const end = Date.now() + 30_000;
     for (let calm = 0; calm < 3; ) {
-      if (Date.now() > end) throw new Error(`Seite zeigt ${selector} nicht`);
+      if (Date.now() > end) throw new Error(`Page does not show ${selector}`);
       await sleep(500);
       const r = await page.send('Runtime.evaluate', { expression: `document.readyState === 'complete' && !!document.querySelector(${JSON.stringify(selector)})`, returnByValue: true }).catch(() => null);
       calm = r?.result?.value === true ? calm + 1 : 0;

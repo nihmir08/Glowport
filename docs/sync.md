@@ -72,7 +72,7 @@ device            master_key ─HKDF "glowport/kek/v1"→ kek → unwrap account
 | --- | --- |
 | Vault exists, no account yet | “Set up sync” as above. The vault becomes the account's personal vault. |
 | No vault yet (new PC) | At first start, next to “Create vault” and “Restore backup”, there is a third way, **“Sign in with an account”**: address, user name, master password. |
-| Vault exists, and so does the account (two devices that grew separately) | “I already have an account”. Beforehand Glowport writes a backup into the data folder (`glowport-vor-konto-<date>.gpvault`, with the previous master password). Then the choice: **move** the local records **into the account's personal vault** (re-encrypted, references between them are kept; duplicates are not detected) or **discard** them. From then on the account's master password applies, and starting without the master password is switched off. |
+| Vault exists, and so does the account (two devices that grew separately) | “I already have an account”. Beforehand Glowport writes a backup into the data folder (`glowport-before-account-<date>.gpvault`, with the previous master password). Then the choice: **move** the local records **into the account's personal vault** (re-encrypted, references between them are kept; duplicates are not detected) or **discard** them. From then on the account's master password applies, and starting without the master password is switched off. |
 
 ### Changing the master password
 

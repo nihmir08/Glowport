@@ -154,7 +154,7 @@ export async function createEditor(parent: HTMLElement, options: EditorOptions):
   if (found)
     void found[1]()
       .then((extension) => editor.dispatch({ effects: syntax.reconfigure(extension) }))
-      .catch((e) => console.error('Sprache nicht geladen', e));
+      .catch((e) => console.error('Language not loaded', e));
 
   return {
     text: () => editor.state.doc.toString(),

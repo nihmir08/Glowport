@@ -8,7 +8,7 @@ import { join, resolve } from 'node:path';
 const version = JSON.parse(readFileSync('package.json', 'utf8')).version;
 // Without an argument the normal version; another executable only for trying out the packing.
 const exe = resolve(process.argv[2] ?? 'target/release/glowport.exe');
-if (!existsSync(exe)) throw new Error(`${exe} fehlt. Vorher \`npm run build:app\` (nicht \`build:dev\`: Die portable Fassung ist die normale).`);
+if (!existsSync(exe)) throw new Error(`${exe} missing. Run \`npm run build:app\` first (not \`build:dev\`: the portable version is the normal one).`);
 
 const out = resolve('target/release/bundle/portable');
 const stage = join(out, 'Glowport');

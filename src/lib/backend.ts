@@ -398,7 +398,7 @@ export const exportData = (request: ExportRequest, fileName: string): Promise<st
 
 const FAKE_UPDATE: UpdateInfo = {
   version: '1.1.0',
-  notes: 'Neu: lokales Terminal (PowerShell, WSL, Git Bash) als Tab.\nSchneller: große Ordner in der Dateileiste.\nBehoben: Die Suche im Terminal behält ihre Eingabe beim Wechsel des Tabs.',
+  notes: 'New: local terminal (PowerShell, WSL, Git Bash) as a tab.\nFaster: large folders in the file bar.\nFixed: the terminal search keeps its input when switching tabs.',
   date: Date.UTC(2026, 10, 20),
 };
 
