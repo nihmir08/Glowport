@@ -1,6 +1,6 @@
 [package]
 name = "glowport-extras"
-description = "Terminals von Glowport jenseits von SSH: Shells dieses Rechners, Telnet, serielle Leitung. Kennt weder Tresor noch Oberfläche."
+description = "Glowport's terminals beyond SSH: shells on this computer, Telnet, serial line. Knows neither vault nor interface."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

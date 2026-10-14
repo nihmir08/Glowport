@@ -29,7 +29,7 @@ impl Driver {
             if done(self) {
                 return None;
             }
-            let event = timeout(deadline.saturating_duration_since(tokio::time::Instant::now()), self.session.events.recv()).await.expect("nichts geschah").expect("Sitzung verschwand ohne Ende");
+            let event = timeout(deadline.saturating_duration_since(tokio::time::Instant::now()), self.session.events.recv()).await.expect("nothing happened").expect("session disappeared without an end");
             match event {
                 Event::Phase(phase) => self.phases.push(phase),
                 Event::HostKey { reply, .. } => drop(reply.send(true)),
@@ -44,7 +44,7 @@ impl Driver {
     }
 
     fn send(&self, command: Command) {
-        self.session.commands.send(command).expect("Sitzung nimmt keine Befehle mehr an");
+        self.session.commands.send(command).expect("session no longer takes commands");
     }
 
     fn typed(&self, line: &str) {
@@ -78,14 +78,14 @@ impl Drop for Home {
 fn bridge() -> Option<Bridge> {
     let found = Bridge::find(DISTRO);
     if found.is_none() {
-        eprintln!("übersprungen: kein mosh-server im WSL „{DISTRO}“");
+        eprintln!("skipped: no mosh-server in WSL “{DISTRO}”");
     }
     found
 }
 
 #[tokio::test]
 async fn without_mosh_server_the_session_falls_back_to_ssh() {
-    let home = Home::new("ohne");
+    let home = Home::new("without");
     let running = server::start(Options { home: Some(home.0.clone()), ..with_password() }, server::key(1)).await.unwrap();
     let mut driver = Driver::new(connect(running.address, Mosh::default()));
     assert_eq!(driver.until(Duration::from_secs(30), |d| d.output.ends_with(PROMPT)).await, None);
@@ -125,14 +125,14 @@ async fn over_mosh_the_terminal_survives_a_dropout() {
     driver.send(Command::Open(reply));
     let opened = tokio::spawn(answer);
     assert_eq!(driver.until(Duration::from_secs(5), |_| opened.is_finished()).await, None);
-    assert!(opened.await.unwrap().unwrap().is_some(), "kein Kanal neben Mosh");
+    assert!(opened.await.unwrap().unwrap().is_some(), "no channel next to Mosh");
 
     // Dropout: nine seconds without a packet. Typed text is not lost.
     bridge.paused.store(true, Ordering::Relaxed);
-    driver.typed("echo nach-$((1+1))");
+    driver.typed("echo after-$((1+1))");
     assert_eq!(driver.until(Duration::from_secs(15), |d| d.mosh.iter().any(|e| matches!(e, MoshEvent::Silent(Some(n)) if *n >= 7))).await, None, "{:?}", driver.mosh);
     bridge.paused.store(false, Ordering::Relaxed);
-    assert_eq!(driver.until(Duration::from_secs(15), |d| d.mosh.last() == Some(&MoshEvent::Silent(None)) && d.output.contains("nach-2")).await, None, "{:?}", driver.mosh);
+    assert_eq!(driver.until(Duration::from_secs(15), |d| d.mosh.last() == Some(&MoshEvent::Silent(None)) && d.output.contains("after-2")).await, None, "{:?}", driver.mosh);
 
     driver.send(Command::Close);
     assert_eq!(driver.until(Duration::from_secs(15), |_| false).await, Some(End::User));

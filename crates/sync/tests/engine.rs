@@ -141,7 +141,7 @@ fn password(name: &str) -> String {
 impl Device {
     fn wrap(vault: Vault, file: Temp) -> Self {
         let door = Arc::new(Mutex::new(vault));
-        let engine = Arc::new(Engine::open(door.clone()).unwrap().expect("mit dem Server verbunden"));
+        let engine = Arc::new(Engine::open(door.clone()).unwrap().expect("linked to the server"));
         Self { door, engine, _file: file }
     }
 
@@ -149,7 +149,7 @@ impl Device {
     async fn register(server: &Server, name: &str, code: &str) -> Self {
         let file = Temp::new(name);
         let door = Arc::new(Mutex::new(Vault::create(&file.0, &password(name), FAST).unwrap()));
-        let engine = Arc::new(register(&door, &server.address, code, name, &password(name), &format!("PC von {name}")).await.unwrap());
+        let engine = Arc::new(register(&door, &server.address, code, name, &password(name), &format!("PC of {name}")).await.unwrap());
         Self { door, engine, _file: file }
     }
 
@@ -216,7 +216,7 @@ async fn eventually(what: &str, check: impl Fn() -> bool) {
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
-    panic!("nicht eingetreten: {what}");
+    panic!("did not happen: {what}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -224,7 +224,7 @@ async fn a_vault_becomes_an_account_and_a_second_device_follows() {
     let server = Server::new().await;
     let (address, info) = probe(&format!("{}/", server.address)).await.unwrap();
     assert_eq!((address.as_str(), info.fresh), (server.address.as_str(), true));
-    assert!(matches!(probe("http://127.0.0.1:1").await, Err(SyncError::Offline(_))), "dort hört niemand");
+    assert!(matches!(probe("http://127.0.0.1:1").await, Err(SyncError::Offline(_))), "nobody listens there");
 
     // A wrong code creates no account and leaves the vault unconnected.
     let file = Temp::new("anna");
@@ -236,7 +236,7 @@ async fn a_vault_becomes_an_account_and_a_second_device_follows() {
     assert!(Engine::open(door.clone()).unwrap().is_none());
 
     let engine = register(&door, &server.address, server.setup(), "anna", &password("anna"), "PC").await.unwrap();
-    assert!(engine.link().admin, "das erste Konto verwaltet den Server");
+    assert!(engine.link().admin, "the first account administers the server");
     refused(register(&door, &server.address, server.setup(), "anna", &password("anna"), "PC").await.map(drop), "already_linked");
     let one = Device { door, engine: Arc::new(engine), _file: file };
     let personal = one.personal();
@@ -248,13 +248,13 @@ async fn a_vault_becomes_an_account_and_a_second_device_follows() {
     let missing = Temp::new("anna-falsch");
     refused(login_new(&missing.0, &server.address, "anna", "falsch", "Laptop", FAST).await.map(drop), "unauthorized");
     assert!(!missing.0.exists());
-    assert!(matches!(login_new(&missing.0, &server.address, "anna", &password("anna"), "Laptop", MIN_KDF).await, Err(SyncError::Protocol(_))), "ein Server darf keine winzige Schlüsselableitung vorgeben");
+    assert!(matches!(login_new(&missing.0, &server.address, "anna", &password("anna"), "Laptop", MIN_KDF).await, Err(SyncError::Protocol(_))), "a server must not dictate a tiny key derivation");
     assert!(!missing.0.exists());
     let two = Device::login(&server, "anna", "Laptop").await;
     assert!(two.texts(&personal).is_empty());
     assert!(two.engine.sync().await.unwrap().changed);
     assert_eq!(two.texts(&personal), one.texts(&personal));
-    assert!(!two.engine.sync().await.unwrap().changed, "eine Runde ohne Neues ändert nichts");
+    assert!(!two.engine.sync().await.unwrap().changed, "a round without anything new changes nothing");
 
     // Different fields of the same entry: both stay, nobody gets a notice.
     one.put(Some(host), r#"{"name":"web-01","own":{"port":22}}"#);
@@ -299,23 +299,23 @@ async fn changes_arrive_on_their_own() {
     eventually("erste Runde", || saw(|s| matches!(s, Status::Synced(_)))).await;
 
     // A change here, a nudge: the other device has it without anyone doing anything there.
-    let id = one.put(None, "kommt von selbst");
+    let id = one.put(None, "comes on its own");
     first.kick();
-    eventually("Änderung auf dem zweiten Gerät", || two.texts(&personal) == ["kommt von selbst"]).await;
+    eventually("change on the second device", || two.texts(&personal) == ["comes on its own"]).await;
     assert!(saw(|s| matches!(s, Status::Synced(report) if report.changed)));
     two.vault(|v| v.delete(&id).unwrap());
     second.kick();
-    eventually("Löschen auf dem ersten Gerät", || one.texts(&personal).is_empty()).await;
+    eventually("deletion on the first device", || one.texts(&personal).is_empty()).await;
 
     // While locked nothing is synced; after unlocking it continues.
     two.vault(|v| v.lock());
     seen.lock().unwrap().clear();
-    one.put(None, "während der Sperre");
+    one.put(None, "while locked");
     first.kick();
-    eventually("Meldung der Sperre", || saw(|s| *s == Status::Locked)).await;
+    eventually("locked status reported", || saw(|s| *s == Status::Locked)).await;
     two.vault(|v| v.unlock(&password("anna")).unwrap());
     second.kick();
-    eventually("Nachholen nach dem Entsperren", || two.texts(&personal) == ["während der Sperre"]).await;
+    eventually("catching up after unlocking", || two.texts(&personal) == ["while locked"]).await;
 
     // If the server fails, the device reports “offline” and keeps what is waiting.
     drop(first);
@@ -323,7 +323,7 @@ async fn changes_arrive_on_their_own() {
     seen.lock().unwrap().clear();
     two.put(None, "wartet");
     second.kick();
-    eventually("Meldung ohne Verbindung", || saw(|s| *s == Status::Offline)).await;
+    eventually("offline status reported", || saw(|s| *s == Status::Offline)).await;
     assert_eq!(two.vault(|v| v.pending(&personal).unwrap().len()), 1);
 }
 
@@ -353,9 +353,9 @@ async fn the_same_over_an_encrypted_connection() {
 
     // Only the first device is nudged. That it arrives at the second within seconds is due to the
     // WebSocket alone: on its own a device only asks again after a minute.
-    one.put(None, "verschlüsselt unterwegs");
+    one.put(None, "encrypted on the way");
     first.kick();
-    eventually("Änderung auf dem zweiten Gerät", || two.texts(&personal) == ["verschlüsselt unterwegs"]).await;
+    eventually("change on the second device", || two.texts(&personal) == ["encrypted on the way"]).await;
 
     // A shared vault with its invitation takes the same path.
     let bert = Device::register(&server, "bert", &one.invite_code().await).await;
@@ -365,10 +365,10 @@ async fn the_same_over_an_encrypted_connection() {
     let invitations = bert.engine.sync().await.unwrap().invitations;
     assert_eq!(invitations.len(), 1);
     bert.engine.accept(&shared).await.unwrap();
-    one.put_in(&shared, "für alle");
+    one.put_in(&shared, "for everyone");
     one.engine.sync().await.unwrap();
     bert.engine.sync().await.unwrap();
-    assert_eq!(bert.texts(&shared), ["für alle"]);
+    assert_eq!(bert.texts(&shared), ["for everyone"]);
 }
 
 /// Whoever sits at the server's command line administers it without an account, and can appoint a new administrator.
@@ -441,7 +441,7 @@ async fn sharing_from_invitation_to_removal() {
     let invitation = &report.invitations[0];
     assert_eq!((invitation.name.as_deref(), invitation.owner.as_str(), invitation.role, invitation.known), (Some("Team"), "anna", Role::Write, Known::New));
     assert_eq!(invitation.code, bert.engine.lookup("anna").await.unwrap().code, "beide sehen denselben Sicherheitscode");
-    assert!(bert.role(&shared).is_none(), "nur angesehen");
+    assert!(bert.role(&shared).is_none(), "only looked at");
     refused(bert.engine.invite(&shared, &candidate, Role::Read).await, "vault");
     bert.engine.accept(&shared).await.unwrap();
     assert_eq!(bert.role(&shared), Some((Role::Write, 1)));
@@ -459,16 +459,16 @@ async fn sharing_from_invitation_to_removal() {
     assert_eq!((bert2.role(&shared), bert2.texts(&shared)), (Some((Role::Write, 1)), vec!["team-host".to_string()]));
 
     // Writing and reading by role.
-    bert.put_in(&shared, "von bert");
+    bert.put_in(&shared, "from bert");
     bert.engine.sync().await.unwrap();
     anna.engine.sync().await.unwrap();
     carl.engine.sync().await.unwrap();
-    assert_eq!(carl.texts(&shared), ["team-host", "von bert"]);
-    assert!(matches!(carl.vault(|v| v.put_in(&shared, b"von carl")), Err(VaultError::ReadOnly)));
+    assert_eq!(carl.texts(&shared), ["from bert", "team-host"]);
+    assert!(matches!(carl.vault(|v| v.put_in(&shared, b"from carl")), Err(VaultError::ReadOnly)));
     refused(carl.engine.remove_member(&shared, &bert.account()).await, "not_owner");
 
     // Anna removes Carl while a change is waiting at Bert's.
-    bert.put_in(&shared, "wartete bei bert");
+    bert.put_in(&shared, "waited at bert");
     anna.engine.remove_member(&shared, &carl.account()).await.unwrap();
     assert_eq!(anna.role(&shared), Some((Role::Owner, 2)));
     let report = carl.engine.sync().await.unwrap();
@@ -477,16 +477,16 @@ async fn sharing_from_invitation_to_removal() {
     bert.engine.sync().await.unwrap();
     assert_eq!(bert.role(&shared), Some((Role::Write, 2)));
     anna.engine.sync().await.unwrap();
-    assert_eq!(anna.texts(&shared), ["team-host", "von bert", "wartete bei bert"]);
+    assert_eq!(anna.texts(&shared), ["from bert", "team-host", "waited at bert"]);
     bert2.engine.sync().await.unwrap();
     assert_eq!((bert2.role(&shared), bert2.texts(&shared)), (Some((Role::Write, 2)), anna.texts(&shared)));
 
     // Fewer permissions rotate the key, more permissions do not.
-    bert.put_in(&shared, "kurz vor dem Herabstufen");
+    bert.put_in(&shared, "just before the downgrade");
     anna.engine.set_role(&shared, &bert.account(), Role::Read).await.unwrap();
     let report = bert.engine.sync().await.unwrap();
     assert_eq!(bert.role(&shared), Some((Role::Read, 3)));
-    assert_eq!((report.pending, bert.notices()), (0, vec![Notice::Discarded { vault: crypto::hex(&shared), count: 1 }]), "was nicht mehr hinaus darf, wird verworfen und gemeldet");
+    assert_eq!((report.pending, bert.notices()), (0, vec![Notice::Discarded { vault: crypto::hex(&shared), count: 1 }]), "what may no longer go out is discarded and reported");
     anna.engine.set_role(&shared, &bert.account(), Role::Write).await.unwrap();
     bert.engine.sync().await.unwrap();
     assert_eq!(bert.role(&shared), Some((Role::Write, 3)));
@@ -508,7 +508,7 @@ async fn sharing_from_invitation_to_removal() {
     bert.engine.delete_vault(&shared).await.unwrap();
     bert2.engine.sync().await.unwrap();
     assert!(bert.role(&shared).is_none());
-    assert!(bert2.role(&shared).is_some(), "die Kopie des Besitzers bleibt, bis er sie selbst entfernt");
+    assert!(bert2.role(&shared).is_some(), "the owner's copy stays until they remove it themselves");
     assert_eq!(bert2.engine.sync().await.unwrap().orphaned, [crypto::hex(&shared)]);
 }
 
@@ -527,9 +527,9 @@ async fn password_devices_and_reconnecting() {
     assert!(two.engine.sync().await.unwrap().password_changed);
     two.vault(|v| {
         v.lock();
-        v.unlock(&password("anna")).expect("das alte öffnet hier noch");
+        v.unlock(&password("anna")).expect("the old one still opens here");
         v.lock();
-        v.unlock("neues passwort").expect("das neue gilt ab jetzt");
+        v.unlock("neues passwort").expect("the new one applies from now on");
         v.lock();
         assert!(matches!(v.unlock(&password("anna")), Err(VaultError::WrongPassword)));
         v.unlock("neues passwort").unwrap();
@@ -539,8 +539,8 @@ async fn password_devices_and_reconnecting() {
     // Renaming and signing out devices.
     let devices = one.engine.devices().await.unwrap();
     let other: Id = crypto::unhex(&devices.iter().find(|d| !d.current).unwrap().id).unwrap();
-    one.engine.rename_device(&other, "Laptop im Büro").await.unwrap();
-    assert_eq!(two.engine.devices().await.unwrap().iter().find(|d| d.current).unwrap().name, "Laptop im Büro");
+    one.engine.rename_device(&other, "Laptop in the office").await.unwrap();
+    assert_eq!(two.engine.devices().await.unwrap().iter().find(|d| d.current).unwrap().name, "Laptop in the office");
     one.engine.remove_device(&other).await.unwrap();
     refused(two.engine.sync().await.map(drop), "unauthorized");
 
@@ -551,17 +551,17 @@ async fn password_devices_and_reconnecting() {
     two.engine.unlink().await.unwrap();
     assert!(Engine::open(two.door.clone()).unwrap().is_none());
     refused(connect(&two.door, &server.address, "anna", "falsch", "Laptop", FAST).await.map(drop), "unauthorized");
-    let again = connect(&two.door, &server.address, "anna", "neues passwort", "Laptop wieder", FAST).await.unwrap();
+    let again = connect(&two.door, &server.address, "anna", "neues passwort", "Laptop again", FAST).await.unwrap();
     one.put(None, "zwei");
     one.engine.sync().await.unwrap();
     again.sync().await.unwrap();
     assert_eq!(two.texts(&personal), ["eins", "zwei"]);
-    assert_eq!(one.engine.devices().await.unwrap().iter().map(|d| d.name.clone()).collect::<Vec<_>>(), ["PC von anna", "Laptop wieder"]);
+    assert_eq!(one.engine.devices().await.unwrap().iter().map(|d| d.name.clone()).collect::<Vec<_>>(), ["PC of anna", "Laptop again"]);
 
     // A vault that belongs to no account cannot be connected this way, and no device is left behind.
     let foreign_file = Temp::new("fremd");
     let foreign = Arc::new(Mutex::new(Vault::create(&foreign_file.0, "lokal", FAST).unwrap()));
-    foreign.lock().unwrap().put(None, b"lag schon auf diesem Geraet").unwrap();
+    foreign.lock().unwrap().put(None, b"was already on this device").unwrap();
     refused(connect(&foreign, &server.address, "anna", "neues passwort", "Dritter", FAST).await.map(drop), "other_account");
     assert!(Engine::open(foreign.clone()).unwrap().is_none());
     assert_eq!(one.engine.devices().await.unwrap().len(), 2);
@@ -573,7 +573,7 @@ async fn password_devices_and_reconnecting() {
     let third = Device::wrap(vault, third_file);
     third.engine.sync().await.unwrap();
     one.engine.sync().await.unwrap();
-    assert_eq!(one.texts(&personal), ["eins", "lag schon auf diesem Geraet", "zwei"]);
+    assert_eq!(one.texts(&personal), ["eins", "was already on this device", "zwei"]);
     assert_eq!(third.texts(&personal), one.texts(&personal));
 
     // Signing out before deleting the data: the device disappears from the list and gets in no more.
@@ -598,27 +598,27 @@ async fn a_restored_server_gets_the_newer_state_back() {
     let one = Device::register(&server, "anna", server.setup()).await;
     let two = Device::login(&server, "anna", "Laptop").await;
     let personal = one.personal();
-    let old = one.put(None, "alt");
-    let gone = one.put(None, "wird geloescht");
+    let old = one.put(None, "old");
+    let gone = one.put(None, "will be deleted");
     one.engine.sync().await.unwrap();
     two.engine.sync().await.unwrap();
 
     // The backup records this state. Afterwards work continues, on both devices.
     let backup = data.0.join("sicherung.db");
     server.app.store.backup(&backup).unwrap();
-    one.put(Some(old), "neu");
-    one.put(None, "nach der Sicherung");
+    one.put(Some(old), "new");
+    one.put(None, "after the backup");
     one.vault(|v| v.delete(&gone).unwrap());
     one.engine.sync().await.unwrap();
     two.engine.sync().await.unwrap();
-    let expected = ["nach der Sicherung", "neu"];
+    let expected = ["after the backup", "new"];
     assert_eq!(two.texts(&personal), expected);
 
     // The server fails and comes back from the backup, under the same address.
     let port = server.stop().await;
     restore(&backup, &data.0);
     let server = Server::start(Store::open(&data.0.join("sync.db")).unwrap(), port).await;
-    assert!(server.setup.is_none(), "die Konten sind noch da");
+    assert!(server.setup.is_none(), "the accounts are still there");
 
     // Every device notices, takes over nothing from the old state and reports the vault.
     for device in [&one, &two] {
@@ -642,10 +642,10 @@ async fn a_restored_server_gets_the_newer_state_back() {
     let report = two.engine.sync().await.unwrap();
     assert_eq!((report.rolled_back.len(), report.pending, report.notices), (0, 0, 0));
     assert_eq!(two.texts(&personal), expected);
-    two.put(Some(old), "noch neuer");
+    two.put(Some(old), "even newer");
     two.engine.sync().await.unwrap();
     one.engine.sync().await.unwrap();
-    assert_eq!(one.texts(&personal), ["nach der Sicherung", "noch neuer"]);
+    assert_eq!(one.texts(&personal), ["after the backup", "even newer"]);
 
     // A fresh device gets exactly this state from the server, so it really has everything again.
     let three = Device::login(&server, "anna", "Dritter").await;

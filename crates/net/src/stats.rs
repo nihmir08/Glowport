@@ -209,10 +209,10 @@ VERSION_ID=\"24.04\"
         assert_eq!((sample.swap_total, sample.swap_free), (2097148 * 1024, 1912828 * 1024));
         assert_eq!(sample.load, [0.42, 0.37, 0.31]);
         assert_eq!(sample.uptime, 311402);
-        assert_eq!((sample.net_rx, sample.net_tx), (4_201_000_000, 915_000_000), "die Schleife zählt nicht mit");
+        assert_eq!((sample.net_rx, sample.net_tx), (4_201_000_000, 915_000_000), "loopback does not count");
         assert_eq!((sample.system.as_str(), sample.kernel.as_str(), sample.hostname.as_str()), ("Ubuntu 24.04.1 LTS", "6.8.0-45-generic", "web-01"));
         let disks: Vec<(&str, u64)> = sample.disks.iter().map(|d| (d.mount.as_str(), d.total / 1024)).collect();
-        assert_eq!(disks, [("/", 82436788), ("/mnt/nas", 1048576000), ("/var/lib/docker", 206292968)], "Wurzel zuerst, dann nach Größe; jedes Gerät einmal, ohne Scheindateisysteme");
+        assert_eq!(disks, [("/", 82436788), ("/mnt/nas", 1048576000), ("/var/lib/docker", 206292968)], "root first, then by size; every device once, without pseudo file systems");
         assert_eq!(sample.disks[0].used, 34512300 * 1024);
     }
 
@@ -221,8 +221,8 @@ VERSION_ID=\"24.04\"
         let text = "@cpu\ncpu 100 0 50 800\n@cores\n0\n@mem\nMemTotal: 1000 kB\nMemFree: 100 kB\nBuffers: 50 kB\nCached: 250 kB\n@disk\nFilesystem 1024-blocks Used Available Capacity Mounted on\nrpool/ROOT/pve-1 900000 100000 800000 12% /\nrpool/data 800000 96 799904 1% /rpool/data\n@os\nNAME=Alpine\n";
         let sample = parse(text).unwrap();
         assert_eq!((sample.cpu_total, sample.cpu_idle, sample.cores), (950, 800, 1));
-        assert_eq!(sample.mem_available, 400 * 1024, "ohne MemAvailable: frei plus Puffer und Zwischenspeicher");
-        assert_eq!(sample.disks.iter().map(|d| d.mount.as_str()).collect::<Vec<_>>(), ["/", "/rpool/data"], "ZFS-Datasets haben keinen Gerätepfad");
+        assert_eq!(sample.mem_available, 400 * 1024, "without MemAvailable: free plus buffers and cache");
+        assert_eq!(sample.disks.iter().map(|d| d.mount.as_str()).collect::<Vec<_>>(), ["/", "/rpool/data"], "ZFS datasets have no device path");
         assert_eq!((sample.system.as_str(), sample.kernel.as_str(), sample.uptime, sample.net_rx), ("Alpine", "", 0, 0));
     }
 

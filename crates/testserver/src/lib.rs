@@ -26,7 +26,7 @@ use russh::{Channel, ChannelId, Disconnect, MethodKind, MethodSet};
 use tokio::{net::TcpListener, task::JoinHandle};
 
 pub const PROMPT: &str = "$ ";
-pub const GREETING: &str = "Willkommen beim Testserver\r\n";
+pub const GREETING: &str = "Welcome to the test server\r\n";
 
 #[derive(Clone, Default)]
 pub struct Options {
@@ -212,13 +212,13 @@ impl Connection {
                                 AgentIdentity::Certificate { .. } => "Zertifikat\r\n".to_string(),
                             })
                             .collect::<String>(),
-                        None => "Agent antwortet nicht\r\n".to_string(),
+                        None => "Agent does not answer\r\n".to_string(),
                     };
                     let _ = handle.data(channel, format!("{text}{PROMPT}").into_bytes()).await;
                 });
                 return Ok(());
             }
-            "agent" => session.data(channel, b"kein Agent\r\n".to_vec())?,
+            "agent" => session.data(channel, b"no agent\r\n".to_vec())?,
             "term" => session.data(channel, format!("{}\r\n", self.terms.get(&channel).map_or("", String::as_str)).into_bytes())?,
             "env" => {
                 for (name, value) in self.env.get(&channel).into_iter().flatten() {

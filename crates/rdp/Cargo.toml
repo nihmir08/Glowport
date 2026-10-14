@@ -1,6 +1,6 @@
 [package]
 name = "glowport-rdp"
-description = "RDP-Sitzungen von Glowport: anmelden, Bild als geänderte Bereiche, Eingaben. Kennt weder Tresor noch Oberfläche."
+description = "Glowport's RDP sessions: sign in, the picture as changed regions, input. Knows neither vault nor interface."
 version = "1.0.1"
 edition = "2021"
 license = "MIT"

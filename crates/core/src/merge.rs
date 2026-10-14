@@ -116,7 +116,7 @@ pub fn merge(base: Option<&[u8]>, mine: Option<&[u8]>, theirs: Option<&[u8]>, mi
     let outcome = if merged == theirs_value {
         Outcome::Theirs
     } else {
-        Outcome::Merged(Zeroizing::new(serde_json::to_vec(&merged).expect("JSON lässt sich immer schreiben")))
+        Outcome::Merged(Zeroizing::new(serde_json::to_vec(&merged).expect("JSON can always be written")))
     };
     Merge { outcome, clashes, restored: false }
 }
@@ -164,7 +164,7 @@ mod tests {
         let (value, merge) = run(Some(base), Some(mine), Some(theirs), false);
         assert_eq!(value.unwrap()["own"]["port"], 2200);
         assert_eq!(merge.clashes, [Clash { path: "own.port".into(), winner: Side::Theirs }]);
-        assert_eq!(merge.outcome, Outcome::Theirs, "nichts Eigenes übrig, also nichts zu schicken");
+        assert_eq!(merge.outcome, Outcome::Theirs, "nothing of our own left, so nothing to send");
     }
 
     #[test]

@@ -332,7 +332,7 @@ mod tests {
             ]
         );
         assert_eq!(draft.hosts[2].password.as_ref().map(|p| p.expose()), Some("geheim"));
-        assert!(draft.hosts[3].password.is_none(), "ein anonymer Host hält kein Passwort");
+        assert!(draft.hosts[3].password.is_none(), "an anonymous host holds no password");
         assert!(draft.skipped.is_empty());
     }
 
@@ -370,7 +370,7 @@ mod tests {
             ("__FolderData__.ini".to_string(), "S:\"Is Expanded\"=1\r\n".to_string()),
             // A serial session: 115200 baud, 7 data bits, even parity, two stop bits, RTS/CTS.
             ("Labor\\konsole.ini".to_string(), "S:\"Protocol Name\"=Serial\r\nS:\"Com Port\"=COM4\r\nD:\"Baud Rate\"=0001c200\r\nD:\"Data Bits\"=00000007\r\nD:\"Parity\"=00000002\r\nD:\"Stop Bits\"=00000002\r\nD:\"RTS Flow Control\"=00000001\r\n".to_string()),
-            ("Labor\\ohne-port.ini".to_string(), "S:\"Protocol Name\"=Serial\r\n".to_string()),
+            ("Labor\\no-port.ini".to_string(), "S:\"Protocol Name\"=Serial\r\n".to_string()),
         ];
         let draft = securecrt_files(&files);
         assert_eq!(draft.hosts.len(), 2);
@@ -379,6 +379,6 @@ mod tests {
         let line = console.serial.unwrap();
         assert_eq!((console.address.as_str(), console.protocol, line.baud, line.data_bits, line.parity, line.stop_bits, line.flow), ("COM4", crate::Protocol::Serial, 115_200, 7, Parity::Even, 2, Flow::Hardware));
         assert_eq!(draft.groups[console.group.unwrap()].name, "Labor");
-        assert_eq!(draft.skipped.iter().map(|s| (s.name.as_str(), s.reason)).collect::<Vec<_>>(), [("ohne-port", "no_address")]);
+        assert_eq!(draft.skipped.iter().map(|s| (s.name.as_str(), s.reason)).collect::<Vec<_>>(), [("no-port", "no_address")]);
     }
 }

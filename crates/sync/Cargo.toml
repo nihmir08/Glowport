@@ -1,6 +1,6 @@
 [package]
 name = "glowport-sync"
-description = "Abgleich von Glowport mit dem Sync-Server: die Seite des Programms."
+description = "Glowport's syncing with the sync server: the program's side."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

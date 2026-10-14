@@ -147,14 +147,14 @@ impl Device {
             let theirs: Vec<Envelope> = reply.conflicts.iter().map(|r| r.envelope().unwrap()).collect();
             assert!(self.vault.apply_remote(vault, &theirs).unwrap().rejected.is_empty());
         }
-        panic!("nach drei Versuchen nicht angenommen");
+        panic!("not accepted after three attempts");
     }
 
     async fn pull(&mut self, server: &Server, vault: &[u8; 16]) -> Result<Pull, Failure> {
         let after = self.vault.cursor(vault).unwrap();
         let pull: Pull = server.get(&format!("/v1/vaults/{}/records?after={after}", self.hex(vault)), &self.token).await?;
         let rows: Vec<Envelope> = pull.records.iter().map(|r| r.envelope().unwrap()).collect();
-        assert!(self.vault.apply_remote(vault, &rows).unwrap().rejected.is_empty(), "der ehrliche Server liefert nichts Falsches");
+        assert!(self.vault.apply_remote(vault, &rows).unwrap().rejected.is_empty(), "the honest server delivers nothing wrong");
         self.vault.set_cursor(vault, pull.seq).unwrap();
         Ok(pull)
     }
@@ -254,7 +254,7 @@ async fn two_devices_of_one_account_converge() {
     let mut two = login(&server, "anna", "anna").await.unwrap();
     assert_eq!(two.pull(&server, &personal).await.unwrap().records.len(), 2);
     assert_eq!(two.names(&personal), one.names(&personal));
-    assert!(two.pull(&server, &personal).await.unwrap().records.is_empty(), "nichts Neues seit der letzten Nummer");
+    assert!(two.pull(&server, &personal).await.unwrap().records.is_empty(), "nothing new since the last number");
 
     // Both change the same host without knowing of each other: the second one at the server merges.
     two.vault.put(Some(host), br#"{"name":"web","own":{"port":2222}}"#).unwrap();
@@ -276,18 +276,18 @@ async fn two_devices_of_one_account_converge() {
     // All or nothing: a package with an outdated record does not get the new one in either.
     let stale = two.vault.pending(&personal).unwrap();
     assert!(stale.is_empty());
-    let kept = one.vault.put(None, b"bleibt").unwrap();
+    let kept = one.vault.put(None, b"stays").unwrap();
     one.push(&server, &personal).await.unwrap();
     two.pull(&server, &personal).await.unwrap();
-    one.vault.put(Some(kept), b"bleibt, neuer").unwrap();
+    one.vault.put(Some(kept), b"stays, newer").unwrap();
     one.push(&server, &personal).await.unwrap();
-    two.vault.put(Some(kept), b"bleibt, veraltet").unwrap();
-    two.vault.put(None, b"neu").unwrap();
+    two.vault.put(Some(kept), b"stays, outdated").unwrap();
+    two.vault.put(None, b"new").unwrap();
     let body = Push { epoch: 1, records: two.vault.outgoing(&personal).unwrap().iter().map(|(envelope, base)| WireRecord::outgoing(envelope, *base)).collect() };
     let path = format!("/v1/vaults/{}/records", crypto::hex(&personal));
     let reply: PushReply = server.post(&path, Some(&two.token), &body).await.unwrap();
     assert_eq!((reply.accepted, reply.conflicts.len()), (false, 1));
-    assert_eq!(server.get::<Pull>(&format!("{path}?after=0"), &two.token).await.unwrap().records.len(), 3, "eins, der Grabstein, bleibt");
+    assert_eq!(server.get::<Pull>(&format!("{path}?after=0"), &two.token).await.unwrap().records.len(), 3, "one, the tombstone, stays");
 
     // What the server can check without a key, it checks: signature and author.
     let mut forged = body.clone();
@@ -343,13 +343,13 @@ async fn sharing_roles_and_key_rotation() {
     bert.pull(&server, &shared).await.unwrap();
     carl.pull(&server, &shared).await.unwrap();
     assert_eq!(carl.names(&shared), ["team-host"]);
-    bert.vault.put_in(&shared, b"von bert").unwrap();
+    bert.vault.put_in(&shared, b"from bert").unwrap();
     bert.push(&server, &shared).await.unwrap();
     anna.pull(&server, &shared).await.unwrap();
-    assert_eq!(anna.names(&shared), ["team-host", "von bert"]);
+    assert_eq!(anna.names(&shared), ["from bert", "team-host"]);
 
     // Carl may only read: not even a record signed by Bert gets in through Carl's sign-in.
-    bert.vault.put_in(&shared, b"wartet bei bert").unwrap();
+    bert.vault.put_in(&shared, b"waiting at bert").unwrap();
     let smuggled = Push { epoch: 1, records: bert.vault.pending(&shared).unwrap().iter().map(WireRecord::from).collect() };
     fails(server.post::<PushReply>(&format!("{path}/records"), Some(&carl.token), &smuggled).await, 403, "record_invalid");
     let own = Push { epoch: 1, records: Vec::new() };
@@ -383,18 +383,18 @@ async fn sharing_roles_and_key_rotation() {
     assert!(server.get::<Overview>("/v1/account", &carl.token).await.unwrap().vaults.iter().all(|v| !v.shared));
 
     let reply = bert.push(&server, &shared).await.unwrap();
-    assert_eq!((reply.accepted, reply.epoch), (false, 2), "mit dem alten Schlüsselstand nimmt der Server nichts an");
+    assert_eq!((reply.accepted, reply.epoch), (false, 2), "with the old key epoch the server accepts nothing");
     let overview: Overview = server.get("/v1/account", &bert.token).await.unwrap();
     let entry = overview.vaults.iter().find(|v| v.shared).unwrap();
     assert_eq!(entry.epoch, 2);
     let pull: Pull = server.get(&format!("{path}/records?after={}", bert.vault.cursor(&shared).unwrap()), &bert.token).await.unwrap();
     let rows: Vec<Envelope> = pull.records.iter().map(|r| r.envelope().unwrap()).collect();
-    assert_eq!(rows.len(), 2, "nach dem Tausch kommt alles neu");
+    assert_eq!(rows.len(), 2, "after the rotation everything comes anew");
     assert!(bert.vault.apply_rotation(&shared, &entry.sealed_key.as_ref().unwrap().0, &entry.roster.as_ref().unwrap().0, &rows).unwrap().rejected.is_empty());
     bert.vault.set_cursor(&shared, pull.seq).unwrap();
     assert!(bert.push(&server, &shared).await.unwrap().accepted);
     anna.pull(&server, &shared).await.unwrap();
-    assert_eq!(anna.names(&shared), ["team-host", "von bert", "wartet bei bert"]);
+    assert_eq!(anna.names(&shared), ["from bert", "team-host", "waiting at bert"]);
     assert_eq!(bert.names(&shared), anna.names(&shared));
 
     // Bert leaves on his own; Anna as owner cannot leave, but can delete.
@@ -472,8 +472,8 @@ async fn old_tombstones_leave_and_late_devices_get_everything() {
     let mut one = register(&server, "anna", &server.setup).await.unwrap();
     let mut two = login(&server, "anna", "anna").await.unwrap();
     let personal = one.personal();
-    let gone = one.vault.put(None, b"wird geloescht").unwrap();
-    one.vault.put(None, b"bleibt").unwrap();
+    let gone = one.vault.put(None, b"will be deleted").unwrap();
+    one.vault.put(None, b"stays").unwrap();
     one.push(&server, &personal).await.unwrap();
     two.pull(&server, &personal).await.unwrap();
     one.vault.delete(&gone).unwrap();

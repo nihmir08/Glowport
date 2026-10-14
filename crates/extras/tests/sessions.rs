@@ -41,12 +41,12 @@ impl Seen {
 /// Reads events until `done` is satisfied or the session ends.
 async fn watch(session: &mut Session, seen: &mut Seen, done: impl Fn(&Seen) -> bool) {
     while !done(seen) && seen.end.is_none() {
-        match timeout(PATIENCE, session.events.recv()).await.expect("die Sitzung meldet sich nicht mehr") {
+        match timeout(PATIENCE, session.events.recv()).await.expect("the session no longer reports") {
             Some(Event::Phase(phase)) => seen.phases.push(phase),
             Some(Event::Output(bytes)) => seen.output.extend(bytes),
             Some(Event::End(end)) => seen.end = Some(end),
             Some(_) => {}
-            None => panic!("die Sitzung endete ohne Grund"),
+            None => panic!("the session ended without a reason"),
         }
     }
 }
@@ -60,8 +60,8 @@ fn input(session: &Session, text: &str) {
 async fn a_local_shell_runs_and_reports_how_it_ended() {
     let shells = local::shells();
     let names: Vec<&str> = shells.iter().map(|shell| shell.id.as_str()).collect();
-    assert!(names.contains(&"cmd") && names.contains(&"powershell"), "auf jedem Windows vorhanden, gefunden: {names:?}");
-    assert!(local::shell("gibt-es-nicht").is_none() && local::shell("C:\\Windows\\System32\\calc.exe").is_none(), "gestartet wird nur, was gefunden wurde");
+    assert!(names.contains(&"cmd") && names.contains(&"powershell"), "present on every Windows, found: {names:?}");
+    assert!(local::shell("does-not-exist").is_none() && local::shell("C:\\Windows\\System32\\calc.exe").is_none(), "only what was found is started");
 
     let mut session = local::open(local::shell("cmd").unwrap(), (100, 30));
     let mut seen = Seen::default();
@@ -74,7 +74,7 @@ async fn a_local_shell_runs_and_reports_how_it_ended() {
     // The answer contains what only the shell fills in; the echo of the input alone would not contain it.
     input(&session, "echo glowport-%OS%-ok\r");
     watch(&mut session, &mut seen, |seen| seen.text().contains("glowport-Windows_NT-ok")).await;
-    assert!(seen.end.is_none(), "die Shell läuft weiter: {}", seen.text());
+    assert!(seen.end.is_none(), "the shell keeps running: {}", seen.text());
 
     // The shell starts in the home directory.
     input(&session, "cd\r");
@@ -110,8 +110,8 @@ async fn closing_a_local_terminal_ends_its_shell() {
 async fn expect(stream: &mut TcpStream, got: &mut Vec<u8>, wanted: &[u8]) {
     let mut buffer = [0u8; 512];
     while !got.windows(wanted.len()).any(|window| window == wanted) {
-        let n = timeout(PATIENCE, stream.read(&mut buffer)).await.expect("der Client schweigt").unwrap();
-        assert!(n > 0, "der Client hat geschlossen, gesehen: {got:?}");
+        let n = timeout(PATIENCE, stream.read(&mut buffer)).await.expect("the client is silent").unwrap();
+        assert!(n > 0, "the client closed, seen: {got:?}");
         got.extend(&buffer[..n]);
     }
 }
@@ -143,12 +143,12 @@ async fn telnet_negotiates_names_the_user_and_passes_the_terminal_through() {
     let mut seen = Seen::default();
     watch(&mut session, &mut seen, |seen| seen.output.ends_with(&[IAC, b'\r'])).await;
     assert_eq!(seen.phases, [Phase::Connecting, Phase::Connected]);
-    assert_eq!(seen.output, [&b"Password: "[..], &[IAC, b'\r']].concat(), "ohne Befehle des Protokolls und ohne das NUL");
+    assert_eq!(seen.output, [&b"Password: "[..], &[IAC, b'\r']].concat(), "without protocol commands and without the NUL");
 
     input(&session, "geheim\r");
     session.commands.send(Command::Resize(90, 20)).unwrap();
     let got = server.await.unwrap();
-    assert!(!got.windows(2).any(|pair| pair == [b'\r', 0]), "die Eingabetaste ist CR LF");
+    assert!(!got.windows(2).any(|pair| pair == [b'\r', 0]), "Enter is CR LF");
 
     // The server closes: the session ends, what it wrote last has arrived.
     watch(&mut session, &mut seen, |_| false).await;
@@ -185,7 +185,7 @@ async fn telnet_to_a_plain_service_builds_the_line_here() {
     session.commands.send(Command::Close).unwrap();
     watch(&mut session, &mut seen, |_| false).await;
     assert_eq!(seen.end, Some(End::User));
-    assert_eq!(server.await.unwrap(), b"HELO glowport\r\n", "ein Dienst ohne Telnet bekommt kein Byte des Protokolls zu sehen");
+    assert_eq!(server.await.unwrap(), b"HELO glowport\r\n", "a service without Telnet sees no protocol byte");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -211,7 +211,7 @@ async fn a_serial_port_that_is_not_there_fails_to_open() {
     // Listing must never fail, even without a single port.
     let ports = serial::ports();
     assert!(ports.iter().all(|port| !port.name.is_empty()));
-    let missing = if cfg!(windows) { "COM254" } else { "/dev/ttyGLOWPORT-fehlt" };
+    let missing = if cfg!(windows) { "COM254" } else { "/dev/ttyGLOWPORT-missing" };
     assert!(!ports.iter().any(|port| port.name == missing));
 
     let mut session = serial::open(missing.into(), serial::Line::default());

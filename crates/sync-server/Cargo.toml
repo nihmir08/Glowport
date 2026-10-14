@@ -1,6 +1,6 @@
 [package]
 name = "glowport-sync-server"
-description = "Sync-Server von Glowport zum Selbstbetreiben. Sieht nur verschlüsselte Datensätze."
+description = "Glowport's sync server for self-hosting. Only sees encrypted records."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

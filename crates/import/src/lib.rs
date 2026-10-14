@@ -478,8 +478,8 @@ mod tests {
         assert_eq!(detect("known_hosts", b"web.example.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIG8xl5W2c2FrEsznplCeG1VfI9zSm9CciIj3drnCX2xq\n"), Some(Source::KnownHosts));
         assert_eq!(detect("config", b"Host web\n  HostName 10.0.0.1\n  User root\n"), Some(Source::SshConfig));
         assert_eq!(detect("hosts.csv", b"Label,Host,Port\nweb,10.0.0.1,22\n"), Some(Source::Csv));
-        assert_eq!(detect("notiz.txt", b"nur ein paar Worte\n"), None);
-        assert_eq!(detect("leer", b""), None);
+        assert_eq!(detect("note.txt", b"just a few words\n"), None);
+        assert_eq!(detect("empty", b""), None);
     }
 
     #[test]

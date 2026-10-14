@@ -21,34 +21,34 @@ pub use live::{status_of, Runner, Status};
 
 #[derive(Debug, thiserror::Error)]
 pub enum SyncError {
-    #[error("Keine Verbindung zum Sync-Server ({0})")]
+    #[error("No connection to the sync server ({0})")]
     Offline(String),
     /// The server is there, but its certificate is not valid: expired, for another name, or issued by
     /// nobody this machine trusts.
-    #[error("Das Zertifikat des Sync-Servers wird nicht anerkannt ({0})")]
+    #[error("The sync server's certificate is not trusted ({0})")]
     Certificate(String),
     /// The server answered and refused. `code` is its reason, e.g. `unauthorized` or `code_invalid`.
     #[error("Der Sync-Server lehnt ab ({code})")]
     Refused { status: u16, code: String },
-    #[error("Unerwartete Antwort des Sync-Servers ({0})")]
+    #[error("Unexpected answer from the sync server ({0})")]
     Protocol(&'static str),
-    #[error("Die Adresse des Sync-Servers ist ungültig")]
+    #[error("The sync server's address is invalid")]
     Address,
-    #[error("Dieser Server verlangt eine neuere Version von Glowport")]
+    #[error("This server needs a newer version of Glowport")]
     TooOld,
-    #[error("Dieser Server ist zu alt für diese Version von Glowport")]
+    #[error("This server is too old for this version of Glowport")]
     ServerTooOld,
-    #[error("Der Abgleich ist nicht eingerichtet")]
+    #[error("Syncing is not set up")]
     NotLinked,
-    #[error("Der Abgleich ist schon eingerichtet")]
+    #[error("Syncing is already set up")]
     AlreadyLinked,
     /// This device's vault belongs to a different account than the one signed in to.
-    #[error("Dieser Tresor gehört zu einem anderen Konto")]
+    #[error("This vault belongs to another account")]
     OtherAccount,
-    #[error("Das geht hier nicht ({0})")]
+    #[error("That is not possible here ({0})")]
     Invalid(&'static str),
     /// The vault was changed by others again and again during a key rotation.
-    #[error("Der Tresor wird gerade von anderen geändert; bitte noch einmal versuchen")]
+    #[error("Others are changing the vault right now; please try again")]
     Busy,
     #[error(transparent)]
     Vault(#[from] VaultError),

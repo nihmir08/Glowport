@@ -13,11 +13,11 @@ fn field<'a>(profile: &'a Value, camel: &str, snake: &str) -> Option<&'a Value> 
 }
 
 pub fn parse(text: &str, home: &str) -> Result<Draft> {
-    let Some(root) = jsonc(text) else { return unreadable("kein JSON") };
+    let Some(root) = jsonc(text) else { return unreadable("not JSON") };
     let profiles = match &root {
         Value::Array(list) => list.as_slice(),
         Value::Object(_) => root.get("profiles").and_then(Value::as_array).map(Vec::as_slice).unwrap_or(&[]),
-        _ => return unreadable("keine Profile"),
+        _ => return unreadable("no profiles"),
     };
     let mut draft = Draft::default();
     let mut by_id: HashMap<&str, usize> = HashMap::new();
@@ -96,6 +96,6 @@ mod tests {
         let draft = parse(store, "").unwrap();
         assert_eq!((draft.hosts[0].name.as_str(), draft.hosts[0].own.agent, draft.hosts[0].own.jump), ("nas", Some(true), Jump::Unset));
         assert_eq!(draft.hosts[0].notes[0].code, "jump_missing");
-        assert!(parse("kein json", "").is_err());
+        assert!(parse("not json", "").is_err());
     }
 }

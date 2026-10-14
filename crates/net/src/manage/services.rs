@@ -206,7 +206,7 @@ connman.service                             not-found inactive dead    connman.s
 console-getty.service                       masked    inactive dead    console-getty.service
 console-setup.service                       loaded    active   exited  Set console font and keymap
 cron.service                                loaded    active   running Regular background program processing daemon
-● kaputt.service                            loaded    failed   failed  Etwas, das nicht startet
+● kaputt.service                            loaded    failed   failed  Something that does not start
 systemd-fsck@dev-disk-by\\x2duuid-12ab.service loaded  active   exited  File System Check on /dev/disk/by-uuid/12ab
 user@1000.service                           loaded    activating start User Manager for UID 1000
 @files
@@ -243,10 +243,10 @@ user@.service                                static          -
                 ("console-getty.service", Active::Inactive, "dead", Enabled::Masked),
                 ("rsync.service", Active::Inactive, "dead", Enabled::Disabled),
             ],
-            "ohne den Dienst, den es nicht gibt, und ohne Vorlagen"
+            "without the service that does not exist, and without templates"
         );
         assert_eq!(list[2].description, "chrony, an NTP client/server");
-        assert_eq!(list[0].description, "Etwas, das nicht startet", "der Punkt davor gehört nicht zum Namen");
+        assert_eq!(list[0].description, "Something that does not start", "the dot before it does not belong to the name");
     }
 
     #[test]

@@ -91,7 +91,7 @@ pub(crate) fn quoted(word: &str) -> String {
 /// A command with exactly one value from the server. The value is not in the command's text but comes as
 /// an argument of its own and is called `"$1"` there. Error messages end up in the output too.
 fn with_argument(script: &str, argument: &str) -> String {
-    debug_assert!(!script.contains('\''), "das Skript steht selbst in einfachen Anführungszeichen");
+    debug_assert!(!script.contains('\''), "the script itself is in single quotes");
     format!("sh -c 'exec 2>&1; export LC_ALL=C; {script}' sh {}", quoted(argument))
 }
 
@@ -174,7 +174,7 @@ mod tests {
 
     #[test]
     fn a_refusal_says_what_to_try_next() {
-        assert_eq!(verdict(true, "permission denied", As::User), Verdict::Done, "gelungen ist gelungen");
+        assert_eq!(verdict(true, "permission denied", As::User), Verdict::Done, "succeeded is succeeded");
         // Refused as the user: once more with sudo.
         for text in [
             "permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock",

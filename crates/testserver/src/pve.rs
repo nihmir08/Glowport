@@ -109,7 +109,7 @@ async fn handle(State(world): State<Shared>, method: Method, uri: Uri, headers: 
     }
     match (method.as_str(), parts.as_slice()) {
         ("GET", ["version"]) => ok(json!({ "version": "9.0.11", "release": "9.0", "repoid": "abc" })),
-        ("GET", ["nodes"]) => ok(json!([{ "node": "pve", "status": "online", "cpu": 0.21, "maxcpu": 32, "mem": 76235669504u64, "maxmem": 137438953472u64, "uptime": 5184000 }, { "node": "alt", "status": "offline" }])),
+        ("GET", ["nodes"]) => ok(json!([{ "node": "pve", "status": "online", "cpu": 0.21, "maxcpu": 32, "mem": 76235669504u64, "maxmem": 137438953472u64, "uptime": 5184000 }, { "node": "old", "status": "offline" }])),
         ("GET", ["cluster", "resources"]) => {
             let listed: HashMap<u32, &'static str> = [101, 111, 112, 120, 130].into_iter().map(|vmid| (vmid, world.listed(vmid))).collect();
             let state = |vmid: u32| listed[&vmid];

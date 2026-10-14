@@ -21,21 +21,21 @@ pub use tls::{fingerprint_text, parse_fingerprint, Fingerprint};
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum PveError {
-    #[error("Die Adresse ist keine der Form https://pve.example.de:8006")]
+    #[error("The address is not of the form https://pve.example.com:8006")]
     Address,
-    #[error("Der Proxmox-Server ist nicht erreichbar ({0})")]
+    #[error("The Proxmox server cannot be reached ({0})")]
     Offline(String),
     /// The certificate is not trusted, or it differs from the confirmed one.
-    #[error("Das Zertifikat des Proxmox-Servers wird nicht anerkannt")]
+    #[error("The Proxmox server's certificate is not trusted")]
     Certificate,
-    #[error("Der Token ist unvollständig oder wird abgelehnt")]
+    #[error("The token is incomplete or is rejected")]
     Token,
     /// The token lacks a permission.
-    #[error("Dem Token fehlt das Recht dafür")]
+    #[error("The token lacks the permission for that")]
     Forbidden,
     #[error("Proxmox meldet: {0}")]
     Failed(String),
-    #[error("Unerwartete Antwort von Proxmox ({0})")]
+    #[error("Unexpected answer from Proxmox ({0})")]
     Protocol(&'static str),
 }
 
@@ -387,7 +387,7 @@ impl Client {
             }
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
-        Err(PveError::Failed("Der Auftrag läuft noch".into()))
+        Err(PveError::Failed("The task is still running".into()))
     }
 
     /// Whether this connection's certificate is trusted on its own. `None` before the first request.

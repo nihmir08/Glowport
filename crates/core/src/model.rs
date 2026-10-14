@@ -939,7 +939,7 @@ mod tests {
         let own = Fields { user: Some("admin".into()), jump: Some(String::new()), reconnect: Some(Reconnect::Notice), ..Fields::default() };
         assert_eq!(resolve_auth(&[&top.defs, &sub.defs, &own], |_| None).user, Some("admin"));
         let overridden = resolve(&host(own), &chain, Reconnect::Auto);
-        assert_eq!(overridden.jump, Resolved { value: None, source: Source::Host }, "leer heißt ausdrücklich kein Sprung-Server");
+        assert_eq!(overridden.jump, Resolved { value: None, source: Source::Host }, "empty explicitly means no jump host");
         assert_eq!(overridden.reconnect.value, Reconnect::Notice);
     }
 
@@ -954,22 +954,22 @@ mod tests {
     #[test]
     fn unknown_fields_and_types_survive() {
         let json = r#"{"t":"host","v":3,"name":"web","address":"10.0.0.1","own":{"user":"x"},"password":"geheim","zukunft":{"a":1}}"#;
-        let Payload::Host(host) = serde_json::from_str::<Payload>(json).unwrap() else { panic!("kein Host") };
+        let Payload::Host(host) = serde_json::from_str::<Payload>(json).unwrap() else { panic!("not a host") };
         assert_eq!(host.extra["zukunft"]["a"], 1);
         assert_eq!(host.protocol, "ssh");
         let back: Value = serde_json::to_value(Payload::Host(host)).unwrap();
         assert_eq!((back["t"].as_str(), back["v"].as_u64(), back["zukunft"]["a"].as_u64()), (Some("host"), Some(3), Some(1)));
 
-        assert_eq!(serde_json::from_str::<Payload>(r#"{"t":"zukunft","name":"später"}"#).unwrap(), Payload::Unknown);
+        assert_eq!(serde_json::from_str::<Payload>(r#"{"t":"future","name":"later"}"#).unwrap(), Payload::Unknown);
     }
 
     #[test]
     fn environment_is_parsed_like_setenv() {
         let pairs = |text: &str| parse_env(text).map(|v| v.into_iter().map(|(n, v)| format!("{n}={v}")).collect::<Vec<_>>().join("|"));
         assert_eq!(pairs("LANG=de_DE.UTF-8  TZ=Europe/Berlin").as_deref(), Some("LANG=de_DE.UTF-8|TZ=Europe/Berlin"));
-        assert_eq!(pairs(r#"GRUSS="Hallo Welt" _X=1 LEER="#).as_deref(), Some("GRUSS=Hallo Welt|_X=1|LEER="));
+        assert_eq!(pairs(r#"GREETING="Hello World" _X=1 EMPTY="#).as_deref(), Some("GREETING=Hello World|_X=1|EMPTY="));
         assert_eq!(pairs("  ").as_deref(), Some(""));
-        for broken in ["ohne-gleich", "1A=x", "A B=x", r#"A="offen"#, r#"A="zu"dran"#, "A-B=x", "=x"] {
+        for broken in ["no-equals", "1A=x", "A B=x", r#"A="open"#, r#"A="closed"trailing"#, "A-B=x", "=x"] {
             assert_eq!(parse_env(broken), None, "{broken}");
         }
     }
@@ -1040,33 +1040,33 @@ mod tests {
 
     #[test]
     fn keys_and_identities_keep_secrets_out_of_debug_output() {
-        let json = r#"{"t":"key","name":"arbeit","kind":"ed25519","bits":256,"fingerprint":"SHA256:x","public":"ssh-ed25519 AAAA","private":"-----BEGIN geheim","origin":"generated","addedAt":5,"neu":1}"#;
-        let Payload::Key(key) = serde_json::from_str::<Payload>(json).unwrap() else { panic!("kein Schlüssel") };
-        assert_eq!((key.kind, key.origin, key.added_at, key.extra["neu"].as_u64()), (KeyKind::Ed25519, KeyOrigin::Generated, 5, Some(1)));
-        assert!(!format!("{key:?}").contains("geheim"));
+        let json = r#"{"t":"key","name":"work","kind":"ed25519","bits":256,"fingerprint":"SHA256:x","public":"ssh-ed25519 AAAA","private":"-----BEGIN secret","origin":"generated","addedAt":5,"new":1}"#;
+        let Payload::Key(key) = serde_json::from_str::<Payload>(json).unwrap() else { panic!("not a key") };
+        assert_eq!((key.kind, key.origin, key.added_at, key.extra["new"].as_u64()), (KeyKind::Ed25519, KeyOrigin::Generated, 5, Some(1)));
+        assert!(!format!("{key:?}").contains("secret"));
 
         let json = r#"{"t":"identity","name":"Deploy","user":"deploy","key":"k1","password":"hunter2"}"#;
-        let Payload::Identity(identity) = serde_json::from_str::<Payload>(json).unwrap() else { panic!("keine Identität") };
+        let Payload::Identity(identity) = serde_json::from_str::<Payload>(json).unwrap() else { panic!("not an identity") };
         assert_eq!(identity.key.as_deref(), Some("k1"));
         assert!(!format!("{identity:?}").contains("hunter2"));
     }
 
     #[test]
     fn proxmox_connections_and_links_keep_what_they_do_not_know() {
-        let json = r#"{"t":"proxmox","name":"Dedi","address":"https://pve.example.de:8006","tokenId":"glowport@pve!glowport","secret":"0c6f2c1e","fingerprint":"5F:1A","neu":1}"#;
-        let Payload::Proxmox(connection) = serde_json::from_str::<Payload>(json).unwrap() else { panic!("keine Verbindung") };
-        assert_eq!((connection.token_id.as_str(), connection.fingerprint.as_deref(), connection.extra["neu"].as_u64()), ("glowport@pve!glowport", Some("5F:1A"), Some(1)));
+        let json = r#"{"t":"proxmox","name":"Dedi","address":"https://pve.example.de:8006","tokenId":"glowport@pve!glowport","secret":"0c6f2c1e","fingerprint":"5F:1A","new":1}"#;
+        let Payload::Proxmox(connection) = serde_json::from_str::<Payload>(json).unwrap() else { panic!("not a connection") };
+        assert_eq!((connection.token_id.as_str(), connection.fingerprint.as_deref(), connection.extra["new"].as_u64()), ("glowport@pve!glowport", Some("5F:1A"), Some(1)));
         assert!(!format!("{connection:?}").contains("0c6f2c1e"));
         let back: Value = serde_json::to_value(Payload::Proxmox(connection)).unwrap();
-        assert_eq!((back["t"].as_str(), back["tokenId"].as_str(), back["neu"].as_u64()), (Some("proxmox"), Some("glowport@pve!glowport"), Some(1)));
+        assert_eq!((back["t"].as_str(), back["tokenId"].as_str(), back["new"].as_u64()), (Some("proxmox"), Some("glowport@pve!glowport"), Some(1)));
 
         // The link on the host: without it nothing is in the record, with it unknown data stays too.
         assert!(serde_json::to_value(Payload::Host(host(Fields::default()))).unwrap().get("proxmox").is_none());
-        let json = r#"{"t":"host","name":"web","address":"10.0.0.1","proxmox":{"connection":"c1","node":"pve","vmid":101,"kind":"qemu","name":"web","spaeter":true}}"#;
-        let Payload::Host(linked) = serde_json::from_str::<Payload>(json).unwrap() else { panic!("kein Host") };
+        let json = r#"{"t":"host","name":"web","address":"10.0.0.1","proxmox":{"connection":"c1","node":"pve","vmid":101,"kind":"qemu","name":"web","later":true}}"#;
+        let Payload::Host(linked) = serde_json::from_str::<Payload>(json).unwrap() else { panic!("not a host") };
         let link = linked.proxmox.clone().unwrap();
         assert_eq!((link.vmid, link.kind.as_str(), link.name.as_deref(), link.address), (101, GUEST_QEMU, Some("web"), None));
-        assert_eq!(serde_json::to_value(Payload::Host(linked)).unwrap()["proxmox"]["spaeter"], true);
+        assert_eq!(serde_json::to_value(Payload::Host(linked)).unwrap()["proxmox"]["later"], true);
     }
 
     #[test]

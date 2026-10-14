@@ -318,7 +318,7 @@ Host *
 "#;
 
     fn host<'a>(draft: &'a Draft, name: &str) -> &'a DraftHost {
-        draft.hosts.iter().find(|h| h.name == name).unwrap_or_else(|| panic!("{name} fehlt"))
+        draft.hosts.iter().find(|h| h.name == name).unwrap_or_else(|| panic!("{name} missing"))
     }
 
     #[test]
@@ -351,7 +351,7 @@ Host *
 
         let old = host(&draft, "alt");
         assert_eq!(old.own.legacy, Some(true));
-        assert_eq!(old.own.jump, Jump::Host(0), "ssh -W ist ein Sprung-Server");
+        assert_eq!(old.own.jump, Jump::Host(0), "ssh -W is a jump host");
         assert_eq!((old.own.agent, old.own.agent_forward), (Some(true), Some(true)));
 
         let customer = host(&draft, "kunde");

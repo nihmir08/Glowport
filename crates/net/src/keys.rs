@@ -302,7 +302,7 @@ mod tests {
         for (text, passphrase, kind, bits, fingerprint) in cases {
             let key = import(text, passphrase).unwrap_or_else(|e| panic!("{fingerprint}: {e:?}"));
             assert_eq!((key.kind, key.bits, key.fingerprint.as_str()), (kind, bits, fingerprint));
-            assert_eq!(key.public.split(' ').count(), 2, "ohne Kommentar: {}", key.public);
+            assert_eq!(key.public.split(' ').count(), 2, "without comment: {}", key.public);
             // What ends up in the vault can be read again without passphrase and is the same key.
             let again = import(&key.private, None).unwrap();
             assert_eq!((again.fingerprint, again.public, again.comment.as_str()), (key.fingerprint, key.public, ""));
@@ -331,10 +331,10 @@ mod tests {
             assert_eq!(import(text, Some("falsch")).unwrap_err(), KeyError::WrongPassphrase);
         }
         // A superfluous passphrase does no harm.
-        assert!(import(OPENSSH, Some("unnötig")).is_ok());
-        assert_eq!(import("kein Schlüssel", None).unwrap_err(), KeyError::Unreadable);
-        assert_eq!(import("-----BEGIN OPENSSH PRIVATE KEY-----\nMüll\n-----END OPENSSH PRIVATE KEY-----\n", None).unwrap_err(), KeyError::Unreadable);
-        assert_eq!(import(&OPENSSH.replace("\n", "\r\n"), None).unwrap().comment, "ich@laptop", "Zeilenenden von Windows");
+        assert!(import(OPENSSH, Some("unneeded")).is_ok());
+        assert_eq!(import("not a key", None).unwrap_err(), KeyError::Unreadable);
+        assert_eq!(import("-----BEGIN OPENSSH PRIVATE KEY-----\njunk\n-----END OPENSSH PRIVATE KEY-----\n", None).unwrap_err(), KeyError::Unreadable);
+        assert_eq!(import(&OPENSSH.replace("\n", "\r\n"), None).unwrap().comment, "ich@laptop", "Windows line ends");
     }
 
     #[test]
@@ -384,24 +384,24 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
         std::fs::create_dir_all(home.join(".ssh")).unwrap();
         let Ok(probe) = run(&home, "true") else {
-            eprintln!("ohne sh im Pfad übersprungen");
+            eprintln!("skipped without sh in the path");
             return;
         };
         assert!(probe.status.success());
 
         // An existing file whose last line has no line ending.
         let file = home.join(".ssh").join("authorized_keys");
-        std::fs::write(&file, "ssh-rsa AAAAaltbestand vorher").unwrap();
+        std::fs::write(&file, "ssh-rsa AAAAexisting before").unwrap();
         let key = generate(Kind::Ed25519, 256).unwrap();
-        let command = install_command(&key.public, "Mein Schlüssel'; rm -rf ~").unwrap();
-        assert!(!command.contains("rm -rf"), "der Kommentar wird entschärft: {command}");
+        let command = install_command(&key.public, "My key'; rm -rf ~").unwrap();
+        assert!(!command.contains("rm -rf"), "the comment is defused: {command}");
 
         let first = run(&home, &command).unwrap();
         assert_eq!(install_outcome(&first.stdout), Some(Installed::Added), "{}", String::from_utf8_lossy(&first.stderr));
         let second = run(&home, &command).unwrap();
         assert_eq!(install_outcome(&second.stdout), Some(Installed::Present));
         let lines: Vec<String> = std::fs::read_to_string(&file).unwrap().lines().map(String::from).collect();
-        assert_eq!(lines, ["ssh-rsa AAAAaltbestand vorher".to_string(), format!("{} Mein_Schl_ssel___rm_-rf__", key.public)]);
+        assert_eq!(lines, ["ssh-rsa AAAAexisting before".to_string(), format!("{} My_key___rm_-rf__", key.public)]);
 
         // Without an existing folder the command creates it.
         std::fs::remove_dir_all(home.join(".ssh")).unwrap();
@@ -410,7 +410,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
 
         assert_eq!(install_outcome(b"sh: grep: not found\n"), None);
-        assert_eq!(install_command("kein Schluessel", "x").unwrap_err(), KeyError::Unreadable);
+        assert_eq!(install_command("not a key", "x").unwrap_err(), KeyError::Unreadable);
     }
 
     #[test]
@@ -420,11 +420,11 @@ mod tests {
         assert_eq!(inspect(&plain, None).unwrap().comment, "arbeit-2026");
         assert_eq!(import(&plain, None).unwrap().fingerprint, key.fingerprint);
 
-        let locked = export(&key.private, "arbeit-2026", Some("neu")).unwrap();
+        let locked = export(&key.private, "arbeit-2026", Some("new")).unwrap();
         assert!(inspect(&locked, None).unwrap().encrypted);
         assert_eq!(import(&locked, Some("falsch")).unwrap_err(), KeyError::WrongPassphrase);
-        let opened = import(&locked, Some("neu")).unwrap();
+        let opened = import(&locked, Some("new")).unwrap();
         assert_eq!((opened.fingerprint, opened.comment.as_str()), (key.fingerprint, "arbeit-2026"));
-        assert_eq!(export("kein Schlüssel", "x", None).unwrap_err(), KeyError::Unreadable);
+        assert_eq!(export("not a key", "x", None).unwrap_err(), KeyError::Unreadable);
     }
 }

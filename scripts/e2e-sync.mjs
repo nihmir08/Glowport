@@ -17,7 +17,7 @@ const SERVER_PORT = 18787;
 const EXTERNAL = process.env.GLOWPORT_E2E_SERVER;
 const SERVER = EXTERNAL ?? `http://127.0.0.1:${SERVER_PORT}`;
 const PW_ANNA = 'e2e-abgleich-anna';
-const PW_ANNA_NEU = 'e2e-abgleich-anna-neu';
+const PW_ANNA_NEU = 'e2e-sync-anna-new';
 const PW_BERT = 'e2e-abgleich-bert';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = [];
@@ -38,10 +38,10 @@ function startServer() {
     child.stdout.on('data', (chunk) => {
       text += String(chunk);
       const found = /Verwalter\): (\S+)/.exec(text);
-      if (found && text.includes('hört auf')) ok(found[1]);
+      if (found && text.includes('listening on')) ok(found[1]);
     });
     child.once('error', no);
-    setTimeout(() => no(new Error('Sync-Server meldet sich nicht')), 15_000);
+    setTimeout(() => no(new Error('Sync server does not report')), 15_000);
   });
   return { child, code };
 }
@@ -104,12 +104,12 @@ class Instance {
       } catch {}
       await sleep(250);
     }
-    throw new Error(`${this.name}: Debug-Schnittstelle nicht erreichbar`);
+    throw new Error(`${this.name}: debug interface not reachable`);
   }
 
   /** Runs code in the window; `invoke` calls the core's commands like the interface does. */
   async run(body) {
-    const timeout = new Promise((_, no) => setTimeout(() => no(new Error(`${this.name}: Schritt antwortet nicht (60 s)`)), 60_000));
+    const timeout = new Promise((_, no) => setTimeout(() => no(new Error(`${this.name}: step does not answer (60 s)`)), 60_000));
     const r = await Promise.race([this.send('Runtime.evaluate', { expression: `(async()=>{${HELPERS}${body}})()`, awaitPromise: true, returnByValue: true }), timeout]);
     if (r.exceptionDetails) throw new Error(`${this.name}: ${r.exceptionDetails.exception?.description ?? r.exceptionDetails.text}`);
     return r.result.value;
@@ -135,27 +135,27 @@ try {
   // ── A vault becomes an account ─────────────────────────────────────────────────────────────────────────
   await a.run(`await invoke('vault_create',{password:${J(PW_ANNA)}}); for (const n of ['web-01','db-01']) await invoke('host_save',{host:host(n)});`);
   const probe = await a.run(`return await invoke('sync_probe',{server:${J(SERVER + '/')}})`);
-  ok('m9 Der Server antwortet und wartet auf sein erstes Konto', probe.server === SERVER && probe.fresh === true, J(probe));
-  ok('m9 Ein falscher Code legt kein Konto an', (await a.run(`return await fails(invoke('sync_register',{request:{server:${J(SERVER)},code:'FALS-CHER-CODE',username:'anna',password:${J(PW_ANNA)},device:'PC'}}))`)) === 'code_invalid');
-  ok('m9 Ein falsches Master-Passwort auch nicht', (await a.run(`return await fails(invoke('sync_register',{request:{server:${J(SERVER)},code:${J(setupCode)},username:'anna',password:'falsch-falsch',device:'PC'}}))`)) === 'wrong_password');
+  ok('m9 The server answers and waits for its first account', probe.server === SERVER && probe.fresh === true, J(probe));
+  ok('m9 A wrong code creates no account', (await a.run(`return await fails(invoke('sync_register',{request:{server:${J(SERVER)},code:'FALS-CHER-CODE',username:'anna',password:${J(PW_ANNA)},device:'PC'}}))`)) === 'code_invalid');
+  ok('m9 Neither does a wrong master password', (await a.run(`return await fails(invoke('sync_register',{request:{server:${J(SERVER)},code:${J(setupCode)},username:'anna',password:'falsch-falsch',device:'PC'}}))`)) === 'wrong_password');
   const registered = await a.run(`return await invoke('sync_register',{request:{server:${J(SERVER)},code:${J(setupCode)},username:'anna',password:${J(PW_ANNA)},device:'PC'}})`);
-  ok('m9 Sync einrichten: verbunden, das erste Konto verwaltet den Server', registered.linked && registered.admin && registered.username === 'anna' && registered.server === SERVER, J({ ...registered, code: '…' }));
+  ok('m9 Set up sync: linked, the first account administers the server', registered.linked && registered.admin && registered.username === 'anna' && registered.server === SERVER, J({ ...registered, code: '…' }));
   const synced = await a.run(`return await until(async()=>{const s=await invoke('sync_state'); return s.phase==='synced' && s.pending===0 && s.syncedAt ? s : null}, 15000)`);
-  ok('m9 Der erste Abgleich läuft durch, nichts wartet mehr', !!synced, J(synced && { phase: synced.phase, pending: synced.pending }));
-  ok('m9 Der eigene Sicherheitscode hat sechs Wörter', synced?.code.split(' · ').length === 6, synced?.code);
+  ok('m9 The first sync runs through, nothing waits any more', !!synced, J(synced && { phase: synced.phase, pending: synced.pending }));
+  ok('m9 Our own safety code has six words', synced?.code.split(' · ').length === 6, synced?.code);
   ok('m9 Die Statusleiste zeigt „Abgeglichen“', await a.run(`return !!(await until(()=>q('.st .st-x .sdot.synced')))`));
 
   // ── Second device: only user name and master password ─────────────────────────────────────────────────
-  ok('m9 Mit Konto anmelden: falsches Passwort wird abgelehnt', (await b.run(`return await fails(invoke('sync_login',{request:{server:${J(SERVER)},username:'anna',password:'falsch-falsch',device:'Laptop'}}))`)) === 'unauthorized');
+  ok('m9 Sign in with account: a wrong password is rejected', (await b.run(`return await fails(invoke('sync_login',{request:{server:${J(SERVER)},username:'anna',password:'falsch-falsch',device:'Laptop'}}))`)) === 'unauthorized');
   // From here on through the real start screen, the way a human does it.
   const wrongAddress = await b.run(`
     (await until(()=>qa('.linkbtn').at(-1))).click();
     await until(()=>q('form.setup'));
-    type(qa('form.setup input')[0],'gibt-es-nicht.invalid');
+    type(qa('form.setup input')[0],'does-not-exist.invalid');
     await wait(150);
     qa('form.setup input')[0].dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
     return await until(()=>q('.setup-server + .errline')?.textContent, 15000)`);
-  ok('m9 Startbildschirm: Eine Adresse ohne Sync-Server wird bei der Adresse gemeldet, die Eingabetaste genügt', wrongAddress === 'Der Sync-Server ist nicht erreichbar.', J(wrongAddress));
+  ok('m9 Start screen: an address without a sync server is reported at the address, Enter is enough', wrongAddress === 'Der Sync-Server ist nicht erreichbar.', J(wrongAddress));
   const joined = await b.run(`
     const fields=()=>qa('form.setup input');
     type(fields()[0],${J(SERVER)}); type(fields()[1],'anna'); type(fields()[2],${J(PW_ANNA)}); type(fields()[3],'Laptop');
@@ -168,46 +168,46 @@ try {
     let least = 2; const end = Date.now()+3000;
     while (Date.now()<end) { least = Math.min(least, qa('.host').length); await wait(20); }
     return { gone, opened, arrived, least, names: await hostNames() }`);
-  ok('m9 Mit Konto anmelden: Der Tresor des zweiten Geräts entsteht aus dem Konto', joined.opened && joined.gone, J(joined));
-  ok('m9 Das zweite Gerät zeigt die Hosts des ersten, und sie bleiben stehen', joined.arrived && joined.least === 2 && J(joined.names) === J(['db-01', 'web-01']), J(joined));
-  ok('m9 Seine Oberfläche zeigt den offenen Tresor', await b.run(`return !!(await until(()=>q('.nav')))`));
+  ok('m9 Sign in with account: the second device's vault is created from the account', joined.opened && joined.gone, J(joined));
+  ok('m9 The second device shows the first one's hosts, and they stay', joined.arrived && joined.least === 2 && J(joined.names) === J(['db-01', 'web-01']), J(joined));
+  ok('m9 Its interface shows the open vault', await b.run(`return !!(await until(()=>q('.nav')))`));
 
   // ── Changes arrive by themselves ──────────────────────────────────────────────────────────────────────
   const started = Date.now();
-  const added = await a.run(`return (await invoke('host_save',{host:host('neu-von-a')})).id`);
-  const seen = await b.run(`return await until(async()=>(await hostNames()).includes('neu-von-a'), 15000)`);
-  ok('m9 Ein neuer Host erscheint auf dem anderen Gerät, ohne dass dort jemand etwas tut', seen === true, `${Date.now() - started} ms`);
+  const added = await a.run(`return (await invoke('host_save',{host:host('new-from-a')})).id`);
+  const seen = await b.run(`return await until(async()=>(await hostNames()).includes('new-from-a'), 15000)`);
+  ok('m9 A new host appears on the other device without anyone doing anything there', seen === true, `${Date.now() - started} ms`);
   await b.run(`await invoke('host_delete',{id:${J(added)}})`);
-  ok('m9 Löschen kommt genauso zurück', (await a.run(`return await until(async()=>!(await hostNames()).includes('neu-von-a'), 15000)`)) === true);
+  ok('m9 Deletion comes back the same way', (await a.run(`return await until(async()=>!(await hostNames()).includes('new-from-a'), 15000)`)) === true);
   const devices = await a.run(`return (await invoke('sync_devices')).map(d=>[d.name,d.current])`);
-  ok('m9 Die Geräteliste nennt beide Geräte mit Namen', J(devices) === J([['PC', true], ['Laptop', false]]), J(devices));
+  ok('m9 The device list names both devices', J(devices) === J([['PC', true], ['Laptop', false]]), J(devices));
 
   // ── Second account via an invitation code ─────────────────────────────────────────────────────────────
   await c.run(`await invoke('vault_create',{password:${J(PW_BERT)}}); await invoke('host_save',{host:host('berts-server')});`);
-  ok('m9 Ohne Code kein zweites Konto', (await c.run(`return await fails(invoke('sync_register',{request:{server:${J(SERVER)},code:${J(setupCode)},username:'bert',password:${J(PW_BERT)},device:'Berts PC'}}))`)) === 'code_invalid');
+  ok('m9 No second account without a code', (await c.run(`return await fails(invoke('sync_register',{request:{server:${J(SERVER)},code:${J(setupCode)},username:'bert',password:${J(PW_BERT)},device:'Berts PC'}}))`)) === 'code_invalid');
   const invite = await a.run(`return (await invoke('admin_invite_create')).at(-1).code`);
-  ok('m9 Der Verwalter erzeugt einen Einladungscode', /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(invite), invite);
+  ok('m9 The administrator creates an invitation code', /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(invite), invite);
   // “New account” in the window: this device's master password is meant, and the form says so.
   const form = await c.run(`
     qa('.nv').at(-2).click();
     await until(()=>q('form.setup'));
     const fields=()=>qa('form.setup input');
-    type(fields()[0],${J(SERVER)}); type(fields()[1],'bert'); type(fields()[2],${J(invite)}); type(fields()[3],'ein-ganz-anderes-passwort');
+    type(fields()[0],${J(SERVER)}); type(fields()[1],'bert'); type(fields()[2],${J(invite)}); type(fields()[3],'a-completely-different-password');
     await wait(150);
     q('form.setup button[type=submit]').click();
     const error = await until(()=>qa('form.setup .errline').at(-1)?.textContent, 15000);
     return { labels: qa('form.setup .fld-l').map(e=>e.textContent), error, linked: (await invoke('sync_state')).linked }`);
-  ok('m9 „Neues Konto“ nennt das Passwort beim Namen und erklärt ein falsches', form.labels.includes('Master-Passwort dieses Geräts') && form.error.startsWith('Das ist nicht das Master-Passwort dieses Geräts') && form.linked === false, J(form));
+  ok('m9 “New account” names the password and explains a wrong one', form.labels.includes('Master-Passwort dieses Geräts') && form.error.startsWith('Das ist nicht das Master-Passwort dieses Geräts') && form.linked === false, J(form));
   const bert = await c.run(`return await invoke('sync_register',{request:{server:${J(SERVER)},code:${J(invite)},username:'bert',password:${J(PW_BERT)},device:'Berts PC'}})`);
-  ok('m9 Mit dem Code entsteht das zweite Konto, ohne Verwaltung', bert.linked && !bert.admin, J({ linked: bert.linked, admin: bert.admin }));
-  ok('m9 Es darf keine Codes erzeugen', (await c.run(`return await fails(invoke('admin_invite_create'))`)) === 'not_admin');
+  ok('m9 With the code the second account is created, without administration', bert.linked && !bert.admin, J({ linked: bert.linked, admin: bert.admin }));
+  ok('m9 It may not create codes', (await c.run(`return await fails(invoke('admin_invite_create'))`)) === 'not_admin');
   const accounts = await a.run(`return (await invoke('admin_accounts')).map(x=>[x.username,x.admin,x.devices])`);
   ok('m9 Der Verwalter sieht beide Konten', J(accounts) === J([['anna', true, 2], ['bert', false, 1]]), J(accounts));
 
   // ── Geteilter Tresor: einladen, annehmen, Rollen ──────────────────────────────────────────────────────
   const team = await a.run(`return await invoke('shared_create',{name:'Team Infra'})`);
   const candidate = await a.run(`return await invoke('shared_lookup',{username:'bert'})`);
-  ok('m9 Konto suchen zeigt den Sicherheitscode des anderen', candidate.username === 'bert' && candidate.known === 'new' && candidate.code === bert.code, J(candidate));
+  ok('m9 Looking up an account shows the other's safety code', candidate.username === 'bert' && candidate.known === 'new' && candidate.code === bert.code, J(candidate));
   await a.run(`await invoke('shared_invite',{vault:${J(team)},account:${J(candidate.account)},role:'read'})`);
   const invited = await a.run(`const v=(await snapshot()).vaults.find(v=>v.id===${J(team)}); return v && [v.name, v.role, v.members.map(m=>[m.name,m.role,m.invited,m.me])]`);
   ok('m9 Der Tresor nennt die Mitglieder; der Eingeladene gilt als eingeladen', J(invited) === J(['Team Infra', 'owner', [['anna', 'owner', false, true], ['bert', 'read', true, false]]]), J(invited));

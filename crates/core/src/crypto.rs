@@ -21,10 +21,10 @@ pub type Key = Zeroizing<[u8; KEY_LEN]>;
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum CryptoError {
-    #[error("Schlüsselableitung fehlgeschlagen")]
+    #[error("Key derivation failed")]
     Kdf,
     /// Wrong key or altered data; the two cannot be told apart from outside.
-    #[error("Entschlüsseln fehlgeschlagen")]
+    #[error("Decryption failed")]
     Decrypt,
 }
 
@@ -77,14 +77,14 @@ pub fn derive_master_key(password: &[u8], salt: &[u8; SALT_LEN], params: KdfPara
 /// Subkey for exactly one purpose. No subkey can be computed from another.
 pub fn derive_subkey(master: &Key, info: &[u8]) -> Key {
     let mut key = Zeroizing::new([0u8; KEY_LEN]);
-    Hkdf::<Sha256>::new(None, master.as_ref()).expand(info, key.as_mut()).expect("32 Byte sind für HKDF-SHA-256 immer zulässig");
+    Hkdf::<Sha256>::new(None, master.as_ref()).expand(info, key.as_mut()).expect("32 bytes are always valid for HKDF-SHA-256");
     key
 }
 
 /// Key from a negotiated secret (X25519). The salt binds it to the public keys involved.
 pub fn derive_shared(secret: &[u8], salt: &[u8], info: &[u8]) -> Key {
     let mut key = Zeroizing::new([0u8; KEY_LEN]);
-    Hkdf::<Sha256>::new(Some(salt), secret).expand(info, key.as_mut()).expect("32 Byte sind für HKDF-SHA-256 immer zulässig");
+    Hkdf::<Sha256>::new(Some(salt), secret).expand(info, key.as_mut()).expect("32 bytes are always valid for HKDF-SHA-256");
     key
 }
 
@@ -132,7 +132,7 @@ pub fn seal(key: &Key, aad: &[u8], plaintext: &[u8]) -> Sealed {
 pub fn seal_with_nonce(key: &Key, nonce: &[u8; NONCE_LEN], aad: &[u8], plaintext: &[u8]) -> Vec<u8> {
     XChaCha20Poly1305::new(key.as_ref().into())
         .encrypt(XNonce::from_slice(nonce), Payload { msg: plaintext, aad })
-        .expect("Datensätze sind weit kleiner als die Grenze des Verfahrens")
+        .expect("records are far smaller than the algorithm's limit")
 }
 
 pub fn open(key: &Key, nonce: &[u8], aad: &[u8], ciphertext: &[u8]) -> Result<Zeroizing<Vec<u8>>, CryptoError> {
@@ -185,17 +185,17 @@ mod tests {
         let sealed = seal(&key, b"zweck", b"geheim");
         assert_eq!(open(&key, &sealed.nonce, b"zweck", &sealed.ciphertext).unwrap().as_slice(), b"geheim");
 
-        assert_eq!(open(&random_key(), &sealed.nonce, b"zweck", &sealed.ciphertext), Err(CryptoError::Decrypt), "anderer Schlüssel");
+        assert_eq!(open(&random_key(), &sealed.nonce, b"zweck", &sealed.ciphertext), Err(CryptoError::Decrypt), "different key");
         assert_eq!(open(&key, &sealed.nonce, b"anderer zweck", &sealed.ciphertext), Err(CryptoError::Decrypt), "andere Angaben");
         assert_eq!(open(&key, &sealed.nonce[..23], b"zweck", &sealed.ciphertext), Err(CryptoError::Decrypt), "kurze Nonce");
         for i in 0..sealed.ciphertext.len() {
             let mut changed = sealed.ciphertext.clone();
             changed[i] ^= 1;
-            assert_eq!(open(&key, &sealed.nonce, b"zweck", &changed), Err(CryptoError::Decrypt), "Byte {i} verändert");
+            assert_eq!(open(&key, &sealed.nonce, b"zweck", &changed), Err(CryptoError::Decrypt), "byte {i} changed");
         }
         let mut nonce = sealed.nonce;
         nonce[0] ^= 1;
-        assert_eq!(open(&key, &nonce, b"zweck", &sealed.ciphertext), Err(CryptoError::Decrypt), "Nonce verändert");
+        assert_eq!(open(&key, &nonce, b"zweck", &sealed.ciphertext), Err(CryptoError::Decrypt), "nonce changed");
     }
 
     #[test]

@@ -220,8 +220,8 @@ unlesbar
         assert_eq!(cpu_between(&before, &after, 300), Some(50.0));
         assert_eq!(cpu_between(&before, &after, 301), Some(200.0));
         assert_eq!(cpu_between(&before, &after, 1), Some(0.0));
-        assert_eq!(cpu_between(&before, &after, 4711), None, "den gab es nicht");
-        assert_eq!(cpu_between(&before, &before, 300), None, "keine Zeit vergangen");
+        assert_eq!(cpu_between(&before, &after, 4711), None, "that one did not exist");
+        assert_eq!(cpu_between(&before, &before, 300), None, "no time passed");
         // The same number, assigned anew: shorter run time.
         let reused = parse(&later.replace("     125 nginx", "       2 nginx")).unwrap();
         assert_eq!(cpu_between(&before, &reused, 300), None);
@@ -231,7 +231,7 @@ unlesbar
     fn a_server_without_the_list_says_so() {
         assert_eq!(parse(""), None);
         assert_eq!(parse("@clock\n@mem\n@ps\n@stat\n"), None);
-        assert_eq!(parse("@clock\n0\n1.0 1.0\n@ps\n"), None, "ohne Takt lässt sich nichts rechnen");
+        assert_eq!(parse("@clock\n0\n1.0 1.0\n@ps\n"), None, "without the clock rate nothing can be computed");
         // BusyBox: the clock exists, `ps` does not know the columns.
         assert_eq!(parse("@clock\n100\n5.00 5.00\n@mem\n@ps\n@stat\n").map(|s| s.processes.len()), Some(0));
     }

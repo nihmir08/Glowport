@@ -1,6 +1,6 @@
 [package]
 name = "glowport-testserver"
-description = "Kleiner SSH-Server für die Tests von Glowport. Nicht Teil des Programms."
+description = "Small SSH server for Glowport's tests. Not part of the program."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

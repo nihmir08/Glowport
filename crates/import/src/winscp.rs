@@ -176,10 +176,10 @@ mod tests {
 
     #[test]
     fn reveals_stored_passwords() {
-        let hidden = hide("geheim-äöü", "web123ssh.kunde-a.example", 7);
-        assert_eq!(reveal(&hidden, "web123ssh.kunde-a.example").as_deref(), Some("geheim-äöü"));
-        assert_eq!(reveal(&hidden, "andererssh.kunde-a.example"), None, "gehört zu einer anderen Sitzung");
-        assert_eq!(reveal("kein hex", "x"), None);
+        let hidden = hide("secret-äöü", "web123ssh.kunde-a.example", 7);
+        assert_eq!(reveal(&hidden, "web123ssh.kunde-a.example").as_deref(), Some("secret-äöü"));
+        assert_eq!(reveal(&hidden, "andererssh.kunde-a.example"), None, "belongs to another session");
+        assert_eq!(reveal("not hex", "x"), None);
         assert_eq!(reveal("A3", "x"), None);
         // Old form without marker: the first number is the length right away.
         let old: String = [3u8, 0, b'a', b'b', b'c'].iter().map(|b| format!("{:02X}", !(b ^ MAGIC))).collect();
@@ -233,8 +233,8 @@ mod tests {
             ]
         );
         assert_eq!(draft.hosts[0].password.as_ref().map(|p| p.expose()), Some("ftp-kennwort"));
-        assert!(draft.hosts[1].password.is_none() && !draft.hosts[1].password_lost, "ein anonymer Host hält kein Passwort");
-        assert!(draft.hosts.iter().all(|h| h.notes.is_empty()), "WinSCP nennt die Verschlüsselung; es gibt nichts zu prüfen");
+        assert!(draft.hosts[1].password.is_none() && !draft.hosts[1].password_lost, "an anonymous host holds no password");
+        assert!(draft.hosts.iter().all(|h| h.notes.is_empty()), "WinSCP names the encryption; there is nothing to check");
         assert_eq!(draft.groups.len(), 1);
         assert_eq!(draft.skipped.iter().map(|s| (s.name.as_str(), s.reason)).collect::<Vec<_>>(), [("wolke", "protocol_other")]);
     }

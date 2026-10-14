@@ -1,6 +1,6 @@
 [package]
 name = "glowport-import"
-description = "Liest, was andere Programme an Verbindungen gespeichert haben. Kennt weder Dateien noch Registry noch Tresor."
+description = "Reads the connections other programs have saved. Knows neither files nor registry nor vault."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

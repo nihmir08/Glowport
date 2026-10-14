@@ -595,11 +595,11 @@ mod tests {
                 data[usize::from(y) * stride + usize::from(x) * 4..][..4].copy_from_slice(&[x as u8, y as u8, 0, 0xff]);
             }
         }
-        let Some(Event::Region { x, y, width: w, height: h, pixels }) = cut(&data, stride, width, height, &InclusiveRectangle { left: 1, top: 1, right: 2, bottom: 2 }) else { panic!("kein Bereich") };
+        let Some(Event::Region { x, y, width: w, height: h, pixels }) = cut(&data, stride, width, height, &InclusiveRectangle { left: 1, top: 1, right: 2, bottom: 2 }) else { panic!("no region") };
         assert_eq!((x, y, w, h), (1, 1, 2, 2));
         assert_eq!(pixels.chunks(4).map(|p| (p[0], p[1])).collect::<Vec<_>>(), [(1, 1), (2, 1), (1, 2), (2, 2)]);
         // If a region sticks out of the picture, it is clipped; if it lies completely outside, there is none.
-        let Some(Event::Region { width: w, height: h, .. }) = cut(&data, stride, width, height, &InclusiveRectangle { left: 3, top: 2, right: 90, bottom: 90 }) else { panic!("kein Bereich") };
+        let Some(Event::Region { width: w, height: h, .. }) = cut(&data, stride, width, height, &InclusiveRectangle { left: 3, top: 2, right: 90, bottom: 90 }) else { panic!("no region") };
         assert_eq!((w, h), (1, 1));
         assert!(cut(&data, stride, width, height, &InclusiveRectangle { left: 4, top: 0, right: 9, bottom: 0 }).is_none());
         assert!(cut(&data[..10], stride, width, height, &InclusiveRectangle { left: 0, top: 0, right: 3, bottom: 2 }).is_none());

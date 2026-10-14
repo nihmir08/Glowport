@@ -338,29 +338,29 @@ mod tests {
     #[test]
     fn the_list_puts_together_what_three_commands_say() {
         let Listing::Containers(list) = parse(&sample()) else { panic!("abgelehnt") };
-        assert_eq!(list.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["db", "web", "alt", "Neu"], "Laufende zuerst, dann nach Namen");
+        assert_eq!(list.iter().map(|c| c.name.as_str()).collect::<Vec<_>>(), ["db", "web", "alt", "Neu"], "running ones first, then by name");
 
         let web = &list[1];
         assert_eq!((web.id.as_str(), web.image.as_str(), web.state, web.health), (WEB, "nginx:1.27", State::Running, Some(Health::Healthy)));
-        assert_eq!(web.ports, ["8080->80/tcp", "8443->443/tcp"], "ohne Adresse, je Paar einmal, nur Veröffentlichtes");
+        assert_eq!(web.ports, ["8080->80/tcp", "8443->443/tcp"], "without address, once per pair, only published ones");
         // 1791752000 is 2026-10-11 20:53:20 UTC: 36 seconds after the start.
         assert_eq!((web.since, web.exit_code, web.cpu, web.memory), (Some(36), None, Some(0.07), Some((13_107_200, 8_160_437_862))));
 
         let db = &list[0];
-        assert_eq!((db.health, db.ports.len(), db.since, db.cpu, db.memory), (None, 0, Some(0), Some(153.2), Some((1_200_000_000, 2_000_000_000))), "Zeit mit Zone, mehr als ein Kern");
+        assert_eq!((db.health, db.ports.len(), db.since, db.cpu, db.memory), (None, 0, Some(0), Some(153.2), Some((1_200_000_000, 2_000_000_000))), "time with zone, more than one core");
 
         let old = &list[2];
-        assert_eq!((old.state, old.since, old.exit_code, old.cpu, old.memory), (State::Exited, Some(0), Some(137), None, None), "beendet: seit dem Ende, keine Auslastung");
+        assert_eq!((old.state, old.since, old.exit_code, old.cpu, old.memory), (State::Exited, Some(0), Some(137), None, None), "exited: since the end, no load");
         assert_eq!(old.image, "registry.example.de:5000/team/job@sha256:abc");
 
         let new = &list[3];
-        assert_eq!((new.state, new.since, new.exit_code), (State::Created, None, None), "nie gestartet");
+        assert_eq!((new.state, new.since, new.exit_code), (State::Created, None, None), "never started");
     }
 
     #[test]
     fn a_refusal_and_an_empty_host_are_told_apart() {
         let refused = "@error\npermission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Get \"http://%2Fvar%2Frun%2Fdocker.sock/v1.47/containers/json?all=1\": dial unix /var/run/docker.sock: connect: permission denied\n";
-        let Listing::Refused(text) = parse(refused) else { panic!("nicht abgelehnt") };
+        let Listing::Refused(text) = parse(refused) else { panic!("not refused") };
         assert_eq!(super::super::verdict(false, &text, As::User), super::super::Verdict::NeedsRoot);
         assert_eq!(parse("@error\nsudo: a password is required\n"), Listing::Refused("sudo: a password is required".into()));
         // Docker runs but has no container.
@@ -382,7 +382,7 @@ mod tests {
             assert_eq!(timestamp(never), None, "{never}");
         }
         assert_eq!((size("0B"), size("512B"), size("1.5kB"), size("12.5MiB"), size(" 7.6GiB ")), (Some(0), Some(512), Some(1500), Some(13_107_200), Some(8_160_437_862)));
-        assert_eq!((size("viel"), size("12"), size("3 Stück")), (None, None, None));
+        assert_eq!((size("lots"), size("12"), size("3 pieces")), (None, None, None));
     }
 
     #[test]
@@ -407,7 +407,7 @@ mod tests {
         // The script is in single quotes and contains none itself.
         assert_eq!(plain.matches('\'').count(), 2);
         let sudo = list_command(As::Sudo);
-        assert_eq!(sudo.matches("sudo -n -- docker").count(), 4, "jeder Aufruf von Docker mit sudo");
+        assert_eq!(sudo.matches("sudo -n -- docker").count(), 4, "every Docker call with sudo");
         assert_eq!(sudo.matches('\'').count(), 2);
     }
 }

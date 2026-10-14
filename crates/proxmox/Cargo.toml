@@ -1,6 +1,6 @@
 [package]
 name = "glowport-proxmox"
-description = "Zugriff auf die Schnittstelle von Proxmox VE: Maschinen auflisten, schalten, ihre Adresse herausfinden."
+description = "Access to the Proxmox VE API: list machines, switch them, find out their address."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

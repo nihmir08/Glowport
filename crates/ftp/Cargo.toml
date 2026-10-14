@@ -1,6 +1,6 @@
 [package]
 name = "glowport-ftp"
-description = "FTP und FTPS für den Dateimanager von Glowport. Kennt weder Tresor noch Oberfläche."
+description = "FTP and FTPS for Glowport's file manager. Knows neither vault nor interface."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

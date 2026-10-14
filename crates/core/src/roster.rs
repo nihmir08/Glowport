@@ -77,15 +77,15 @@ pub struct Roster {
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum RosterError {
-    #[error("Die Mitgliederliste ist unlesbar oder widerspricht sich")]
+    #[error("The member list is unreadable or contradicts itself")]
     Malformed,
-    #[error("Die Mitgliederliste gehört zu einem anderen Tresor")]
+    #[error("The member list belongs to another vault")]
     WrongVault,
-    #[error("Die Mitgliederliste trägt nicht die Signatur des Besitzers")]
+    #[error("The member list does not carry the owner's signature")]
     BadSignature,
-    #[error("Die Mitgliederliste ist älter als die bekannte")]
+    #[error("The member list is older than the known one")]
     Stale,
-    #[error("Rechte zu entziehen braucht einen Schlüsseltausch")]
+    #[error("Revoking rights needs a key rotation")]
     NeedsRotation,
 }
 
@@ -283,8 +283,8 @@ mod tests {
         let words: Vec<&str> = WORDS.lines().collect();
         let unique: std::collections::BTreeSet<&str> = words.iter().copied().collect();
         assert_eq!((words.len(), unique.len()), (512, 512));
-        assert!(words.iter().all(|w| w.len() >= 2 && w.bytes().all(|b| b.is_ascii_lowercase())), "nur Kleinbuchstaben ohne Umlaute: überall gleich zu lesen und zu tippen");
-        assert_eq!(crypto::hex(&Sha256::digest(WORDS.as_bytes())), "a52c086639c7e6e0cb1ffbc0295a66266cbb8b18d21efa15fdbe676c2ec7b059", "die Liste darf sich nie ändern");
+        assert!(words.iter().all(|w| w.len() >= 2 && w.bytes().all(|b| b.is_ascii_lowercase())), "only lowercase letters without umlauts: read and typed the same everywhere");
+        assert_eq!(crypto::hex(&Sha256::digest(WORDS.as_bytes())), "a52c086639c7e6e0cb1ffbc0295a66266cbb8b18d21efa15fdbe676c2ec7b059", "the list must never change");
         // Recomputed independently (Python: SHA-256 over the bound data, nine bits per word).
         assert_eq!(safety_code(&[1; 32], &[2; 32]), "wiese · krabbe · wippe · hahn · holz · drossel");
         assert_ne!(safety_code(&[1; 32], &[2; 32]), safety_code(&[1; 32], &[3; 32]));
@@ -320,15 +320,15 @@ mod tests {
         let blob = sign(&first, None, &key(1)).unwrap();
         assert_eq!(verify(&blob, &VAULT, None).unwrap(), first);
         assert_eq!(verify(&blob, &[8; 16], None), Err(RosterError::WrongVault));
-        assert_eq!(sign(&first, None, &key(2)), Err(RosterError::BadSignature), "ein Mitglied ist nicht der Besitzer");
+        assert_eq!(sign(&first, None, &key(2)), Err(RosterError::BadSignature), "a member is not the owner");
         for i in [0, SIGNATURE_LEN + 3, blob.len() - 2] {
             let mut changed = blob.clone();
             changed[i] ^= 1;
-            assert!(verify(&changed, &VAULT, None).is_err(), "Byte {i} verändert");
+            assert!(verify(&changed, &VAULT, None).is_err(), "byte {i} changed");
         }
         assert!(first.may_write(&key(1).verifying_key().to_bytes()));
-        assert!(!first.may_write(&key(2).verifying_key().to_bytes()), "Leserecht schreibt nicht");
-        assert!(!first.may_write(&key(3).verifying_key().to_bytes()), "kein Mitglied");
+        assert!(!first.may_write(&key(2).verifying_key().to_bytes()), "read access does not write");
+        assert!(!first.may_write(&key(3).verifying_key().to_bytes()), "not a member");
     }
 
     /// The server cannot add itself: a new list only counts with the previous owner's signature.
@@ -338,7 +338,7 @@ mod tests {
         let second = roster(2, vec![member(1, Role::Owner), member(2, Role::Read), member(3, Role::Write)]);
         let blob = sign(&second, Some(&first), &key(1)).unwrap();
         assert_eq!(verify(&blob, &VAULT, Some(&first)).unwrap(), second);
-        assert_eq!(verify(&blob, &VAULT, Some(&second)), Err(RosterError::Stale), "dieselbe Nummer noch einmal");
+        assert_eq!(verify(&blob, &VAULT, Some(&second)), Err(RosterError::Stale), "the same number again");
 
         // An attacker names themselves owner and signs accordingly.
         let forged = roster(3, vec![member(9, Role::Owner), member(1, Role::Read)]);
@@ -349,7 +349,7 @@ mod tests {
         older.epoch = 1;
         let mut newer = second.clone();
         newer.epoch = 2;
-        assert_eq!(sign(&older, Some(&newer), &key(1)), Err(RosterError::Stale), "Schlüsselstand geht nicht zurück");
+        assert_eq!(sign(&older, Some(&newer), &key(1)), Err(RosterError::Stale), "the key epoch does not go back");
     }
 
     #[test]
@@ -362,8 +362,8 @@ mod tests {
 
         let mut handed = first.clone();
         handed.version = 2;
-        assert_eq!(hand_over(&mut handed.clone(), &public(2), &key(3)), Err(RosterError::BadSignature), "nur der Besitzer übergibt");
-        assert_eq!(hand_over(&mut handed.clone(), &public(9), &key(1)), Err(RosterError::Malformed), "nur an ein Mitglied");
+        assert_eq!(hand_over(&mut handed.clone(), &public(2), &key(3)), Err(RosterError::BadSignature), "only the owner hands over");
+        assert_eq!(hand_over(&mut handed.clone(), &public(9), &key(1)), Err(RosterError::Malformed), "only to a member");
         hand_over(&mut handed, &public(2), &key(1)).unwrap();
         assert_eq!(handed.members.iter().map(|m| m.role).collect::<Vec<_>>(), [Role::Write, Role::Owner, Role::Read]);
         let blob = sign(&handed, Some(&first), &key(1)).unwrap();
@@ -377,7 +377,7 @@ mod tests {
         let blob = sign(&third, Some(&handed), &key(2)).unwrap();
         verify(&blob, &VAULT, Some(&first)).unwrap();
         verify(&blob, &VAULT, None).unwrap();
-        assert_eq!(sign(&third, Some(&handed), &key(1)), Err(RosterError::BadSignature), "die frühere Besitzerin signiert nichts mehr");
+        assert_eq!(sign(&third, Some(&handed), &key(1)), Err(RosterError::BadSignature), "the former owner signs nothing any more");
 
         // A transfer can neither be left out nor rewritten.
         let mut stripped = third.clone();
@@ -405,10 +405,10 @@ mod tests {
     #[test]
     fn contradictory_rosters_are_refused() {
         let cases = [
-            ("kein Besitzer", roster(1, vec![member(1, Role::Write)])),
+            ("no owner", roster(1, vec![member(1, Role::Write)])),
             ("zwei Besitzer", roster(1, vec![member(1, Role::Owner), member(2, Role::Owner)])),
-            ("Konto doppelt", roster(1, vec![member(1, Role::Owner), member(1, Role::Read)])),
-            ("leer", roster(1, vec![])),
+            ("account twice", roster(1, vec![member(1, Role::Owner), member(1, Role::Read)])),
+            ("empty", roster(1, vec![])),
             ("Nummer null", roster(0, vec![member(1, Role::Owner)])),
         ];
         for (what, roster) in cases {

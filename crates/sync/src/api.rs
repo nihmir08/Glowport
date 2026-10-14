@@ -122,7 +122,7 @@ impl Api {
     fn url(&self, segments: &[&str]) -> Url {
         let mut url = self.base.clone();
         // The address ends in `/`; the empty last segment is dropped before the own ones are appended.
-        url.path_segments_mut().expect("http und https haben immer einen Pfad").pop_if_empty().push("v1").extend(segments);
+        url.path_segments_mut().expect("http and https always have a path").pop_if_empty().push("v1").extend(segments);
         url
     }
 
@@ -295,7 +295,7 @@ mod tests {
 
         let api = Api::new("https://example.com/glowport").unwrap();
         assert_eq!(api.url(&["vaults", "ab", "records"]).as_str(), "https://example.com/glowport/v1/vaults/ab/records");
-        assert_eq!(api.url(&["keys", "a/b c"]).as_str(), "https://example.com/glowport/v1/keys/a%2Fb%20c", "ein Name bleibt ein Stück des Pfads");
+        assert_eq!(api.url(&["keys", "a/b c"]).as_str(), "https://example.com/glowport/v1/keys/a%2Fb%20c", "a name stays one piece of the path");
         assert_eq!(api.live(), ("example.com".into(), 443, true, "wss://example.com/glowport/v1/live".into()));
         assert_eq!(Api::new("http://127.0.0.1:8787").unwrap().live(), ("127.0.0.1".into(), 8787, false, "ws://127.0.0.1:8787/v1/live".into()));
     }

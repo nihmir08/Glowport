@@ -63,7 +63,7 @@ impl Running {
             }
             std::thread::sleep(Duration::from_millis(50));
         }
-        panic!("nicht im Protokoll: {text}\n{}", self.log.lock().unwrap().join("\n"));
+        panic!("not in the log: {text}\n{}", self.log.lock().unwrap().join("\n"));
     }
 }
 
@@ -87,11 +87,11 @@ fn start(data: &Path, extra: &[&str]) -> Running {
         let line = line.unwrap();
         banner.push_str(&line);
         banner.push('\n');
-        if line.contains("hört auf") {
+        if line.contains("listening on") {
             break;
         }
     }
-    assert!(banner.contains("hört auf"), "der Server ist nicht gestartet: {banner}");
+    assert!(banner.contains("listening on"), "the server did not start: {banner}");
     let log: Arc<Mutex<Vec<String>>> = Arc::default();
     let sink = log.clone();
     std::thread::spawn(move || lines.map_while(Result::ok).for_each(|line| sink.lock().unwrap().push(line)));
@@ -119,58 +119,58 @@ fn connect(port: u16) -> TcpStream {
 
 #[test]
 fn commands_as_typed_on_the_server() {
-    let data = Temp::new("befehle");
+    let data = Temp::new("commands");
     let dir = &data.0;
 
     // A command does not create a data store: in the wrong folder it says so instead of inventing an empty server.
     let (ok, out, err) = run(dir, &["invite"]);
-    assert!(!ok && out.is_empty() && err.contains("Kein Datenbestand") && !dir.join("sync.db").exists(), "{err}");
+    assert!(!ok && out.is_empty() && err.contains("No server data") && !dir.join("sync.db").exists(), "{err}");
     drop(start(dir, &[]));
 
-    assert_eq!(run(dir, &["accounts"]), (true, "Noch kein Konto.\n".into(), String::new()));
+    assert_eq!(run(dir, &["accounts"]), (true, "No account yet.\n".into(), String::new()));
     let (ok, out, _) = run(dir, &["invite"]);
-    let code = out.lines().next().and_then(|line| line.strip_prefix("Einladungscode: ")).expect("Einladungscode in der Ausgabe").to_string();
-    assert!(ok && code.len() >= 8 && out.contains("Gilt einmal, bis 20"), "{out}");
+    let code = out.lines().next().and_then(|line| line.strip_prefix("Invitation code: ")).expect("invitation code in the output").to_string();
+    assert!(ok && code.len() >= 8 && out.contains("Valid once, until 20"), "{out}");
     assert!(run(dir, &["invites"]).1.starts_with(&code));
     // When typing it in, lower case is allowed.
-    assert_eq!(run(dir, &["revoke", &code.to_lowercase()]), (true, "Einladungscode widerrufen.\n".into(), String::new()));
-    assert_eq!(run(dir, &["invites"]).1, "Keine offenen Einladungscodes.\n");
+    assert_eq!(run(dir, &["revoke", &code.to_lowercase()]), (true, "Invitation code revoked.\n".into(), String::new()));
+    assert_eq!(run(dir, &["invites"]).1, "No open invitation codes.\n");
     let (ok, _, err) = run(dir, &["revoke", &code]);
-    assert!(!ok && err.contains("gibt es nicht"), "{err}");
+    assert!(!ok && err.contains("There is no open invitation code"), "{err}");
 
     for command in ["disable", "enable", "delete", "admin", "noadmin"] {
-        let (ok, out, err) = run(dir, &[command, "niemand"]);
-        assert!(!ok && out.is_empty() && err.contains("Ein Konto „niemand“ gibt es nicht"), "{command}: {err}");
+        let (ok, out, err) = run(dir, &[command, "nobody"]);
+        assert!(!ok && out.is_empty() && err.contains("There is no account “nobody”"), "{command}: {err}");
     }
 
     // The backup is a complete database and overwrites nothing.
-    let copy = dir.join("sicherung.db");
+    let copy = dir.join("backup.db");
     assert!(run(dir, &["backup", copy.to_str().unwrap()]).0);
     assert!(std::fs::read(&copy).unwrap().starts_with(b"SQLite format 3"));
     assert!(!run(dir, &["backup", copy.to_str().unwrap()]).0);
 
     // Mistyped: an explanation instead of a start.
-    for args in [&["quatsch"][..], &["invite", "zu viel"], &["--unbekannt"], &["--help"]] {
+    for args in [&["nonsense"][..], &["invite", "too much"], &["--unknown"], &["--help"]] {
         let (ok, _, err) = run(dir, args);
-        assert!(!ok && err.contains("Aufruf:"), "{args:?}: {err}");
+        assert!(!ok && err.contains("Usage:"), "{args:?}: {err}");
     }
     let (ok, _, err) = run(dir, &["--tls-cert", "cert.pem"]);
-    assert!(!ok && err.contains("--tls-cert und --tls-key"), "{err}");
-    let (ok, _, err) = run(dir, &["--listen", "nirgends"]);
-    assert!(!ok && err.contains("keine Adresse"), "{err}");
+    assert!(!ok && err.contains("--tls-cert and --tls-key"), "{err}");
+    let (ok, _, err) = run(dir, &["--listen", "nowhere"]);
+    assert!(!ok && err.contains("not an address"), "{err}");
     let (ok, _, err) = run(dir, &["--trust-proxy-from", "10.0.0.10, nginx"]);
-    assert!(!ok && err.contains("„nginx“ ist keine Adresse"), "{err}");
-    let output = program(dir).env("GLOWPORT_SYNC_TRUST_PROXY", "irgendwer").output().unwrap();
+    assert!(!ok && err.contains("“nginx” is not an address"), "{err}");
+    let output = program(dir).env("GLOWPORT_SYNC_TRUST_PROXY", "anyone").output().unwrap();
     assert!(!output.status.success() && String::from_utf8_lossy(&output.stderr).contains("GLOWPORT_SYNC_TRUST_PROXY"));
-    let output = program(dir).env("GLOWPORT_SYNC_MAX_RECORDS", "viele").output().unwrap();
-    assert!(!output.status.success() && String::from_utf8_lossy(&output.stderr).contains("keine Zahl größer null"));
+    let output = program(dir).env("GLOWPORT_SYNC_MAX_RECORDS", "many").output().unwrap();
+    assert!(!output.status.success() && String::from_utf8_lossy(&output.stderr).contains("is not a number greater than zero"));
 }
 
 #[test]
 fn serves_while_commands_run_beside_it() {
-    let data = Temp::new("betrieb");
+    let data = Temp::new("running");
     let server = start(&data.0, &[]);
-    assert!(server.banner.contains("Einrichtungscode für das erste Konto"), "{}", server.banner);
+    assert!(server.banner.contains("Setup code for the first account"), "{}", server.banner);
 
     let mut stream = connect(server.port);
     stream.write_all(request()).unwrap();
@@ -180,8 +180,8 @@ fn serves_while_commands_run_beside_it() {
 
     // The same database while the server is running.
     let (ok, out, err) = run(&data.0, &["invite"]);
-    assert!(ok && out.starts_with("Einladungscode: "), "{out}{err}");
-    assert!(run(&data.0, &["backup", data.0.join("im-betrieb.db").to_str().unwrap()]).0);
+    assert!(ok && out.starts_with("Invitation code: "), "{out}{err}");
+    assert!(run(&data.0, &["backup", data.0.join("while-running.db").to_str().unwrap()]).0);
 
     // The log: what changes something or fails, with time, status, kind and account; reading stays silent.
     assert!(plain(server.port, "POST", "/v1/prelogin", r#"{"username":"anna"}"#).contains("200"));
@@ -190,7 +190,7 @@ fn serves_while_commands_run_beside_it() {
     assert!(plain(server.port, "GET", "/v1/account", "").contains("401"));
     assert!(server.logged("GET /v1/account").ends_with(" 401 GET /v1/account -"));
     // What does not exist appears without the requested path; IDs in addresses appear as patterns.
-    assert!(plain(server.port, "GET", "/geheim/abc123", "").contains("404"));
+    assert!(plain(server.port, "GET", "/secret/abc123", "").contains("404"));
     assert!(server.logged(" 404 ").ends_with(" 404 GET ? -"));
     assert!(plain(server.port, "DELETE", "/v1/devices/0123456789abcdef0123456789abcdef", "").contains("401"));
     assert!(server.logged("DELETE").ends_with(" 401 DELETE /v1/devices/{device} -"));
@@ -228,7 +228,7 @@ fn serves_with_its_own_certificate() {
     assert!(!String::from_utf8_lossy(&answer).contains("fresh"));
 
     // A key that is none: the server does not start and says which files are the reason.
-    std::fs::write(&key, "kein Schlüssel").unwrap();
+    std::fs::write(&key, "not a key").unwrap();
     let (ok, _, err) = run(&data.0, &["serve", "--listen", &format!("127.0.0.1:{}", free_port()), "--tls-cert", cert.to_str().unwrap(), "--tls-key", key.to_str().unwrap()]);
-    assert!(!ok && err.contains("Zertifikat") && err.contains("key.pem"), "{err}");
+    assert!(!ok && err.contains("certificate") && err.contains("key.pem"), "{err}");
 }

@@ -498,7 +498,7 @@ mod tests {
         // If the server withdraws its echo, that is confirmed.
         assert_eq!(receive(&mut codec, &[IAC, WONT, ECHO]).1, [IAC, DONT, ECHO]);
         assert!(!codec.remote_echo());
-        assert!(receive(&mut codec, &[IAC, WONT, ECHO, IAC, DONT, 99]).1.is_empty(), "was schon aus ist, braucht keine Antwort");
+        assert!(receive(&mut codec, &[IAC, WONT, ECHO, IAC, DONT, 99]).1.is_empty(), "what is already off needs no answer");
     }
 
     #[test]
@@ -513,7 +513,7 @@ mod tests {
         // Without a user this side does not even offer the environment.
         let mut nameless = Codec::new("vt100", None, (80, 24));
         assert_eq!(receive(&mut nameless, &[IAC, DO, NEW_ENVIRON]).1, [IAC, WONT, NEW_ENVIRON]);
-        assert!(nameless.resize(100, 30).is_empty(), "die Fenstergröße ist nicht ausgehandelt");
+        assert!(nameless.resize(100, 30).is_empty(), "the window size is not negotiated");
         // A question about something not negotiated stays unanswered.
         assert!(receive(&mut nameless, &[IAC, SB, TERMINAL_TYPE, SEND, IAC, SE]).1.is_empty());
     }
@@ -582,9 +582,9 @@ mod tests {
         // Ctrl+U discards, Ctrl+C reports the interruption to the server.
         codec.typed(b"weg");
         assert_eq!(codec.typed(&[0x15]).echo, b"\x08 \x08\x08 \x08\x08 \x08");
-        codec.typed(b"auch weg");
+        codec.typed(b"gone too");
         assert_eq!(codec.typed(&[0x03]), Typed { wire: vec![IAC, IP], echo: b"^C\r\n".to_vec() });
-        assert_eq!(codec.typed(b"\r").wire, b"\r\n", "die verworfene Zeile geht nicht mit ab");
+        assert_eq!(codec.typed(b"\r").wire, b"\r\n", "the discarded line does not go out with it");
         // A Tab and an arrow key take along what is already there.
         codec.typed(b"sh");
         assert_eq!(codec.typed(b"\t").wire, b"sh\t");

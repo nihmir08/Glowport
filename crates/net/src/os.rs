@@ -106,7 +106,7 @@ mod tests {
         assert_eq!(os("Linux\nNAME=\"Ubuntu\"\nID=ubuntu\nID_LIKE=debian\n").as_deref(), Some("Ub"));
         assert_eq!(os("Linux\nID=debian\n").as_deref(), Some("De"));
         assert_eq!(os("Linux\nID=raspbian\nID_LIKE=debian\n").as_deref(), Some("Rp"));
-        assert_eq!(os("Linux\nID=debian\nGLOWPORT_MARK=rpi\n").as_deref(), Some("Rp"), "die 64-Bit-Fassung nennt sich debian");
+        assert_eq!(os("Linux\nID=debian\nGLOWPORT_MARK=rpi\n").as_deref(), Some("Rp"), "the 64-bit version calls itself debian");
         assert_eq!(os("Linux\nID=alpine\n").as_deref(), Some("Al"));
         assert_eq!(os("Linux\nID=arch\n").as_deref(), Some("Ar"));
         assert_eq!(os("Linux\nID=irgendwas\n").as_deref(), Some("Li"));
@@ -127,14 +127,14 @@ mod tests {
         assert_eq!(os("Linux\nID=kali\nID_LIKE=debian\n").as_deref(), Some("Kali"));
         assert_eq!(os("Linux\nID=nixos\n").as_deref(), Some("NixOS"));
         assert_eq!(os("Linux\nID=\"openwrt\"\nID_LIKE=\"lede openwrt\"\n").as_deref(), Some("OpenWrt"));
-        assert_eq!(os("Linux\nID=zorin\nID_LIKE=\"ubuntu debian\"\n").as_deref(), Some("Ub"), "ein unbekannter Abkömmling bekommt das Zeichen seiner Familie");
+        assert_eq!(os("Linux\nID=zorin\nID_LIKE=\"ubuntu debian\"\n").as_deref(), Some("Ub"), "an unknown derivative gets its family's symbol");
         assert_eq!(os("Linux\nID=eurolinux\nID_LIKE=\"rhel fedora centos\"\n").as_deref(), Some("RH"));
     }
 
     #[test]
     fn systems_built_on_another_show_as_themselves() {
         let os = |text: &str| classify(text);
-        assert_eq!(os("Linux\nID=debian\nGLOWPORT_MARK=pve\n").as_deref(), Some("PVE"), "Proxmox ist Debian mit /etc/pve");
+        assert_eq!(os("Linux\nID=debian\nGLOWPORT_MARK=pve\n").as_deref(), Some("PVE"), "Proxmox is Debian with /etc/pve");
         assert_eq!(os("Linux\nID=debian\nGLOWPORT_MARK=pbs\n").as_deref(), Some("PBS"));
         assert_eq!(os("Linux\nGLOWPORT_MARK=synology\n").as_deref(), Some("Synology"));
         assert_eq!(os("Linux\nID=slackware\nGLOWPORT_MARK=unraid\n").as_deref(), Some("Unraid"));
@@ -144,7 +144,7 @@ mod tests {
         assert_eq!(os("OpenBSD\n").as_deref(), Some("OpenBSD"));
         assert_eq!(os("NetBSD\n").as_deref(), Some("NetBSD"));
         assert_eq!(os("Darwin\n").as_deref(), Some("macOS"));
-        assert_eq!(os("\r\nMicrosoft Windows [Version 10.0.26100.1742]\r\n").as_deref(), Some("Win"), "Antwort von ver");
+        assert_eq!(os("\r\nMicrosoft Windows [Version 10.0.26100.1742]\r\n").as_deref(), Some("Win"), "answer from ver");
         // The query itself must be valid in csh as in sh: a single argument in single quotes.
         assert!(super::PROBE.starts_with("sh -c '") && super::PROBE.ends_with("' || ver") && super::PROBE.matches('\'').count() == 2);
     }

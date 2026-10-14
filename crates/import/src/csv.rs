@@ -73,7 +73,7 @@ pub fn looks_like(text: &str) -> bool {
 
 pub fn parse(text: &str) -> Result<Draft> {
     let mut all = rows(text, delimiter(text)).into_iter();
-    let Some(head) = all.next() else { return unreadable("leer") };
+    let Some(head) = all.next() else { return unreadable("empty") };
     let headers: Vec<String> = head.iter().map(|h| plain(h)).collect();
     let address = column(&headers, ADDRESS).ok_or(ImportError::Unknown)?;
     // “host” can be the name or the address; it only counts as the name if another column carries the address.

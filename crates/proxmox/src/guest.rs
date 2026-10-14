@@ -149,7 +149,7 @@ mod tests {
         assert_eq!(static_address("ip=10.0.10.11/24,gw=10.0.10.1").as_deref(), Some("10.0.10.11"));
         assert_eq!(static_address("name=eth0,bridge=vmbr0,hwaddr=BC:24:11:AA:BB:CC,ip=10.0.0.53/24,gw=10.0.0.1,type=veth").as_deref(), Some("10.0.0.53"));
         assert_eq!(static_address("ip=dhcp,ip6=2001:db8::5/64").as_deref(), Some("2001:db8::5"), "IPv4 per DHCP, IPv6 fest");
-        assert_eq!(static_address("gw=10.0.0.1,ip6=2001:db8::5/64,ip=10.0.0.7/24").as_deref(), Some("10.0.0.7"), "IPv4 vor IPv6");
+        assert_eq!(static_address("gw=10.0.0.1,ip6=2001:db8::5/64,ip=10.0.0.7/24").as_deref(), Some("10.0.0.7"), "IPv4 before IPv6");
         for none in ["ip=dhcp", "ip=dhcp,ip6=auto", "name=eth0,bridge=vmbr0,ip=manual", "name=eth0,bridge=vmbr0", "", "ip=quatsch"] {
             assert_eq!(static_address(none), None, "{none}");
         }
@@ -165,7 +165,7 @@ mod tests {
             interface("eth0", &["fe80::be24:11ff:feaa:bbcc", "2001:db8::10/64", "10.0.10.90/24"]),
             interface("eth1", &["192.168.50.4"]),
         ];
-        assert_eq!(measured_address(&seen).as_deref(), Some("10.0.10.90"), "IPv4 vor IPv6, ohne Schleife und Docker");
+        assert_eq!(measured_address(&seen).as_deref(), Some("10.0.10.90"), "IPv4 before IPv6, without loopback and Docker");
         assert_eq!(measured_address(&[interface("eth0", &["fe80::1", "2001:db8::10/64"])]).as_deref(), Some("2001:db8::10"));
         assert_eq!(measured_address(&[interface("lo", &["127.0.0.1"]), interface("eth0", &["169.254.3.4", "fe80::1", "quatsch"])]), None);
         assert_eq!(measured_address(&[]), None);
@@ -177,18 +177,18 @@ mod tests {
         let line = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOgQqXeoYfd9GJUg5ajXbvrpe+0M0f5PTO0MRd4ZpqK7 deploy@laptop";
         let own = "SHA256:HHT2sEZO+TuiQj394rcd79mgejTl0WQ0Gdawh2rVk/c".to_string();
         let encoded = format!("{}%0A%0Ano-pty%20{}%0Akein%20schluessel%0A", line.replace(' ', "%20"), line.replace(' ', "%20"));
-        assert_eq!(key_fingerprints(&encoded), [own.clone(), own.clone()], "umschrieben, mit Leerzeile, mit Optionen davor");
+        assert_eq!(key_fingerprints(&encoded), [own.clone(), own.clone()], "encoded, with an empty line, with options before it");
         assert_eq!(key_fingerprints("ssh-ed25519%20kein-base64!%0A%ZZ"), Vec::<String>::new());
     }
 
     #[test]
     fn the_system_is_read_from_whatever_names_it() {
         assert_eq!(os_code(Some("l26"), Some("Ubuntu 24.04.1 LTS"), "web-01"), Some("Ub"));
-        assert_eq!(os_code(Some("l26"), None, "debian-13-vorlage"), Some("De"), "der Name der Maschine hilft");
-        assert_eq!(os_code(Some("alpine"), None, "gitea"), Some("Al"), "Container nennen ihr System selbst");
+        assert_eq!(os_code(Some("l26"), None, "debian-13-template"), Some("De"), "the machine's name helps");
+        assert_eq!(os_code(Some("alpine"), None, "gitea"), Some("Al"), "containers name their system themselves");
         assert_eq!(os_code(Some("l26"), None, "web-01"), Some("Li"));
-        assert_eq!(os_code(Some("win11"), None, "büro"), Some("Win"));
-        assert_eq!(os_code(Some("l26"), Some("Fedora Linux 42"), "kiste"), Some("Li"), "ohne eigenes Kürzel: Linux");
+        assert_eq!(os_code(Some("win11"), None, "office"), Some("Win"));
+        assert_eq!(os_code(Some("l26"), Some("Fedora Linux 42"), "box"), Some("Li"), "without its own code: Linux");
         assert_eq!(os_code(Some("other"), None, "kiste"), None);
         assert_eq!(os_code(None, None, ""), None);
     }
@@ -200,7 +200,7 @@ mod tests {
         assert_eq!(facts(true, "web-01", &vm, &eth, Some("Ubuntu 24.04")), Facts { address: Some(("10.0.10.11".into(), Source::CloudInit)), user: Some("deploy".into()), keys: vec![], os: Some("Ub") });
         // DHCP: what the guest agent reports counts. Without Cloud-Init nobody names a user.
         assert_eq!(facts(true, "monitoring", &json!({ "ipconfig0": "ip=dhcp", "ostype": "l26" }), &eth, None), Facts { address: Some(("10.0.10.99".into(), Source::Agent)), user: None, keys: vec![], os: Some("Li") });
-        assert_eq!(facts(true, "aus", &json!({ "ostype": "l26" }), &[], None).address, None, "aus und ohne feste Adresse");
+        assert_eq!(facts(true, "off", &json!({ "ostype": "l26" }), &[], None).address, None, "off and without a fixed address");
         // Container: fixed address from net0, otherwise the reported one; user root.
         assert_eq!(facts(false, "pihole", &json!({ "net0": "name=eth0,bridge=vmbr0,ip=10.0.0.53/24", "ostype": "debian" }), &[], None), Facts { address: Some(("10.0.0.53".into(), Source::Config)), user: Some("root".into()), keys: vec![], os: Some("De") });
         assert_eq!(facts(false, "gitea", &json!({ "net0": "name=eth0,bridge=vmbr0,ip=dhcp", "ostype": "alpine" }), &eth, None).address, Some(("10.0.10.99".into(), Source::Guest)));

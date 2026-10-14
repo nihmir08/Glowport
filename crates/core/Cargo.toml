@@ -1,6 +1,6 @@
 [package]
 name = "glowport-core"
-description = "Kern von Glowport: Tresor, Datenmodell, Vererbung. Ohne Tauri testbar."
+description = "Glowport's core: vault, data model, inheritance. Testable without Tauri."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

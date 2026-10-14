@@ -68,7 +68,7 @@ impl Driver {
             if done(self) {
                 return None;
             }
-            let event = timeout(Duration::from_secs(10), self.session.events.recv()).await.expect("nichts geschah").expect("Sitzung verschwand ohne Ende");
+            let event = timeout(Duration::from_secs(10), self.session.events.recv()).await.expect("nothing happened").expect("session disappeared without an end");
             match event {
                 Event::Phase(phase) => self.phases.push(phase),
                 Event::Banner(text) => self.banner = Some(text),
@@ -80,7 +80,7 @@ impl Driver {
                 Event::Secret { station, kind, attempt, reply } => {
                     self.stations.push(station);
                     self.asked.push((kind, attempt));
-                    let answer = self.answers.pop_front().expect("unerwartete Rückfrage");
+                    let answer = self.answers.pop_front().expect("unexpected prompt");
                     let _ = reply.send(answer.map(|text| Secret::new(text.into())));
                 }
                 Event::Interactive { reply, .. } => drop(reply.send(None)),
@@ -101,11 +101,11 @@ impl Driver {
     /// Waits until the shell is ready.
     async fn prompt(&mut self) {
         let seen = self.output.len();
-        assert_eq!(self.until(|d| d.output[seen..].ends_with(PROMPT)).await, None, "Sitzung endete vor der Eingabeaufforderung");
+        assert_eq!(self.until(|d| d.output[seen..].ends_with(PROMPT)).await, None, "session ended before the prompt");
     }
 
     fn send(&self, command: Command) {
-        self.session.commands.send(command).expect("Sitzung nimmt keine Befehle mehr an");
+        self.session.commands.send(command).expect("session no longer takes commands");
     }
 
     fn typed(&self, line: &str) {
@@ -148,8 +148,8 @@ async fn password_login_gives_a_working_shell() {
     let mut driver = Driver::new(connect(running.address, Some("richtig")));
     driver.prompt().await;
     assert_eq!(driver.phases, [Phase::Connecting, Phase::Authenticating, Phase::Connected]);
-    assert!(driver.output.contains("Willkommen beim Testserver"));
-    assert!(driver.asked.is_empty(), "mit gespeichertem Passwort gibt es keine Rückfrage");
+    assert!(driver.output.contains("Welcome to the test server"));
+    assert!(driver.asked.is_empty(), "with a saved password there is no prompt");
 
     let key = driver.host_key.clone().unwrap();
     assert_eq!(key.algorithm, "ssh-ed25519");
@@ -190,7 +190,7 @@ async fn rejected_host_key_stops_before_any_password_is_sent() {
     let mut driver = Driver::new(connect(running.address, Some("richtig")));
     driver.accept_host_key = false;
     assert_eq!(driver.end().await, End::HostKeyRejected);
-    assert_eq!(driver.phases, [Phase::Connecting], "die Anmeldung darf gar nicht erst beginnen");
+    assert_eq!(driver.phases, [Phase::Connecting], "signing in must not even begin");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -201,7 +201,7 @@ async fn wrong_saved_password_leads_to_prompts() {
     driver.prompt().await;
     assert_eq!(driver.notices, ["saved_password_rejected"]);
     assert_eq!(driver.asked, [(SecretKind::Password, 1), (SecretKind::Password, 2)]);
-    assert_eq!(driver.accepted_password.as_ref().map(|p| p.as_str()), Some("richtig"), "das funktionierende Passwort wird zum Speichern gemeldet");
+    assert_eq!(driver.accepted_password.as_ref().map(|p| p.as_str()), Some("richtig"), "the working password is reported for saving");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -211,7 +211,7 @@ async fn a_server_that_only_takes_keys_says_so_when_there_is_none() {
     let mut driver = Driver::new(connect(running.address, None));
     assert_eq!(driver.end().await, End::AuthFailed);
     assert_eq!(driver.notices, ["key_required"]);
-    assert!(driver.asked.is_empty(), "es gibt nichts zu fragen");
+    assert!(driver.asked.is_empty(), "there is nothing to ask");
 
     // With a key the server does not know, the reason is a different one.
     let key = keys::generate(keys::Kind::Ed25519, 256).unwrap();
@@ -232,7 +232,7 @@ async fn too_many_wrong_passwords_fail_and_cancel_ends_quietly() {
 
     let mut driver = Driver::new(connect(running.address, None));
     driver.answers = [None].into();
-    assert_eq!(driver.end().await, End::User, "Abbrechen der Rückfrage ist kein Fehler");
+    assert_eq!(driver.end().await, End::User, "cancelling the prompt is not an error");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -266,7 +266,7 @@ async fn key_file_logs_in_and_asks_for_its_passphrase() {
 async fn unusable_or_unauthorised_key_falls_back_to_the_password() {
     let running = server::start(Options { authorized_keys: vec![server::key(9).public_key().clone()], ..with_password() }, server::key(1)).await.unwrap();
 
-    let garbage = KeyFile::new("kaputt", "das ist kein Schlüssel");
+    let garbage = KeyFile::new("broken", "this is not a key");
     let mut driver = Driver::new(Connect { key_file: Some(garbage.0.clone()), ..connect(running.address, Some("richtig")) });
     driver.prompt().await;
     assert_eq!(driver.notices, ["key_unreadable"]);
@@ -286,7 +286,7 @@ async fn key_from_the_vault_logs_in_without_any_question() {
 
     let mut driver = Driver::new(Connect { key: Some(known.private.clone()), ..connect(running.address, None) });
     driver.prompt().await;
-    assert!(driver.asked.is_empty() && driver.notices.is_empty(), "weder Passphrase noch Passwort: {:?}", driver.notices);
+    assert!(driver.asked.is_empty() && driver.notices.is_empty(), "neither passphrase nor password: {:?}", driver.notices);
 
     // A key the server does not know: a notice, then the saved password rescues the sign-in.
     let stranger = keys::generate(keys::Kind::Ecdsa, 256).unwrap();
@@ -298,7 +298,7 @@ async fn key_from_the_vault_logs_in_without_any_question() {
     let unused = KeyFile::new("unbenutzt", ENCRYPTED_KEY);
     let mut driver = Driver::new(Connect { key: Some(known.private), key_file: Some(unused.0.clone()), ..connect(running.address, None) });
     driver.prompt().await;
-    assert!(driver.asked.is_empty(), "die Passphrase der Datei wird nicht gebraucht");
+    assert!(driver.asked.is_empty(), "the file's passphrase is not needed");
 
     let mut driver = Driver::new(Connect { key: Some(Secret::new("kaputt".into())), ..connect(running.address, Some("richtig")) });
     driver.prompt().await;
@@ -324,7 +324,7 @@ impl Drop for Home {
 #[tokio::test(flavor = "multi_thread")]
 async fn public_key_is_installed_over_ssh_and_logs_in_afterwards() {
     if std::process::Command::new("sh").arg("-c").arg("true").output().is_err() {
-        eprintln!("ohne sh im Pfad übersprungen");
+        eprintln!("skipped without sh in the path");
         return;
     }
     let home = Home::new("install");
@@ -367,7 +367,7 @@ async fn jump_servers_are_chained_each_with_its_own_login() {
     let mut driver = Driver::new(chain);
     driver.prompt().await;
     assert_eq!(driver.host_keys.iter().map(|(_, port, _)| *port).collect::<Vec<_>>(), [first.address.port(), second.address.port(), target.address.port()]);
-    assert_eq!(driver.host_keys[2].2, server::key(3).public_key().fingerprint(Default::default()).to_string(), "der Schlüssel des Ziels, nicht der einer Station");
+    assert_eq!(driver.host_keys[2].2, server::key(3).public_key().fingerprint(Default::default()).to_string(), "the destination's key, not that of a hop");
     assert!(driver.asked.is_empty());
     driver.typed("exit");
     assert_eq!(driver.end().await, End::Remote { exit_status: Some(0) });
@@ -386,7 +386,7 @@ async fn jump_servers_are_chained_each_with_its_own_login() {
 
     // A hop that does not forward, or a destination that cannot be reached from it.
     let closed = server::start(with_password(), server::key(4)).await.unwrap();
-    let mut driver = Driver::new(via(target.address, Some("richtig"), "ziel", Some(via(closed.address, Some("richtig"), "zu", None))));
+    let mut driver = Driver::new(via(target.address, Some("richtig"), "ziel", Some(via(closed.address, Some("richtig"), "closed", None))));
     assert!(matches!(driver.end().await, End::ConnectFailed(_)));
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let nowhere = listener.local_addr().unwrap();
@@ -442,11 +442,11 @@ async fn agent_keys_log_in_and_the_agent_can_be_forwarded() {
     // The server only knows the agent's second key: the first is refused, the second gets in.
     let mut driver = Driver::new(Connect { agent: Some(agents.clone()), ..connect(running.address, None) });
     driver.prompt().await;
-    assert!(driver.asked.is_empty(), "keine Rückfrage, der Agent unterschreibt");
+    assert!(driver.asked.is_empty(), "no prompt, the agent signs");
     // Without forwarding the server sees no agent.
     driver.typed("agent");
     driver.prompt().await;
-    assert!(driver.output.contains("kein Agent"), "{}", driver.output);
+    assert!(driver.output.contains("no agent"), "{}", driver.output);
 
     // With forwarding the server can query the agent.
     let mut driver = Driver::new(Connect { agent: Some(agents.clone()), agent_forward: true, ..connect(running.address, None) });
@@ -460,10 +460,10 @@ async fn agent_keys_log_in_and_the_agent_can_be_forwarded() {
     driver.prompt().await;
     driver.typed("agent");
     driver.prompt().await;
-    assert!(driver.output.contains("kein Agent"));
+    assert!(driver.output.contains("no agent"));
 
     // If no agent runs, it quietly continues with the other ways.
-    let nowhere = glowport_net::Agents { openssh: Some(format!(r"\\.\pipe\glowport-test-{}-fehlt", std::process::id())), pageant: false };
+    let nowhere = glowport_net::Agents { openssh: Some(format!(r"\\.\pipe\glowport-test-{}-missing", std::process::id())), pageant: false };
     assert!(glowport_net::agent::list(&nowhere).await.iter().all(|a| !a.running));
     let mut driver = Driver::new(Connect { agent: Some(nowhere), ..connect(running.address, Some("richtig")) });
     driver.prompt().await;
@@ -474,7 +474,7 @@ async fn agent_keys_log_in_and_the_agent_can_be_forwarded() {
 async fn old_devices_need_the_legacy_setting() {
     let old = server::start(Options { legacy_only: true, ..with_password() }, server::key(1)).await.unwrap();
     let mut driver = Driver::new(connect(old.address, Some("richtig")));
-    assert!(matches!(driver.end().await, End::ConnectFailed(_)), "ohne die Einstellung gibt es kein gemeinsames Verfahren");
+    assert!(matches!(driver.end().await, End::ConnectFailed(_)), "without the setting there is no common algorithm");
 
     let mut driver = Driver::new(Connect { legacy: true, term: "vt100".into(), ..connect(old.address, Some("richtig")) });
     driver.prompt().await;
@@ -600,7 +600,7 @@ async fn connections_go_through_http_and_socks_proxies() {
             assert!(matches!(driver.end().await, End::ConnectFailed(_)), "{kind}");
         }
     }
-    assert!(!format!("{:?}", login("geheim")).contains("geheim"), "das Passwort steht nicht in Protokollen");
+    assert!(!format!("{:?}", login("geheim")).contains("geheim"), "the password is not in logs");
 }
 
 /// Issues a user certificate the way a certificate authority would with `ssh-keygen -s`.
@@ -625,7 +625,7 @@ async fn certificates_log_in_where_only_the_authority_is_trusted() {
     let info = keys::inspect_certificate(&format!("{good} kommentar"), &key.public).unwrap();
     assert_eq!((info.key_id.as_str(), info.principals.as_slice(), info.valid_before), ("test-zertifikat", ["tester".to_string()].as_slice(), Some(now + 3600)));
     assert_eq!(info.authority, ca.public_key().fingerprint(Default::default()).to_string());
-    assert_eq!(info.text.split(' ').count(), 2, "ohne Kommentar abgelegt");
+    assert_eq!(info.text.split(' ').count(), 2, "stored without comment");
     let mut driver = Driver::new(with(&info.text, None));
     driver.prompt().await;
     assert!(driver.asked.is_empty() && driver.notices.is_empty());
@@ -641,7 +641,7 @@ async fn certificates_log_in_where_only_the_authority_is_trusted() {
     // A certificate for a different key is not even stored.
     let other = keys::generate(keys::Kind::Ed25519, 256).unwrap();
     assert_eq!(keys::inspect_certificate(&good, &other.public).unwrap_err(), keys::KeyError::CertificateMismatch);
-    assert_eq!(keys::inspect_certificate("kein Zertifikat", &key.public).unwrap_err(), keys::KeyError::CertificateUnreadable);
+    assert_eq!(keys::inspect_certificate("not a certificate", &key.public).unwrap_err(), keys::KeyError::CertificateUnreadable);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -661,7 +661,7 @@ async fn servers_certified_by_a_trusted_authority_need_no_question() {
     let good = server::start(Options { host_certificate: Some(issue(&ca, "127.0.0.1", now - 60..now + 3600)), ..with_password() }, host_key.clone()).await.unwrap();
     let mut driver = Driver::new(Connect { authorities: trusted.clone(), ..connect(good.address, Some("richtig")) });
     driver.prompt().await;
-    assert!(driver.host_keys.is_empty(), "das Zertifikat hat genügt");
+    assert!(driver.host_keys.is_empty(), "the certificate was enough");
 
     // Whoever trusts no authority is shown the bare key as always.
     let mut driver = Driver::new(connect(good.address, Some("richtig")));
@@ -738,12 +738,12 @@ async fn pausing_holds_output_back_until_resumed() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn banner_and_operating_system_are_reported() {
-    let options = Options { banner: Some("Zutritt nur für Befugte\u{7}\n".into()), exec_output: Some("Linux\nID=ubuntu\nID_LIKE=debian\n".into()), ..with_password() };
+    let options = Options { banner: Some("Authorised personnel only\u{7}\n".into()), exec_output: Some("Linux\nID=ubuntu\nID_LIKE=debian\n".into()), ..with_password() };
     let running = server::start(options, server::key(1)).await.unwrap();
     let mut driver = Driver::new(Connect { detect_os: true, ..connect(running.address, Some("richtig")) });
     assert_eq!(driver.until(|d| d.os.is_some()).await, None);
     assert_eq!(driver.os.as_deref(), Some("Ub"));
-    assert_eq!(driver.banner.as_deref(), Some("Zutritt nur für Befugte\n"), "Steuerzeichen werden entfernt");
+    assert_eq!(driver.banner.as_deref(), Some("Authorised personnel only\n"), "control characters are removed");
 
     // A server that refuses the query does not disturb the session.
     let plain = server::start(with_password(), server::key(1)).await.unwrap();

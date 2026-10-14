@@ -162,7 +162,7 @@ fn connect(running: &Running, user: &str, password: &str, pin: Option<Fingerprin
 }
 
 async fn next(session: &mut Session) -> Event {
-    tokio::time::timeout(Duration::from_secs(20), session.events.recv()).await.expect("die Sitzung meldet sich nicht").expect("die Sitzung endete ohne Ende")
+    tokio::time::timeout(Duration::from_secs(20), session.events.recv()).await.expect("the session does not report").expect("the session ended without an end")
 }
 
 /// Reads until an event matches; phases, pointers and other regions pass by.
@@ -171,7 +171,7 @@ async fn until<T>(session: &mut Session, mut pick: impl FnMut(Event) -> Option<T
         let event = next(session).await;
         if let Event::End(end) = &event {
             let end = end.clone();
-            return pick(event).unwrap_or_else(|| panic!("die Sitzung endete: {end:?}"));
+            return pick(event).unwrap_or_else(|| panic!("the session ended: {end:?}"));
         }
         if let Some(found) = pick(event) {
             return found;
@@ -203,8 +203,8 @@ impl Canvas {
     }
 
     fn apply(&mut self, x: u16, y: u16, width: u16, height: u16, pixels: &[u8]) {
-        assert_eq!(pixels.len(), usize::from(width) * usize::from(height) * 4, "ein Bereich bringt genau seine Bildpunkte mit");
-        assert!(x + width <= self.width && y + height <= self.height, "ein Bereich liegt im Bild");
+        assert_eq!(pixels.len(), usize::from(width) * usize::from(height) * 4, "a region brings exactly its pixels");
+        assert!(x + width <= self.width && y + height <= self.height, "a region lies within the picture");
         for row in 0..usize::from(height) {
             let to = ((usize::from(y) + row) * usize::from(self.width) + usize::from(x)) * 4;
             self.pixels[to..to + usize::from(width) * 4].copy_from_slice(&pixels[row * usize::from(width) * 4..][..usize::from(width) * 4]);
@@ -220,7 +220,7 @@ impl Canvas {
         while !self.shows(x, y, colour) {
             match next(session).await {
                 Event::Region { x, y, width, height, pixels } => self.apply(x, y, width, height, &pixels),
-                Event::End(end) => panic!("die Sitzung endete: {end:?}"),
+                Event::End(end) => panic!("the session ended: {end:?}"),
                 _ => {}
             }
         }
@@ -239,11 +239,11 @@ async fn an_unknown_certificate_is_asked_about_before_any_password_leaves() {
         // Refused: the session ends, and the server saw no sign-in.
         let mut session = open(connect(&running, USER, PASSWORD, None));
         let (fingerprint, reply) = until(&mut session, |event| if let Event::Certificate { fingerprint, reply } = event { Some((fingerprint, reply)) } else { None }).await;
-        assert_eq!(fingerprint, running.fingerprint, "gezeigt wird der Fingerabdruck des Zertifikats, das der Server hat");
+        assert_eq!(fingerprint, running.fingerprint, "the fingerprint shown is that of the certificate the server has");
         reply.send(false).unwrap();
         assert_eq!(end(&mut session).await, End::User);
         // Over NLA the simulated server does not show sign-ins; the flow up to here is the same.
-        assert!(running.world.lock().unwrap().logins.is_empty(), "nla={nla}: ohne Bestätigung geht keine Anmeldung an den Server");
+        assert!(running.world.lock().unwrap().logins.is_empty(), "nla={nla}: without confirmation no sign-in goes to the server");
 
         // Confirmed: it continues up to the picture.
         let mut session = open(connect(&running, USER, PASSWORD, None));
@@ -272,24 +272,24 @@ async fn a_confirmed_certificate_is_not_asked_about_and_a_different_one_stops_th
         _ => None,
     })
     .await;
-    assert!(!asked, "mit hinterlegtem Fingerabdruck gibt es keine Rückfrage");
+    assert!(!asked, "with a stored fingerprint there is no prompt");
     session.commands.send(Command::Close).unwrap();
     assert_eq!(end(&mut session).await, End::User);
     let before = running.world.lock().unwrap().logins.len();
-    assert_eq!(before, 1, "die Anmeldung von eben hat der Server gesehen");
+    assert_eq!(before, 1, "the server saw the sign-in from just now");
 
     let mut other = running.fingerprint;
     other[0] ^= 0xff;
     let mut session = open(connect(&running, USER, PASSWORD, Some(other)));
     assert_eq!(end(&mut session).await, End::CertificateChanged(running.fingerprint));
-    assert_eq!(running.world.lock().unwrap().logins.len(), before, "an einen Server mit anderem Zertifikat geht keine Anmeldung");
+    assert_eq!(running.world.lock().unwrap().logins.len(), before, "no sign-in goes to a server with a different certificate");
 }
 
 #[tokio::test]
 async fn a_wrong_password_is_refused() {
     let running = serve(true);
     let mut session = open(connect(&running, USER, "falsch", Some(running.fingerprint)));
-    assert_eq!(end(&mut session).await, End::AuthFailed, "über NLA lehnt der Server schon die Anmeldung ab");
+    assert_eq!(end(&mut session).await, End::AuthFailed, "over NLA the server already rejects the sign-in");
 
     // Without NLA the server only checks the password after setup and then disconnects.
     let running = serve(false);
@@ -320,12 +320,12 @@ async fn the_picture_arrives_and_follows_what_the_server_paints() {
     session.commands.send(Command::Key { code: 0x1e, extended: false, down: false }).unwrap();
     canvas.wait(&mut session, PATCH.0 + 5, PATCH.1 + 5, PAINTED).await;
     assert!(canvas.shows(PATCH.0 + PATCH.2 - 5, PATCH.1 + PATCH.3 - 5, PAINTED));
-    assert!(canvas.shows(PATCH.0 - 8, PATCH.1 - 8, BACKGROUND) && canvas.shows(PATCH.0 + PATCH.2 + 8, PATCH.1 + PATCH.3 + 8, BACKGROUND), "außerhalb des Rechtecks bleibt das Bild");
+    assert!(canvas.shows(PATCH.0 - 8, PATCH.1 - 8, BACKGROUND) && canvas.shows(PATCH.0 + PATCH.2 + 8, PATCH.1 + PATCH.3 + 8, BACKGROUND), "outside the rectangle the picture stays");
     {
         let world = running.world.lock().unwrap();
         let seen = world.inputs.join(" | ");
         for expected in ["Move { x: 100, y: 200 }", "LeftPressed", "LeftReleased", "VerticalScroll { value: -120 }", "UnicodePressed(228)", "Pressed { code: 29, extended: true }", "Pressed { code: 30, extended: false }", "Released { code: 30, extended: false }"] {
-            assert!(seen.contains(expected), "{expected} fehlt in: {seen}");
+            assert!(seen.contains(expected), "{expected} missing in: {seen}");
         }
     }
 
@@ -346,7 +346,7 @@ async fn a_new_size_gives_a_new_picture_without_a_new_login() {
     assert_eq!((width, height), (1024, 768));
     let mut canvas = Canvas::new(width, height);
     canvas.wait(&mut session, 1000, 700, BACKGROUND).await;
-    assert_eq!(running.world.lock().unwrap().logins.len(), logins, "die Größe ändert sich ohne neue Anmeldung");
+    assert_eq!(running.world.lock().unwrap().logins.len(), logins, "the size changes without a new sign-in");
 
     session.commands.send(Command::Close).unwrap();
     assert_eq!(end(&mut session).await, End::User);

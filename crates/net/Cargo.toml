@@ -1,6 +1,6 @@
 [package]
 name = "glowport-net"
-description = "SSH-Verbindungen von Glowport. Kennt weder Tresor noch Oberfläche."
+description = "Glowport's SSH connections. Knows neither vault nor interface."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

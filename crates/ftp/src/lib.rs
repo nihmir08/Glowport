@@ -745,8 +745,8 @@ mod tests {
     fn listings_are_read_in_all_three_shapes() {
         let lines = |text: &str| text.lines().map(str::to_string).collect::<Vec<_>>();
         // Standardised: the folder itself and the one above it are dropped.
-        let found = entries(&lines("type=cdir;modify=20261012120000; .\ntype=pdir;modify=20261012120000; ..\ntype=dir;modify=20261012120000;UNIX.mode=0755; web\ntype=file;size=1234;modify=20200229000000;UNIX.mode=0640;UNIX.uid=1000;UNIX.gid=33; mit leerzeichen.txt"), true);
-        assert_eq!(found.iter().map(|e| (e.name.as_str(), e.kind, e.size)).collect::<Vec<_>>(), [("web", Kind::Dir, 0), ("mit leerzeichen.txt", Kind::File, 1234)]);
+        let found = entries(&lines("type=cdir;modify=20261012120000; .\ntype=pdir;modify=20261012120000; ..\ntype=dir;modify=20261012120000;UNIX.mode=0755; web\ntype=file;size=1234;modify=20200229000000;UNIX.mode=0640;UNIX.uid=1000;UNIX.gid=33; with spaces.txt"), true);
+        assert_eq!(found.iter().map(|e| (e.name.as_str(), e.kind, e.size)).collect::<Vec<_>>(), [("web", Kind::Dir, 0), ("with spaces.txt", Kind::File, 1234)]);
         assert_eq!((found[1].modified, found[1].mode, found[1].uid, found[1].owner.as_str(), found[1].group.as_str()), (1_582_934_400, 0o640, 1000, "1000", "33"));
         // Like `ls -l`: the “total” line is dropped, a link names its target.
         let found = entries(&lines("total 12\ndrwxr-xr-x 2 1000 1000 4096 Jan 05 2025 .\ndrwxr-xr-x 2 1000 1000 4096 Jan 05 2025 logs\n-rw-r----- 1 1000 33 77 Jan 05 2025 seite.html\nlrwxrwxrwx 1 0 0 9 Jan 05 2025 aktuell -> /srv/v2"), false);

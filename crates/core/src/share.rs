@@ -44,7 +44,7 @@ pub fn open(sealed: &[u8], vault: &[u8; 16], epoch: u64, secret: &StaticSecret) 
     if sealed.len() != SEALED_LEN {
         return Err(CryptoError::Decrypt);
     }
-    let ephemeral: [u8; 32] = sealed[..32].try_into().expect("Länge geprüft");
+    let ephemeral: [u8; 32] = sealed[..32].try_into().expect("length checked");
     let shared = secret.diffie_hellman(&PublicKey::from(ephemeral));
     if !shared.was_contributory() {
         return Err(CryptoError::Decrypt);
@@ -84,16 +84,16 @@ mod tests {
         let vault_key = crypto::random_key();
         let sealed = seal(&vault_key, &[7; 16], 3, &bob_public).unwrap();
         assert_eq!(open(&sealed, &[7; 16], 3, &bob).unwrap().as_ref(), vault_key.as_ref());
-        assert!(open(&sealed, &[7; 16], 3, &eve).is_err(), "fremder Schlüssel");
-        assert!(open(&sealed, &[8; 16], 3, &bob).is_err(), "anderer Tresor");
-        assert!(open(&sealed, &[7; 16], 4, &bob).is_err(), "anderer Schlüsselstand");
-        assert!(open(&sealed[1..], &[7; 16], 3, &bob).is_err(), "falsche Länge");
+        assert!(open(&sealed, &[7; 16], 3, &eve).is_err(), "foreign key");
+        assert!(open(&sealed, &[8; 16], 3, &bob).is_err(), "different vault");
+        assert!(open(&sealed, &[7; 16], 4, &bob).is_err(), "different key epoch");
+        assert!(open(&sealed[1..], &[7; 16], 3, &bob).is_err(), "wrong length");
         for i in 0..sealed.len() {
             let mut changed = sealed.clone();
             changed[i] ^= 1;
-            assert!(open(&changed, &[7; 16], 3, &bob).is_err(), "Byte {i} verändert");
+            assert!(open(&changed, &[7; 16], 3, &bob).is_err(), "byte {i} changed");
         }
-        assert_ne!(seal(&vault_key, &[7; 16], 3, &bob_public).unwrap(), sealed, "jedes Paket ist frisch");
+        assert_ne!(seal(&vault_key, &[7; 16], 3, &bob_public).unwrap(), sealed, "every package is fresh");
     }
 
     #[test]

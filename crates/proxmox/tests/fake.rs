@@ -26,7 +26,7 @@ async fn the_secret_only_travels_over_a_confirmed_certificate() {
         assert_eq!(client.version().await, Err(PveError::Certificate));
         assert_eq!(client.seen().map(|look| (look.fingerprint, look.trusted)), Some((fingerprint, false)));
     }
-    assert!(world.lock().unwrap().tokens.is_empty(), "bis hierher hat der Server kein Token gesehen");
+    assert!(world.lock().unwrap().tokens.is_empty(), "the server has not seen a token up to here");
 
     // With the confirmed fingerprint exactly this certificate applies.
     let client = Client::new(&address, TOKEN, SECRET, Some(fingerprint)).unwrap();
@@ -35,7 +35,7 @@ async fn the_secret_only_travels_over_a_confirmed_certificate() {
 
     // A wrong secret, an incomplete token, an address that is none, a server that does not exist.
     assert_eq!(Client::new(&address, TOKEN, "falsch", Some(fingerprint)).unwrap().version().await, Err(PveError::Token));
-    for (token, secret) in [("glowport", SECRET), ("glowport@pve", SECRET), ("@pve!test", SECRET), (TOKEN, ""), (TOKEN, "mit leer"), (TOKEN, "zeile\r\nX-Kopf: 1")] {
+    for (token, secret) in [("glowport", SECRET), ("glowport@pve", SECRET), ("@pve!test", SECRET), (TOKEN, ""), (TOKEN, "with space"), (TOKEN, "line\r\nX-Header: 1")] {
         assert!(matches!(Client::new(&address, token, secret, None), Err(PveError::Token)), "{token} {secret:?}");
     }
     for bad in ["http://localhost:8006", "localhost:8006", "https://", "https://pve.example.de/pfad", "https://a b"] {
@@ -52,7 +52,7 @@ async fn machines_are_listed_located_and_switched() {
     let client = Client::new(&address, TOKEN, SECRET, Some(fingerprint)).unwrap();
 
     let nodes = client.nodes().await.unwrap();
-    assert_eq!(nodes.iter().map(|n| (n.node.as_str(), n.online, n.cores)).collect::<Vec<_>>(), [("alt", false, None), ("pve", true, Some(32))]);
+    assert_eq!(nodes.iter().map(|n| (n.node.as_str(), n.online, n.cores)).collect::<Vec<_>>(), [("old", false, None), ("pve", true, Some(32))]);
     assert_eq!((nodes[1].cpu, nodes[1].memory, nodes[1].uptime), (Some(0.21), Some((76_235_669_504, 137_438_953_472)), Some(5_184_000)));
 
     // By node and number; whatever is not a machine is dropped. Numbers also come as text.
@@ -67,18 +67,18 @@ async fn machines_are_listed_located_and_switched() {
     ]);
     let by = |vmid: u32| guests.iter().find(|g| g.vmid == vmid).unwrap();
     assert_eq!((by(101).tags.as_slice(), by(101).cpu, by(101).cores, by(101).uptime), (&["prod".to_string(), "web".to_string()][..], Some(0.18), Some(4), Some(1_209_600)));
-    assert_eq!((by(130).tags.len(), by(130).cpu, by(130).uptime, by(130).memory), (0, None, None, Some((0, 4_294_967_296))), "aus: keine Last, keine Laufzeit");
+    assert_eq!((by(130).tags.len(), by(130).cpu, by(130).uptime, by(130).memory), (0, None, None, Some((0, 4_294_967_296))), "off: no load, no uptime");
 
     // Where the address comes from: Cloud-Init, guest agent, container settings, the container itself.
     let web = client.facts(by(101)).await.unwrap();
     assert_eq!((web.address, web.user.as_deref(), web.os), (Some(("10.0.10.11".into(), Source::CloudInit)), Some("deploy"), Some("Li")));
-    assert_eq!(web.keys, ["SHA256:HHT2sEZO+TuiQj394rcd79mgejTl0WQ0Gdawh2rVk/c"], "der hinterlegte Schlüssel, wie OpenSSH ihn nennt");
+    assert_eq!(web.keys, ["SHA256:HHT2sEZO+TuiQj394rcd79mgejTl0WQ0Gdawh2rVk/c"], "the stored key, as OpenSSH names it");
     let monitoring = client.facts(by(120)).await.unwrap();
     assert_eq!((monitoring.address, monitoring.user), (Some(("10.0.10.90".into(), Source::Agent)), None));
     assert_eq!(client.facts(by(111)).await.unwrap().address, Some(("10.0.0.53".into(), Source::Config)));
     let gitea = client.facts(by(112)).await.unwrap();
     assert_eq!((gitea.address, gitea.user.as_deref(), gitea.os), (Some(("10.0.10.74".into(), Source::Guest)), Some("root"), Some("Al")));
-    assert_eq!(client.facts(by(130)).await.unwrap().address, None, "aus und ohne feste Adresse");
+    assert_eq!(client.facts(by(130)).await.unwrap().address, None, "off and without a fixed address");
 
     // Permissions: the full token lacks nothing, the reader lacks switching and the guest agent.
     assert_eq!(client.missing().await.unwrap(), []);
@@ -91,7 +91,7 @@ async fn machines_are_listed_located_and_switched() {
     client.power("pve", Kind::Qemu, 101, Power::Shutdown).await.unwrap();
     let after = client.guests().await.unwrap();
     assert_eq!(after.iter().filter(|g| [101, 130].contains(&g.vmid)).map(|g| g.status).collect::<Vec<_>>(), ["stopped", "running"]);
-    assert_eq!(world.lock().unwrap().polls.values().copied().collect::<Vec<_>>(), [2, 2], "jeder Auftrag wurde abgewartet");
+    assert_eq!(world.lock().unwrap().polls.values().copied().collect::<Vec<_>>(), [2, 2], "every task was waited for");
     assert_eq!(client.power("pve", Kind::Qemu, 9000, Power::Start).await, Err(PveError::Failed("unable to start VM 9000 - VM is a template".into())));
     assert_eq!(client.power("pve/../x", Kind::Qemu, 101, Power::Start).await, Err(PveError::Protocol("Knoten")));
     // A machine's guest agent is not running: the address stays open, that is not an error.
@@ -119,7 +119,7 @@ async fn right_after_switching_the_machine_itself_knows_its_state() {
 /// Checking against the system's certificate store, at public addresses. Needs the internet and therefore
 /// only runs by hand: `cargo test -p glowport-proxmox --test fake -- --ignored`.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "braucht das Internet"]
+#[ignore = "needs the internet"]
 async fn a_recognised_certificate_needs_no_fingerprint() {
     assert!(look("https://example.com").await.unwrap().trusted);
     assert!(!look("https://self-signed.badssl.com").await.unwrap().trusted);

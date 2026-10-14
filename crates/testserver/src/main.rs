@@ -23,7 +23,7 @@ async fn main() -> std::io::Result<()> {
     let ca = std::env::args().nth(2).and_then(|path| std::fs::read_to_string(path).ok()).and_then(|text| PrivateKey::from_openssh(text).ok());
     let options = Options {
         password: Some(("tester".into(), "richtig".into())),
-        banner: Some("Testserver von Glowport\n".into()),
+        banner: Some("Glowport test server\n".into()),
         exec_output: Some("Linux\nID=ubuntu\nID_LIKE=debian\n".into()),
         home: std::env::args_os().nth(1).map(Into::into),
         user_ca: ca.as_ref().map(|ca| ca.public_key().clone()),

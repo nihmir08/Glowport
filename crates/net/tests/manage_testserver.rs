@@ -6,7 +6,7 @@ use glowport_net::manage::{self, docker, processes, services, As, Verdict};
 use glowport_testserver::admin::Admin;
 
 fn ask(admin: &mut Admin, command: &str) -> (bool, String) {
-    let (text, status) = admin.answer(command).unwrap_or_else(|| panic!("der Testserver kennt den Befehl nicht: {command}"));
+    let (text, status) = admin.answer(command).unwrap_or_else(|| panic!("the test server does not know the command: {command}"));
     (status == 0, text)
 }
 
@@ -47,7 +47,7 @@ fn the_test_server_speaks_the_commands_of_the_sidebar() {
     };
     assert_eq!((start(&mut admin, As::User), start(&mut admin, As::Sudo)), (Verdict::NeedsRoot, Verdict::NeedsPassword));
     assert!(ask(&mut admin, &services::status_command("e2e-web.service", As::User).unwrap()).1.contains("Active: active (running)"));
-    assert!(!ask(&mut admin, &services::status_command("e2e-idle.service", As::User).unwrap()).0, "ein Dienst, der nicht läuft, endet mit 3");
+    assert!(!ask(&mut admin, &services::status_command("e2e-idle.service", As::User).unwrap()).0, "a service that is not running ends with 3");
 
     // Processes: two measurements give the load; the user may end their own, not others'.
     let first = processes::parse(&ask(&mut admin, processes::LIST).1).unwrap();
@@ -55,7 +55,7 @@ fn the_test_server_speaks_the_commands_of_the_sidebar() {
     let second = processes::parse(&ask(&mut admin, processes::LIST).1).unwrap();
     assert_eq!(second.processes.iter().map(|p| (p.pid, p.name.as_str(), p.kernel)).collect::<Vec<_>>(), [(1, "init", false), (2, "kthreadd", true), (300, "sshd", false), (4711, "python3", false), (4712, "sleep", false)]);
     let load = processes::cpu_between(&first, &second, 4711).unwrap();
-    assert!((30.0..=70.0).contains(&load), "ein halber Kern, gemessen {load}");
+    assert!((30.0..=70.0).contains(&load), "half a core, measured {load}");
     let kill = |admin: &mut Admin, pid, how| {
         let (ok, text) = ask(admin, &processes::Signal::Term.command(pid, how).unwrap());
         manage::verdict(ok, &text, how)

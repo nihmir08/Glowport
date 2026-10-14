@@ -223,7 +223,7 @@ mod tests {
     fn slow_lines_get_small_pieces() {
         // A piece needs at most half the timeout: at 10 bits per character that is baud / 200 bytes.
         assert_eq!((chunk_size(300), chunk_size(9600), chunk_size(115_200), chunk_size(4_000_000)), (1, 48, 576, 4096));
-        assert_eq!(chunk_size(50), 1, "nie weniger als ein Byte");
+        assert_eq!(chunk_size(50), 1, "never less than one byte");
     }
 
     #[test]

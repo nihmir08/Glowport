@@ -1,6 +1,6 @@
 [package]
 name = "glowport-sync-proto"
-description = "Nachrichten zwischen Glowport und dem Sync-Server. Von beiden Seiten benutzt."
+description = "Messages between Glowport and the sync server. Used by both sides."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

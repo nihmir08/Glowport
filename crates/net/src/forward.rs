@@ -403,7 +403,7 @@ mod tests {
     async fn socks5_names_addresses_and_refusals() {
         let (request, reply) = greet(&[5, 1, 0, 5, 1, 0, 3, 11, b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'o', b'r', b'g', 0x01, 0xBB]).await;
         assert_eq!(request, Some(Request { version: 5, host: "example.org".into(), port: 443 }));
-        assert_eq!(reply, [5, 0], "„ohne Anmeldung“ wird angenommen; die Antwort auf die Bitte kommt erst nach dem Verbinden");
+        assert_eq!(reply, [5, 0], "“no authentication” is accepted; the answer to the request only comes after connecting");
 
         let (request, _) = greet(&[5, 2, 2, 0, 5, 1, 0, 1, 10, 0, 0, 7, 0x1F, 0x90]).await;
         assert_eq!(request, Some(Request { version: 5, host: "10.0.0.7".into(), port: 8080 }));

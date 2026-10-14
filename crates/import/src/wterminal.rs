@@ -101,7 +101,7 @@ pub fn command_line(line: &str, name: &str, home: &str, draft: &mut Draft) -> Op
 }
 
 pub fn parse(text: &str, home: &str) -> Result<Draft> {
-    let Some(root) = jsonc(text) else { return unreadable("kein JSON") };
+    let Some(root) = jsonc(text) else { return unreadable("not JSON") };
     let profiles = root.get("profiles").map(|p| p.get("list").unwrap_or(p)).and_then(Value::as_array);
     let mut draft = Draft::default();
     for profile in profiles.into_iter().flatten() {

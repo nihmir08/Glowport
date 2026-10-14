@@ -4,12 +4,12 @@
 use glowport_sync::{probe, SyncError};
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "braucht das Internet"]
+#[ignore = "needs the internet"]
 async fn certificates_are_checked_against_the_system_store() {
     // A valid certificate: the connection stands, there is just no Glowport server there.
     match probe("https://example.com").await {
         Err(SyncError::Refused { .. } | SyncError::Protocol(_)) => {}
-        other => panic!("eine Antwort erwartet, die kein Glowport-Server ist, bekommen: {other:?}"),
+        other => panic!("expected an answer from something that is not a Glowport server, got: {other:?}"),
     }
     // Expired, self-signed, for another name: each refused as a certificate problem.
     for address in ["https://expired.badssl.com", "https://self-signed.badssl.com", "https://wrong.host.badssl.com", "https://untrusted-root.badssl.com"] {
@@ -22,9 +22,9 @@ async fn certificates_are_checked_against_the_system_store() {
 
 /// How long it takes until an address without a sync server is reported as such.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "braucht das Internet"]
+#[ignore = "needs the internet"]
 async fn wrong_addresses_are_reported_soon() {
-    for address in ["gibt-es-nicht.example.com", "sync.example.invalid", "quatsch", "example.org", "example.com", "192.0.2.1", "example.com:444"] {
+    for address in ["does-not-exist.example.com", "sync.example.invalid", "nonsense", "example.org", "example.com", "192.0.2.1", "example.com:444"] {
         let started = std::time::Instant::now();
         let outcome = probe(address).await;
         println!("{address:<32} {:>6} ms  {:?}", started.elapsed().as_millis(), outcome.map(|(server, _)| server).map_err(|e| e.code().to_string()));

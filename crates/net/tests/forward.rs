@@ -54,9 +54,9 @@ async fn free_port() -> u16 {
 /// for a password; without a value they count as a test failure.
 async fn settle(session: &mut Session, password: Option<&str>) -> Result<Tunnel, End> {
     loop {
-        match timeout(Duration::from_secs(10), session.events.recv()).await.expect("nichts geschah").expect("Aufbau verschwand ohne Ergebnis") {
+        match timeout(Duration::from_secs(10), session.events.recv()).await.expect("nothing happened").expect("setup disappeared without a result") {
             Event::HostKey { reply, .. } => drop(reply.send(true)),
-            Event::Secret { reply, .. } => drop(reply.send(Some(Secret::new(password.expect("unerwartete Rückfrage").into())))),
+            Event::Secret { reply, .. } => drop(reply.send(Some(Secret::new(password.expect("unexpected prompt").into())))),
             Event::Forward(tunnel) => return Ok(tunnel),
             Event::End(end) => return Err(end),
             _ => {}
@@ -68,13 +68,13 @@ async fn local(address: SocketAddr, rule: Rule, counters: &Arc<Counters>) -> (Tu
     let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let mut session = forward::open(connect(address, Some("richtig")), rule, Some(listener), Arc::clone(counters));
-    (settle(&mut session, None).await.expect("Weiterleitung kam nicht zustande"), port)
+    (settle(&mut session, None).await.expect("forwarding did not come about"), port)
 }
 
 async fn exchange(stream: &mut TcpStream, text: &[u8]) -> Vec<u8> {
     stream.write_all(text).await.unwrap();
     let mut reply = vec![0u8; text.len() + 5];
-    timeout(Duration::from_secs(5), stream.read_exact(&mut reply)).await.expect("keine Antwort").unwrap();
+    timeout(Duration::from_secs(5), stream.read_exact(&mut reply)).await.expect("no answer").unwrap();
     reply
 }
 
@@ -86,7 +86,7 @@ async fn eventually(what: &str, check: impl Fn() -> bool) {
         }
         sleep(Duration::from_millis(30)).await;
     }
-    panic!("nicht eingetreten: {what}");
+    panic!("did not happen: {what}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -105,11 +105,11 @@ async fn a_local_port_leads_through_the_server_to_its_target() {
 
     drop(first);
     drop(second);
-    eventually("beide Verbindungen sind zu", || counters.open.load(Ordering::Relaxed) == 0).await;
+    eventually("both connections are closed", || counters.open.load(Ordering::Relaxed) == 0).await;
 
     // Switching off frees the port again.
     drop(tunnel);
-    eventually("der Port ist wieder frei", || std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()).await;
+    eventually("the port is free again", || std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -155,7 +155,7 @@ async fn a_dynamic_port_speaks_socks() {
     let mut again = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
     again.write_all(&[&[4u8, 1][..], &target.port().to_be_bytes(), &[127, 0, 0, 1, 0]].concat()).await.unwrap();
     again.read_exact(&mut [0u8; 8]).await.unwrap();
-    assert_eq!(exchange(&mut again, b"noch da").await, b"echo:noch da");
+    assert_eq!(exchange(&mut again, b"still there").await, b"echo:still there");
     assert_eq!(counters.total.load(Ordering::Relaxed), 4);
 }
 
@@ -167,17 +167,17 @@ async fn a_remote_port_leads_back_to_this_machine() {
     let counters = Arc::new(Counters::default());
     let rule = Rule::Remote { bind: "127.0.0.1".into(), bind_port: at_server, host: "127.0.0.1".into(), port: target.port() };
     let mut session = forward::open(connect(running.address, Some("richtig")), rule.clone(), None, Arc::clone(&counters));
-    let tunnel = settle(&mut session, None).await.expect("Weiterleitung kam nicht zustande");
+    let tunnel = settle(&mut session, None).await.expect("forwarding did not come about");
 
     // The test server now listens itself; whatever arrives there ends up at the destination on this side.
     let mut stream = TcpStream::connect(("127.0.0.1", at_server)).await.unwrap();
-    assert_eq!(exchange(&mut stream, b"von draussen").await, b"echo:von draussen");
+    assert_eq!(exchange(&mut stream, b"from outside").await, b"echo:from outside");
     assert_eq!((counters.total.load(Ordering::Relaxed), counters.sent.load(Ordering::Relaxed), counters.received.load(Ordering::Relaxed)), (1, 12, 17));
 
     // Switching off takes the port away from the server again.
     drop(stream);
     drop(tunnel);
-    eventually("der Server lauscht nicht mehr", || std::net::TcpListener::bind(("127.0.0.1", at_server)).is_ok()).await;
+    eventually("the server no longer listens", || std::net::TcpListener::bind(("127.0.0.1", at_server)).is_ok()).await;
 
     // A server that does not allow this refuses; the rule does not come about.
     let strict = server::start(Options { forwarding: false, ..options() }, server::key(2)).await.unwrap();
@@ -192,7 +192,7 @@ async fn a_lost_connection_ends_the_tunnel() {
     // This destination makes the test server cut the connection.
     let (mut tunnel, port) = local(running.address, Rule::Local { host: "disconnect.test".into(), port: 1 }, &counters).await;
     let _ = TcpStream::connect(("127.0.0.1", port)).await.unwrap();
-    let end = timeout(Duration::from_secs(10), tunnel.closed()).await.expect("der Abriss blieb unbemerkt");
+    let end = timeout(Duration::from_secs(10), tunnel.closed()).await.expect("the break went unnoticed");
     assert!(matches!(end, End::ConnectionLost(_)), "{end:?}");
 }
 
@@ -232,7 +232,7 @@ async fn setting_up_asks_like_a_session_and_can_be_cancelled() {
     };
     assert_eq!(end, End::User);
     drop(reply);
-    eventually("der Port ist wieder frei", || std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()).await;
+    eventually("the port is free again", || std::net::TcpListener::bind(("127.0.0.1", port)).is_ok()).await;
 
     // A wrong password can be retried; refusing the key ends without a forward.
     let mut session = forward::open(connect(running.address, None), rule, Some(TcpListener::bind(("127.0.0.1", 0)).await.unwrap()), Arc::new(Counters::default()));
@@ -265,7 +265,7 @@ impl Drop for Home {
 #[tokio::test(flavor = "multi_thread")]
 async fn commands_report_output_errors_and_status() {
     if std::process::Command::new("sh").arg("-c").arg("true").output().is_err() {
-        eprintln!("ohne sh im Pfad übersprungen");
+        eprintln!("skipped without sh in the path");
         return;
     }
     let home = Home::new("befehle");
@@ -298,7 +298,7 @@ async fn commands_report_output_errors_and_status() {
 #[tokio::test(flavor = "multi_thread")]
 async fn the_measuring_command_runs_in_a_plain_shell() {
     if std::process::Command::new("sh").arg("-c").arg("true").output().is_err() {
-        eprintln!("ohne sh im Pfad übersprungen");
+        eprintln!("skipped without sh in the path");
         return;
     }
     // This machine has no /proc; the test checks that the command runs as a whole and names its sections.
@@ -307,9 +307,9 @@ async fn the_measuring_command_runs_in_a_plain_shell() {
     let output = run_command(&connect(running.address, Some("richtig")), stats::COMMAND, Duration::from_secs(30), 256 * 1024, |_, _, _| true).await.unwrap();
     let text = String::from_utf8_lossy(&output.stdout);
     for section in ["@cpu", "@cores", "@mem", "@load", "@uptime", "@net", "@disk", "@kernel", "@host", "@os"] {
-        assert!(text.lines().any(|line| line.trim() == section), "Abschnitt {section} fehlt in:\n{text}");
+        assert!(text.lines().any(|line| line.trim() == section), "section {section} missing in:\n{text}");
     }
-    assert!(!text.contains("No such file"), "Fehlermeldungen gehören nicht in die Ausgabe:\n{text}");
+    assert!(!text.contains("No such file"), "error messages do not belong in the output:\n{text}");
     if std::path::Path::new("/proc/stat").exists() {
         assert!(stats::parse(&text).is_some());
     }
@@ -363,7 +363,7 @@ async fn measures_tunnel_throughput() {
     let direct = pour(sink_port).await;
     let tunnelled = pour(port).await;
     let megabytes = (SIZE / 1024 / 1024) as f64;
-    println!("512 MB ohne Tunnel:  {direct:.2} s = {:.0} MB/s", megabytes / direct);
+    println!("512 MB without tunnel:  {direct:.2} s = {:.0} MB/s", megabytes / direct);
     println!("512 MB durch Tunnel: {tunnelled:.2} s = {:.0} MB/s", megabytes / tunnelled);
 
     let target = echo().await;
@@ -374,5 +374,5 @@ async fn measures_tunnel_throughput() {
         assert_eq!(exchange(&mut stream, b"ping").await, b"echo:ping");
     }
     let each = started.elapsed().as_secs_f64() * 1000.0 / f64::from(CONNECTIONS);
-    println!("{CONNECTIONS} Verbindungen nacheinander durch den Tunnel, je eine Anfrage: {each:.2} ms je Verbindung");
+    println!("{CONNECTIONS} connections one after another through the tunnel, one request each: {each:.2} ms per connection");
 }

@@ -72,7 +72,7 @@ impl IntoResponse for Fail {
     fn into_response(self) -> Response {
         let status = StatusCode::from_u16(self.status()).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         // What went wrong internally is none of the requester's business.
-        let message = if matches!(self, Fail::Internal(_)) { "Interner Fehler".to_string() } else { self.to_string() };
+        let message = if matches!(self, Fail::Internal(_)) { "Internal error".to_string() } else { self.to_string() };
         (status, Json(ApiError { code: self.code().into(), message })).into_response()
     }
 }

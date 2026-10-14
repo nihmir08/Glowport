@@ -402,6 +402,6 @@ mod tests {
         assert_eq!(STANDARD.encode(&bytes.0), "AP8QIA==");
         assert_eq!(bytes.array::<4>(), Some([0, 255, 16, 32]));
         assert_eq!(bytes.array::<3>(), None);
-        assert_eq!(format!("{bytes:?}"), "Bytes(4)", "kein Inhalt in Protokollen");
+        assert_eq!(format!("{bytes:?}"), "Bytes(4)", "no content in logs");
     }
 }

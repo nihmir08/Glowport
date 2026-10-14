@@ -197,7 +197,7 @@ pub async fn probe(server: &str) -> Result<(String, Info)> {
 async fn check(api: &Api) -> Result<Info> {
     let info = api.info().await?;
     if info.name != "glowport-sync" {
-        return Err(SyncError::Protocol("kein Glowport-Server"));
+        return Err(SyncError::Protocol("not a Glowport server"));
     }
     if info.min_protocol > PROTOCOL {
         return Err(SyncError::TooOld);
@@ -209,7 +209,7 @@ async fn check(api: &Api) -> Result<Info> {
 }
 
 fn link_from(api: &Api, session: &Session) -> Result<Link> {
-    let (account, device) = session.account_id.array::<16>().zip(session.device_id.array::<16>()).ok_or(SyncError::Protocol("Sitzung"))?;
+    let (account, device) = session.account_id.array::<16>().zip(session.device_id.array::<16>()).ok_or(SyncError::Protocol("session"))?;
     Ok(Link { server: api.server(), account: hex(&account), username: session.username.clone(), device: hex(&device), token: encode_token(&session.token.0), admin: session.admin })
 }
 
@@ -220,7 +220,7 @@ async fn sign_in(api: &Api, username: &str, password: &str, min_kdf: KdfParams) 
     let salt = pre.salt.array().ok_or(SyncError::Protocol("Salz"))?;
     let kdf: KdfParams = pre.kdf.into();
     if kdf.memory_kib < min_kdf.memory_kib || kdf.passes < min_kdf.passes || kdf.lanes < min_kdf.lanes {
-        return Err(SyncError::Protocol("zu schwache Schlüsselableitung"));
+        return Err(SyncError::Protocol("key derivation too weak"));
     }
     let secret = password.to_string();
     let auth = tokio::task::spawn_blocking(move || vault::auth_key(&secret, &salt, kdf)).await.map_err(|_| SyncError::Protocol("abgebrochen"))??;
@@ -228,7 +228,7 @@ async fn sign_in(api: &Api, username: &str, password: &str, min_kdf: KdfParams) 
     if reply.needs.is_some() {
         return Err(SyncError::TooOld);
     }
-    reply.session.ok_or(SyncError::Protocol("Sitzung"))
+    reply.session.ok_or(SyncError::Protocol("session"))
 }
 
 /// Signs out a device just signed in if something fails afterwards. If that does not work, a nameless
@@ -253,7 +253,7 @@ pub async fn register<D: Door>(door: &Arc<D>, server: &str, code: &str, username
         Ok(Register { code, username, auth_key: auth_key.as_ref().into(), account: (&vault.account()?).into(), device_name: vault.seal_own(device_name.as_bytes())?.into() })
     })
     .await?;
-    let session = api.register(&request).await?.session.ok_or(SyncError::Protocol("Sitzung"))?;
+    let session = api.register(&request).await?.session.ok_or(SyncError::Protocol("session"))?;
     let link = link_from(&api, &session)?;
     door.enter(|vault| link.save(vault))?;
     Engine::with(door.clone(), link)
@@ -270,7 +270,7 @@ pub async fn connect<D: Door>(door: &Arc<D>, server: &str, username: &str, passw
     }
     let session = sign_in(&api, username, password, min_kdf).await?;
     let link = link_from(&api, &session)?;
-    let account = session.account.account().ok_or(SyncError::Protocol("Konto"))?;
+    let account = session.account.account().ok_or(SyncError::Protocol("account"))?;
     let adopted = door.enter(|vault| {
         if vault.public_keys()?.0 != account.ed25519_public || vault.personal()? != account.personal {
             return Err(SyncError::OtherAccount);
@@ -310,7 +310,7 @@ pub async fn login_new(path: &Path, server: &str, username: &str, password: &str
     check(&api).await?;
     let session = sign_in(&api, username, password, min_kdf).await?;
     let link = link_from(&api, &session)?;
-    let account = session.account.account().ok_or(SyncError::Protocol("Konto"));
+    let account = session.account.account().ok_or(SyncError::Protocol("account"));
     let (target, secret, saved) = (path.to_path_buf(), password.to_string(), link.clone());
     let created = match account {
         Ok(account) => tokio::task::spawn_blocking(move || {
@@ -385,7 +385,7 @@ impl<D: Door> Engine<D> {
                 link.save(vault)?;
             }
             // The master password was changed on another device: the new wrapping is stored as pending.
-            let theirs = wrapping_of(&overview).ok_or(SyncError::Protocol("Konto"))?;
+            let theirs = wrapping_of(&overview).ok_or(SyncError::Protocol("account"))?;
             if vault.current_wrapping()? != theirs {
                 vault.stage_wrapping(&theirs)?;
                 report.password_changed = true;
@@ -394,12 +394,12 @@ impl<D: Door> Engine<D> {
         })?;
 
         for entry in &overview.vaults {
-            let id: Id = entry.id.array().ok_or(SyncError::Protocol("Tresor"))?;
+            let id: Id = entry.id.array().ok_or(SyncError::Protocol("vault"))?;
             report.invited.extend(entry.members.iter().filter(|member| member.invited).filter_map(|member| Some((hex(&id), hex(&member.account.array::<16>()?)))));
             match local.iter().find(|info| info.id == id) {
                 Some(info) if !entry.shared => {
                     if info.kind != Kind::Personal {
-                        return Err(SyncError::Protocol("Tresor"));
+                        return Err(SyncError::Protocol("vault"));
                     }
                     self.sync_vault(&id, &mut report).await?;
                 }
@@ -442,7 +442,7 @@ impl<D: Door> Engine<D> {
     /// A shared vault that already exists here: take over key rotation and new member list,
     /// then sync the records.
     async fn sync_shared(&self, id: &Id, info: &VaultInfo, entry: &VaultEntry, report: &mut Report) -> Result<()> {
-        let (Some(roster), Some(sealed_key)) = (&entry.roster, &entry.sealed_key) else { return Err(SyncError::Protocol("Tresor")) };
+        let (Some(roster), Some(sealed_key)) = (&entry.roster, &entry.sealed_key) else { return Err(SyncError::Protocol("vault")) };
         if entry.epoch > info.epoch {
             // The owner rotated the key: everything comes newly encrypted.
             let pull = self.api.pull(id, 0).await?;
@@ -745,8 +745,8 @@ impl<D: Door> Engine<D> {
     /// Looks up an account to invite and says whether its keys match those seen before.
     pub async fn lookup(&self, username: &str) -> Result<Candidate> {
         let keys = self.api.keys(username.trim()).await?;
-        let (account, ed25519, x25519) = keys.account_id.array::<16>().zip(keys.ed25519.array::<32>()).zip(keys.x25519.array::<32>()).map(|((a, b), c)| (a, hex(&b), hex(&c))).ok_or(SyncError::Protocol("Schlüssel"))?;
-        let code = code_of(&ed25519, &x25519).ok_or(SyncError::Protocol("Schlüssel"))?;
+        let (account, ed25519, x25519) = keys.account_id.array::<16>().zip(keys.ed25519.array::<32>()).zip(keys.x25519.array::<32>()).map(|((a, b), c)| (a, hex(&b), hex(&c))).ok_or(SyncError::Protocol("keys"))?;
+        let code = code_of(&ed25519, &x25519).ok_or(SyncError::Protocol("keys"))?;
         let known = self.door.enter(|vault| known(vault, &account, &ed25519, &x25519))?;
         Ok(Candidate { account: hex(&account), username: keys.username, ed25519, x25519, code, known })
     }

@@ -80,7 +80,7 @@ pub enum DirError {
     Vault(#[from] VaultError),
     #[error("Eingabe abgelehnt: {0:?}")]
     Invalid(Invalid),
-    #[error("Eintrag nicht gefunden")]
+    #[error("Entry not found")]
     NotFound,
 }
 
@@ -1493,7 +1493,7 @@ impl Directory {
         if parent.as_ref().is_some_and(elsewhere) || (home != personal && others.iter().any(elsewhere)) {
             return invalid(Invalid::OtherVault);
         }
-        let bytes = zeroize::Zeroizing::new(serde_json::to_vec(payload).expect("Datensätze lassen sich immer als JSON schreiben"));
+        let bytes = zeroize::Zeroizing::new(serde_json::to_vec(payload).expect("records can always be written as JSON"));
         let id = match id {
             Some(id) => hex(&self.vault.put(Some(parse_id(id)?), &bytes)?),
             None => hex(&self.vault.put_in(&home, &bytes)?),
@@ -1973,8 +1973,8 @@ impl Directory {
         let workspaces: Vec<(String, Workspace)> = self.workspaces.iter().filter(|(_, w)| w.layout.hosts().contains(&old)).map(|(id, w)| (id.clone(), w.clone())).collect();
         for (id, mut workspace) in workspaces {
             // IDs are 32 hex characters and appear in the structure only as IDs.
-            let layout = serde_json::to_string(&workspace.layout).expect("Aufbau lässt sich immer schreiben").replace(old, &new);
-            workspace.layout = serde_json::from_str(&layout).expect("derselbe Aufbau mit anderer Kennung");
+            let layout = serde_json::to_string(&workspace.layout).expect("a layout can always be written").replace(old, &new);
+            workspace.layout = serde_json::from_str(&layout).expect("the same layout with another ID");
             self.put(Some(&id), &Payload::Workspace(workspace))?;
         }
         let jump_to = |fields: &Fields| fields.jump.as_deref() == Some(old);
@@ -2308,19 +2308,19 @@ mod tests {
     fn contradictions_from_a_sync_are_defused_when_reading() {
         let temp = Temp::new("defuse");
         let mut dir = temp.directory();
-        let a = dir.save_group(GroupInput { defs: Fields { user: Some("von-a".into()), ..Fields::default() }, ..group("A", None) }).unwrap();
+        let a = dir.save_group(GroupInput { defs: Fields { user: Some("from-a".into()), ..Fields::default() }, ..group("A", None) }).unwrap();
         let b = dir.save_group(group("B", Some(&a))).unwrap();
         let c = dir.save_group(group("C", Some(&b))).unwrap();
         let web = dir.save_host(host("web", Some(&c))).unwrap();
-        assert_eq!(reason(dir.save_group(GroupInput { id: Some(a.clone()), ..group("A", Some(&c)) })), Invalid::GroupCycle, "ein Gerät allein darf das nicht");
+        assert_eq!(reason(dir.save_group(GroupInput { id: Some(a.clone()), ..group("A", Some(&c)) })), Invalid::GroupCycle, "a single device must not do that");
 
         // Another device put A under C while here B was under A: A → C → B → A.
-        raw(&mut dir, Some(&a), serde_json::json!({"t": "group", "v": 1, "name": "A", "parent": c, "defs": {"user": "von-a"}}));
+        raw(&mut dir, Some(&a), serde_json::json!({"t": "group", "v": 1, "name": "A", "parent": c, "defs": {"user": "from-a"}}));
         let snapshot = dir.snapshot();
         let parent = |id: &str| snapshot.groups.iter().find(|g| g.id == id).unwrap().parent.clone();
         let smallest = [&a, &b, &c].into_iter().min().unwrap();
         let roots: Vec<&String> = [&a, &b, &c].into_iter().filter(|id| parent(id).is_none()).collect();
-        assert_eq!(roots, [smallest], "genau eine Gruppe öffnet den Kreis, überall dieselbe");
+        assert_eq!(roots, [smallest], "exactly one group opens the cycle, the same one everywhere");
         // Inheritance ends there and does not go round in circles.
         assert!(dir.chain(Some(&c)).len() <= 3);
         assert!(dir.effective(&web, Reconnect::Auto).is_ok());
@@ -2381,7 +2381,7 @@ mod tests {
         assert_eq!(reason(dir.save_host(HostInput { color: Some("rot".into()), ..host("a", None) })), Invalid::ColorInvalid);
         assert_eq!(reason(dir.save_host(host("a", Some("00000000000000000000000000000000")))), Invalid::GroupMissing);
         assert_eq!(reason(dir.save_host(HostInput { own: Fields { jump: Some("ffffffffffffffffffffffffffffffff".into()), ..Fields::default() }, ..host("a", None) })), Invalid::JumpMissing);
-        assert!(dir.snapshot().hosts.is_empty(), "abgelehnte Eingaben dürfen nichts hinterlassen");
+        assert!(dir.snapshot().hosts.is_empty(), "rejected input must leave nothing behind");
 
         // Whitespace is removed, empty values count as “not set”.
         let id = dir.save_host(HostInput { address: " example.org ".into(), color: Some("#ff2e63".into()), own: own("  "), ..host("  web  ", None) }).unwrap();
@@ -2402,9 +2402,9 @@ mod tests {
 
         let edit = |password| HostInput { id: Some(id.clone()), password, ..host("b", None) };
         dir.save_host(edit(None)).unwrap();
-        assert_eq!(dir.hosts[&id].password.as_ref().map(Secret::expose), Some("hunter2"), "fehlendes Feld ändert nichts");
-        dir.save_host(edit(secret("neu"))).unwrap();
-        assert_eq!(dir.hosts[&id].password.as_ref().map(Secret::expose), Some("neu"));
+        assert_eq!(dir.hosts[&id].password.as_ref().map(Secret::expose), Some("hunter2"), "a missing field changes nothing");
+        dir.save_host(edit(secret("new"))).unwrap();
+        assert_eq!(dir.hosts[&id].password.as_ref().map(Secret::expose), Some("new"));
         dir.save_host(edit(Some(None))).unwrap();
         assert!(!dir.snapshot().hosts[0].has_password);
 
@@ -2468,9 +2468,9 @@ mod tests {
         assert_eq!((dir.hosts[&copy].name.as_str(), dir.hosts[&copy].password.is_some()), ("bastion (Kopie)", true));
 
         dir.delete_host(&bastion).unwrap();
-        assert_eq!(dir.groups[&grp].defs.jump, None, "Verweis der Gruppe gelöst");
+        assert_eq!(dir.groups[&grp].defs.jump, None, "the group's reference is removed");
         assert!(matches!(dir.delete_host(&bastion), Err(DirError::NotFound)));
-        assert!(matches!(dir.delete_host("kein-hex"), Err(DirError::NotFound)));
+        assert!(matches!(dir.delete_host("not-hex"), Err(DirError::NotFound)));
         assert_eq!(dir.snapshot().hosts.len(), 1);
     }
 
@@ -2482,9 +2482,9 @@ mod tests {
         assert_eq!(dir.judge_host_key("Server.Example", 22, key_a), Verdict::Unknown);
 
         dir.trust_host_key("Server.Example", 22, "ssh-ed25519", "SHA256:aaa", &format!("{key_a} kommentar")).unwrap();
-        assert_eq!(dir.judge_host_key("server.example", 22, key_a), Verdict::Trusted, "Groß- und Kleinschreibung der Adresse zählt nicht");
+        assert_eq!(dir.judge_host_key("server.example", 22, key_a), Verdict::Trusted, "the address's case does not matter");
         assert_eq!(dir.judge_host_key("server.example", 22, &format!("{key_a} anderer-kommentar")), Verdict::Trusted);
-        assert_eq!(dir.judge_host_key("server.example", 2222, key_a), Verdict::Unknown, "ein anderer Port ist ein anderer Dienst");
+        assert_eq!(dir.judge_host_key("server.example", 2222, key_a), Verdict::Unknown, "another port is another service");
         assert_eq!(dir.judge_host_key("server.example", 22, key_b), Verdict::Changed { known: vec!["SHA256:aaa".into()] });
 
         // If the user trusts the new key, it replaces the old one.
@@ -2530,7 +2530,7 @@ mod tests {
         assert_eq!(info.mosh, Some(MoshInfo { predict: "always".into(), port: Some("60001:60010".into()), server: Some("~/.local/bin/mosh-server".into()) }));
         assert_eq!(dir.connect_info(&plain).unwrap().mosh, None);
         let lone = dir.save_host(host("allein", None)).unwrap();
-        assert_eq!(dir.connect_info(&lone).unwrap().mosh, None, "ohne Vorgabe kein Mosh");
+        assert_eq!(dir.connect_info(&lone).unwrap().mosh, None, "no Mosh without a setting");
     }
 
     #[test]
@@ -2544,7 +2544,7 @@ mod tests {
         let info = dir.connect_info(&id).unwrap();
         assert_eq!((info.name.as_str(), info.address.as_str(), info.port, info.user.as_str()), ("web-01", "10.0.10.11", 2200, "deploy"));
         assert_eq!((info.jump.as_deref(), info.startcmd.as_deref(), info.env.len()), (None, None, 0));
-        assert_eq!((info.agent, info.agent_forward), (false, false), "ohne Vorgabe kein Agent");
+        assert_eq!((info.agent, info.agent_forward), (false, false), "no agent without a setting");
         assert_eq!((info.proxy.is_none(), info.keepalive, info.timeout, info.term.as_str(), info.charset.as_str(), info.legacy), (true, 30, 15, "xterm-256color", "utf-8", false));
 
         // Fine-tuning and proxy: checked when saving, inherited like everything else, can be switched off on the host.
@@ -2561,7 +2561,7 @@ mod tests {
         let info = dir.connect_info(&other).unwrap();
         assert_eq!(info.proxy, Some(ProxySpec { kind: model::ProxyKind::Socks5, host: "127.0.0.1".into(), port: 9050, user: None }));
         assert_eq!((info.keepalive, info.timeout, info.term.as_str(), info.charset.as_str(), info.legacy), (0, 60, "vt100", "iso-8859-1", true));
-        assert!(dir.connect_info(&switch).unwrap().proxy.is_none(), "„ausdrücklich keiner“ am Host");
+        assert!(dir.connect_info(&switch).unwrap().proxy.is_none(), "“explicitly none” on the host");
 
         // Proxy with sign-in: the user is in the address, the password is stored as a secret where the proxy is defined.
         let secret = |text: &str| Some(Some(Secret::new(text.into())));
@@ -2569,13 +2569,13 @@ mod tests {
         dir.save_group(GroupInput { id: Some(switches.clone()), defs: with_login.clone(), proxy_password: secret("gruppen-pw"), ..group("Switches", None) }).unwrap();
         let info = dir.connect_info(&other).unwrap();
         assert_eq!((info.proxy.as_ref().and_then(|p| p.user.as_deref()), info.proxy_password.as_ref().map(Secret::expose)), (Some("ich"), Some("gruppen-pw")));
-        assert!(dir.connect_info(&switch).unwrap().proxy_password.is_none(), "ohne Proxy auch kein Passwort");
+        assert!(dir.connect_info(&switch).unwrap().proxy_password.is_none(), "no password without a proxy either");
         let own_proxy = Fields { proxy: Some("socks5://anders@10.0.0.9".into()), ..Fields::default() };
         dir.save_host(HostInput { id: Some(other.clone()), own: own_proxy.clone(), proxy_password: secret("host-pw"), ..host("sw-02", Some(&switches)) }).unwrap();
-        assert_eq!(dir.connect_info(&other).unwrap().proxy_password.as_ref().map(Secret::expose), Some("host-pw"), "der eigene Proxy bringt sein eigenes Passwort mit");
+        assert_eq!(dir.connect_info(&other).unwrap().proxy_password.as_ref().map(Secret::expose), Some("host-pw"), "its own proxy brings its own password");
         let snapshot = dir.snapshot();
         assert!(snapshot.groups.iter().any(|g| g.has_proxy_password) && snapshot.hosts.iter().find(|h| h.id == other).unwrap().has_proxy_password);
-        assert!(!serde_json::to_string(&snapshot).unwrap().contains("-pw"), "kein Passwort verlässt den Kern");
+        assert!(!serde_json::to_string(&snapshot).unwrap().contains("-pw"), "no password leaves the core");
         // Without the field it stays, `null` removes it, and without a proxy of its own it is dropped.
         dir.save_host(HostInput { id: Some(other.clone()), own: own_proxy.clone(), ..host("sw-02", Some(&switches)) }).unwrap();
         assert!(dir.snapshot().hosts.iter().find(|h| h.id == other).unwrap().has_proxy_password);
@@ -2591,22 +2591,22 @@ mod tests {
         dir.save_group(GroupInput { id: Some(group_id.clone()), defs, ..group("Produktiv", None) }).unwrap();
         dir.save_host(HostInput { id: Some(id.clone()), address: "10.0.10.11".into(), own: Fields { startcmd: Some("cd /srv".into()), agent_forward: Some(false), ..Fields::default() }, ..host("web-01", Some(&group_id)) }).unwrap();
         let info = dir.connect_info(&id).unwrap();
-        assert_eq!((info.agent, info.agent_forward), (true, false), "Agent von der Gruppe, Weiterreichen am Host abgeschaltet");
+        assert_eq!((info.agent, info.agent_forward), (true, false), "agent from the group, forwarding switched off on the host");
         assert_eq!((info.jump.as_deref(), info.startcmd.as_deref()), (Some(bastion.as_str()), Some("cd /srv")));
         assert_eq!(info.env, [("STUFE".to_string(), "prod".to_string())]);
         let hop = dir.connect_info(&bastion).unwrap();
-        assert_eq!((hop.user.as_str(), hop.jump.as_deref()), ("sprung", None), "„ausdrücklich keiner“ am Sprung-Server selbst");
+        assert_eq!((hop.user.as_str(), hop.jump.as_deref()), ("sprung", None), "“explicitly none” on the jump host itself");
         assert_eq!(reason(dir.save_host(HostInput { own: Fields { env: Some("kaputt".into()), ..Fields::default() }, ..host("x", None) })), Invalid::EnvInvalid);
         dir.save_group(GroupInput { id: Some(group_id.clone()), defs: Fields { user: Some("deploy".into()), port: Some(2200), key_file: Some("  C:\\Keys\\deploy  ".into()), ..Fields::default() }, ..group("Produktiv", None) }).unwrap();
         let info = dir.connect_info(&id).unwrap();
-        assert_eq!(info.key_file.as_deref(), Some("C:\\Keys\\deploy"), "Leerraum um den Pfad wird entfernt");
+        assert_eq!(info.key_file.as_deref(), Some("C:\\Keys\\deploy"), "whitespace around the path is removed");
         assert!(info.password.is_none());
         assert!(matches!(dir.connect_info("00000000000000000000000000000000"), Err(DirError::NotFound)));
 
-        dir.set_host_password(&id, Secret::new("neu-eingegeben".into())).unwrap();
-        assert_eq!(dir.connect_info(&id).unwrap().password.as_ref().map(Secret::expose), Some("neu-eingegeben"));
+        dir.set_host_password(&id, Secret::new("newly-entered".into())).unwrap();
+        assert_eq!(dir.connect_info(&id).unwrap().password.as_ref().map(Secret::expose), Some("newly-entered"));
         assert!(dir.set_host_os(&id, "Ub").unwrap());
-        assert!(!dir.set_host_os(&id, "Ub").unwrap(), "gleiches System ist keine Änderung");
+        assert!(!dir.set_host_os(&id, "Ub").unwrap(), "the same system is no change");
         let snapshot = dir.snapshot();
         let saved = snapshot.hosts.iter().find(|h| h.id == id).unwrap();
         assert_eq!((saved.os.as_deref(), saved.has_password), (Some("Ub"), true));
@@ -2618,7 +2618,7 @@ mod tests {
             kind: KeyKind::Ed25519,
             bits: 256,
             fingerprint: format!("SHA256:{name}"),
-            public: format!("ssh-ed25519 AAAA{name} kommentar aus der datei"),
+            public: format!("ssh-ed25519 AAAA{name} comment from the file"),
             private: Secret::new(format!("-----BEGIN OPENSSH PRIVATE KEY-----{name}")),
             origin: KeyOrigin::Generated,
         }
@@ -2640,9 +2640,9 @@ mod tests {
         assert_eq!(snapshot.keys.iter().map(|k| k.name.as_str()).collect::<Vec<_>>(), ["Alt", "arbeit"]);
         let view = &snapshot.keys[1];
         assert_eq!((view.id.as_str(), view.kind, view.bits, view.origin), (id.as_str(), KeyKind::Ed25519, 256, KeyOrigin::Generated));
-        assert_eq!(view.public_key, "ssh-ed25519 AAAAarbeit arbeit", "der Kommentar ist der Name, nicht der aus der Datei");
+        assert_eq!(view.public_key, "ssh-ed25519 AAAAarbeit arbeit", "the comment is the name, not the one from the file");
         assert!(view.added_at > 0);
-        assert!(!serde_json::to_string(&snapshot).unwrap().contains("PRIVATE"), "der private Teil verlässt den Kern nicht");
+        assert!(!serde_json::to_string(&snapshot).unwrap().contains("PRIVATE"), "the private part does not leave the core");
 
         dir.rename_key(&id, " arbeit-2026 ").unwrap();
         assert_eq!(dir.key_public(&id).unwrap(), "ssh-ed25519 AAAAarbeit arbeit-2026");
@@ -2707,7 +2707,7 @@ mod tests {
         assert_eq!(info.key.as_ref().map(Secret::expose), Some("-----BEGIN OPENSSH PRIVATE KEY-----anderer"));
 
         // “Explicitly no identity” on the host: default user, no key, no password.
-        let bare = dir.save_host(HostInput { own: Fields { identity: Some(String::new()), ..Fields::default() }, ..host("alt", Some(&prod)) }).unwrap();
+        let bare = dir.save_host(HostInput { own: Fields { identity: Some(String::new()), ..Fields::default() }, ..host("old", Some(&prod)) }).unwrap();
         let info = dir.connect_info(&bare).unwrap();
         assert_eq!((info.user.as_str(), info.password.is_none(), info.key.is_none()), (model::DEFAULT_USER, true, true));
 
@@ -2716,7 +2716,7 @@ mod tests {
         dir.set_key_certificate(&work, Some(certificate.clone())).unwrap();
         assert_eq!(dir.connect_info(&plain).unwrap().certificate.as_deref(), Some("ssh-ed25519-cert-v01@openssh.com AAAAzert"));
         assert_eq!(dir.snapshot().keys.iter().find(|k| k.id == work).unwrap().certificate, Some(certificate));
-        assert!(dir.connect_info(&special).unwrap().certificate.is_none(), "der andere Schlüssel hat keines");
+        assert!(dir.connect_info(&special).unwrap().certificate.is_none(), "the other key has none");
         dir.set_key_certificate(&work, None).unwrap();
         assert!(dir.connect_info(&plain).unwrap().certificate.is_none());
         assert!(matches!(dir.set_key_certificate("00000000000000000000000000000000", None), Err(DirError::NotFound)));
@@ -2724,7 +2724,7 @@ mod tests {
         // Deleting a key drops the references on the host and in the identity, everything else stays.
         dir.delete_key(&other).unwrap();
         assert!(dir.snapshot().hosts.iter().all(|h| h.own.key.is_none()));
-        assert_eq!(dir.connect_info(&special).unwrap().key.as_ref().map(Secret::expose), Some("-----BEGIN OPENSSH PRIVATE KEY-----arbeit"), "jetzt gilt der Schlüssel der Identität");
+        assert_eq!(dir.connect_info(&special).unwrap().key.as_ref().map(Secret::expose), Some("-----BEGIN OPENSSH PRIVATE KEY-----arbeit"), "now the identity's key applies");
         dir.delete_key(&work).unwrap();
         assert_eq!((dir.snapshot().keys.len(), dir.snapshot().identities[0].key.as_deref()), (0, None));
         assert!(dir.connect_info(&plain).unwrap().key.is_none());
@@ -2733,7 +2733,7 @@ mod tests {
         // After copying it to a host, the host can be switched to the key.
         let fresh = dir.add_key(key("frisch")).unwrap();
         assert!(dir.set_host_key(&plain, &fresh).unwrap());
-        assert!(!dir.set_host_key(&plain, &fresh).unwrap(), "derselbe Schlüssel ist keine Änderung");
+        assert!(!dir.set_host_key(&plain, &fresh).unwrap(), "the same key is no change");
         assert_eq!(dir.connect_info(&plain).unwrap().key.as_ref().map(Secret::expose), Some("-----BEGIN OPENSSH PRIVATE KEY-----frisch"));
         assert_eq!(reason(dir.set_host_key(&plain, "00000000000000000000000000000000")), Invalid::KeyMissing);
 
@@ -2741,7 +2741,7 @@ mod tests {
         dir.delete_identity(&deploy).unwrap();
         let snapshot = dir.snapshot();
         assert!(snapshot.identities.is_empty() && snapshot.groups[0].defs.identity.is_none());
-        assert_eq!(snapshot.hosts.iter().find(|h| h.id == bare).unwrap().own.identity.as_deref(), Some(""), "„ausdrücklich keine“ bleibt stehen");
+        assert_eq!(snapshot.hosts.iter().find(|h| h.id == bare).unwrap().own.identity.as_deref(), Some(""), "“explicitly none” stays");
         assert_eq!(dir.connect_info(&plain).unwrap().user, model::DEFAULT_USER);
         assert_eq!(snapshot.hosts.len(), 3);
     }
@@ -2765,7 +2765,7 @@ mod tests {
         let outside = dir.save_host(HostInput { address: "203.0.113.5".into(), ..host("fremd", None) }).unwrap();
         let mut both = dir.connect_info(&inside).unwrap().authorities;
         both.sort();
-        assert_eq!(both, ["ssh-ed25519 AAAAAlles", "ssh-ed25519 AAAAFirma"], "ohne Kommentar, beide passen");
+        assert_eq!(both, ["ssh-ed25519 AAAAAlles", "ssh-ed25519 AAAAFirma"], "without a comment, both match");
         assert_eq!(dir.connect_info(&outside).unwrap().authorities, ["ssh-ed25519 AAAAAlles"]);
 
         dir.delete_authority(&company).unwrap();
@@ -2793,21 +2793,21 @@ mod tests {
 
         let view = dir.snapshot().workspaces.into_iter().find(|w| w.id == id).unwrap();
         assert_eq!((view.name.as_str(), view.multi), ("Deploy", true));
-        assert_eq!(view.layout, side(0.95, pane(&web), stacked), "das Verhältnis wird begrenzt, der Rest bleibt");
+        assert_eq!(view.layout, side(0.95, pane(&web), stacked), "the ratio is capped, the rest stays");
         let alone = dir.snapshot().workspaces.into_iter().find(|w| w.id == single).unwrap();
         assert_eq!((alone.layout.clone(), alone.multi), (*pane(&db), false), "unbekannte Hosts fallen weg, Multi-Exec braucht zwei Bereiche");
 
         // The same form the interface sends and reads.
         let json = serde_json::to_value(&alone.layout).unwrap();
         assert_eq!(json, serde_json::json!({ "pane": { "kind": "host", "id": db } }));
-        assert!(serde_json::from_value::<Arrangement>(serde_json::json!({ "pane": { "kind": "direct", "user": "root", "host": "1.2.3.4", "port": 22 } })).is_err(), "eingetippte Adressen gehören nicht in den Tresor");
+        assert!(serde_json::from_value::<Arrangement>(serde_json::json!({ "pane": { "kind": "direct", "user": "root", "host": "1.2.3.4", "port": 22 } })).is_err(), "typed addresses do not belong in the vault");
 
         dir.save_workspace(WorkspaceInput { id: Some(id.clone()), name: "Deploy-Runde".into(), multi: false, layout: side(0.4, pane(&web), pane(&db)) }).unwrap();
         assert_eq!(dir.snapshot().workspaces.iter().map(|w| w.name.as_str()).collect::<Vec<_>>(), ["Allein", "Deploy-Runde"]);
 
         dir.delete_host(&db).unwrap();
         let left = dir.snapshot().workspaces;
-        assert_eq!(left.len(), 1, "der Arbeitsbereich ohne Hosts ist weg");
+        assert_eq!(left.len(), 1, "the workspace without hosts is gone");
         assert_eq!(left[0].layout, *pane(&web));
         dir.delete_workspace(&id).unwrap();
         assert!(matches!(dir.delete_workspace(&id), Err(DirError::NotFound)));
@@ -2831,22 +2831,22 @@ mod tests {
         assert_eq!(reason(dir.save_forward(ForwardInput { bind_address: "-o ProxyCommand".into(), ..rule("Grafana", ForwardKind::Local, &web, 3000, "127.0.0.1", 3000) })), Invalid::AddressInvalid);
 
         let grafana = dir.save_forward(rule(" Grafana ", ForwardKind::Local, &web, 3000, " 127.0.0.1 ", 3000)).unwrap();
-        let socks = dir.save_forward(rule("SOCKS", ForwardKind::Dynamic, &db, 1080, "wird ignoriert", 99_999)).unwrap();
+        let socks = dir.save_forward(rule("SOCKS", ForwardKind::Dynamic, &db, 1080, "ignored", 99_999)).unwrap();
         dir.save_forward(ForwardInput { bind_address: "0.0.0.0".into(), ..rule("Webhook", ForwardKind::Remote, &db, 8080, "localhost", 5173) }).unwrap();
 
         let view = dir.forward(&grafana).unwrap();
         assert_eq!((view.name.as_str(), view.bind_address.as_str(), view.bind_port, view.dest_host.as_str(), view.dest_port), ("Grafana", "127.0.0.1", 3000, "127.0.0.1", 3000));
         let dynamic = dir.forward(&socks).unwrap();
-        assert_eq!((dynamic.dest_host.as_str(), dynamic.dest_port), ("", 0), "ein SOCKS-Proxy hat kein festes Ziel");
+        assert_eq!((dynamic.dest_host.as_str(), dynamic.dest_port), ("", 0), "a SOCKS proxy has no fixed destination");
         assert_eq!(dir.snapshot().forwards.iter().map(|f| (f.name.as_str(), f.bind_address.as_str())).collect::<Vec<_>>(), [("Grafana", "127.0.0.1"), ("SOCKS", "127.0.0.1"), ("Webhook", "0.0.0.0")]);
         // The same form the interface reads.
         assert_eq!(serde_json::to_value(&dynamic).unwrap(), serde_json::json!({ "id": socks, "name": "SOCKS", "kind": "dynamic", "host": db, "bindAddress": "127.0.0.1", "bindPort": 1080, "destHost": "", "destPort": 0 }));
 
-        dir.save_forward(ForwardInput { id: Some(grafana.clone()), ..rule("Grafana neu", ForwardKind::Local, &web, 3001, "10.0.0.5", 80) }).unwrap();
+        dir.save_forward(ForwardInput { id: Some(grafana.clone()), ..rule("Grafana new", ForwardKind::Local, &web, 3001, "10.0.0.5", 80) }).unwrap();
         assert_eq!(dir.forward(&grafana).unwrap().dest_host, "10.0.0.5");
 
         dir.delete_host(&db).unwrap();
-        assert_eq!(dir.snapshot().forwards.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(), ["Grafana neu"], "mit dem Host gehen seine Regeln");
+        assert_eq!(dir.snapshot().forwards.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(), ["Grafana new"], "a host's rules go with it");
         dir.delete_forward(&grafana).unwrap();
         assert!(matches!(dir.delete_forward(&grafana), Err(DirError::NotFound)));
         assert!(matches!(dir.forward(&grafana), Err(DirError::NotFound)));
@@ -2858,7 +2858,7 @@ mod tests {
         let mut dir = temp.directory();
         let command = |name: &str, text: &str, hotkey: Option<&str>| SnippetInput { id: None, name: name.into(), package: " Alltag ".into(), kind: SnippetKind::Command, command: text.into(), steps: Vec::new(), hotkey: hotkey.map(Into::into) };
         let step = |wait: u32, keys: &str| MacroStep { wait, keys: keys.into() };
-        let recorded = |name: &str, steps: Vec<MacroStep>| SnippetInput { id: None, name: name.into(), package: String::new(), kind: SnippetKind::Macro, command: "wird ignoriert".into(), steps, hotkey: None };
+        let recorded = |name: &str, steps: Vec<MacroStep>| SnippetInput { id: None, name: name.into(), package: String::new(), kind: SnippetKind::Macro, command: "ignored".into(), steps, hotkey: None };
 
         assert_eq!(reason(dir.save_snippet(command("", "df -h", None))), Invalid::NameRequired);
         assert_eq!(reason(dir.save_snippet(command("Platz", "  \n ", None))), Invalid::CommandRequired);
@@ -2876,7 +2876,7 @@ mod tests {
         let stored = all.iter().find(|s| s.id == space).unwrap();
         assert_eq!((stored.package.as_str(), stored.command.as_str(), stored.hotkey.as_deref()), ("Alltag", "df -h\ndu -sh *", Some("Alt+1")));
         let played = all.iter().find(|s| s.id == tour).unwrap();
-        assert_eq!((played.command.as_str(), played.steps.len(), played.steps[1].wait), ("", 2, MAX_MACRO_WAIT), "leere Schritte fallen weg, endlose Pausen werden begrenzt");
+        assert_eq!((played.command.as_str(), played.steps.len(), played.steps[1].wait), ("", 2, MAX_MACRO_WAIT), "empty steps are dropped, endless pauses are capped");
         assert_eq!(serde_json::to_value(&played.steps[0]).unwrap(), serde_json::json!({ "wait": 0, "keys": "cd /var\r" }));
         assert!(!format!("{:?}", dir.snippets[&tour]).contains("cd /var"), "getippte Tasten erscheinen in keiner Ausgabe");
 
@@ -2918,16 +2918,16 @@ mod tests {
     fn unknown_fields_and_records_survive_an_edit() {
         let temp = Temp::new("unknown");
         let mut dir = temp.directory();
-        let future = br#"{"t":"host","v":2,"name":"alt","address":"1.2.3.4","zukunft":"bleibt"}"#;
+        let future = br#"{"t":"host","v":2,"name":"old","address":"1.2.3.4","future":"stays"}"#;
         let id = hex(&dir.vault_mut().put(None, future).unwrap());
-        dir.vault_mut().put(None, r#"{"t":"zukunft","name":"kommt später"}"#.as_bytes()).unwrap();
-        dir.vault_mut().put(None, b"kein json").unwrap();
+        dir.vault_mut().put(None, r#"{"t":"future","name":"comes later"}"#.as_bytes()).unwrap();
+        dir.vault_mut().put(None, b"not json").unwrap();
         dir.reload().unwrap();
         assert_eq!((dir.snapshot().hosts.len(), dir.snapshot().damaged), (1, 1));
 
-        dir.save_host(HostInput { id: Some(id.clone()), ..host("neu", None) }).unwrap();
-        assert_eq!((dir.hosts[&id].v, dir.hosts[&id].extra["zukunft"].as_str()), (2, Some("bleibt")));
-        assert_eq!(dir.vault().list().unwrap().records.len(), 3, "fremde Datensätze bleiben im Tresor");
+        dir.save_host(HostInput { id: Some(id.clone()), ..host("new", None) }).unwrap();
+        assert_eq!((dir.hosts[&id].v, dir.hosts[&id].extra["future"].as_str()), (2, Some("stays")));
+        assert_eq!(dir.vault().list().unwrap().records.len(), 3, "foreign records stay in the vault");
     }
 
     #[test]
@@ -2949,12 +2949,12 @@ mod tests {
 
         // If a step fails, what was written before is gone again too.
         let failed = dir.batch(|dir| {
-            dir.save_host(host("bleibt-nicht", None))?;
+            dir.save_host(host("does-not-stay", None))?;
             dir.save_host(HostInput { address: " ".into(), ..host("kaputt", None) })
         });
         assert_eq!(reason(failed), Invalid::AddressRequired);
         assert_eq!(dir.snapshot().hosts.len(), 2);
-        assert!(dir.save_host(host("danach", None)).is_ok(), "nach einer Sammeländerung geht es normal weiter");
+        assert!(dir.save_host(host("danach", None)).is_ok(), "after a batch change it continues normally");
 
         // Several keys may apply to one address; the same one is not added a second time.
         assert!(dir.add_known_host("Web.Example.org", 22, "ssh-ed25519", "SHA256:a", "ssh-ed25519 AAAA kommentar").unwrap());
@@ -2963,7 +2963,7 @@ mod tests {
         assert_eq!(dir.known_hosts().len(), 2);
         assert_eq!(dir.judge_host_key("web.example.org", 22, "ssh-rsa BBBB"), Verdict::Trusted);
         assert_eq!(dir.judge_host_key("web.example.org", 22, "ssh-ed25519 AAAA"), Verdict::Trusted);
-        assert_eq!(reason(dir.add_known_host("-böse", 22, "x", "y", "ssh-rsa BBBB")), Invalid::AddressInvalid);
+        assert_eq!(reason(dir.add_known_host("-evil", 22, "x", "y", "ssh-rsa BBBB")), Invalid::AddressInvalid);
     }
 
     #[test]
@@ -3002,15 +3002,15 @@ mod tests {
         dir.save_host(HostInput { id: Some(id.clone()), ..web(Fields { user: Some("web123".into()), ..Fields::default() }, Some(settings), None) }).unwrap();
         let info = dir.ftp_info(&id).unwrap();
         assert_eq!((info.port, info.dir.as_deref()), (990, Some("/htdocs")));
-        assert_eq!(info.password.as_ref().map(Secret::expose), Some("geheim"), "ohne Angabe bleibt das Passwort");
+        assert_eq!(info.password.as_ref().map(Secret::expose), Some("geheim"), "without a value the password stays");
         dir.save_host(HostInput { id: Some(id.clone()), ..web(Fields { user: Some("web123".into()), port: Some(2121), ..Fields::default() }, None, None) }).unwrap();
-        assert_eq!((dir.ftp_info(&id).unwrap().port, dir.ftp_info(&id).unwrap().security), (2121, FtpSecurity::Implicit), "ohne Angabe bleiben die Einstellungen");
+        assert_eq!((dir.ftp_info(&id).unwrap().port, dir.ftp_info(&id).unwrap().security), (2121, FtpSecurity::Implicit), "without values the settings stay");
 
         // With an identity, user and password come from it; the host then holds none.
-        let identity = dir.save_identity(IdentityInput { password: Some(Some(Secret::new("aus-der-identitaet".into()))), ..identity("Hoster", "kunde7", None) }).unwrap();
+        let identity = dir.save_identity(IdentityInput { password: Some(Some(Secret::new("from-the-identity".into()))), ..identity("Hoster", "kunde7", None) }).unwrap();
         dir.save_host(HostInput { id: Some(id.clone()), ..web(Fields { user: Some("web123".into()), identity: Some(identity.clone()), ..Fields::default() }, None, None) }).unwrap();
         let info = dir.ftp_info(&id).unwrap();
-        assert_eq!((info.user.as_str(), info.password.as_ref().map(Secret::expose), info.saves_password), ("kunde7", Some("aus-der-identitaet"), false));
+        assert_eq!((info.user.as_str(), info.password.as_ref().map(Secret::expose), info.saves_password), ("kunde7", Some("from-the-identity"), false));
         let view = serde_json::to_value(dir.snapshot().hosts.iter().find(|h| h.id == id).unwrap()).unwrap();
         assert_eq!((view["own"].clone(), view["hasPassword"].clone()), (serde_json::json!({ "identity": identity }), serde_json::json!(false)));
 
@@ -3027,7 +3027,7 @@ mod tests {
         let info = dir.ftp_info(&id).unwrap();
         assert_eq!((info.security, info.plain_ok), (FtpSecurity::Explicit, false));
         dir.set_ftp_choice(&id, true, false).unwrap();
-        assert!(!dir.ftp_info(&id).unwrap().plain_ok, "bei FTPS gibt es nichts abzubestellen");
+        assert!(!dir.ftp_info(&id).unwrap().plain_ok, "with FTPS there is nothing to dismiss");
 
         // A confirmed certificate is listed with the known hosts and applies to exactly this address and port.
         let port = dir.ftp_info(&id).unwrap().port;
@@ -3035,7 +3035,7 @@ mod tests {
         assert_eq!(dir.ftp_info(&id).unwrap().pin.as_deref(), Some("5F:1A"));
         assert_eq!(dir.certificate_pin("ftp.example.org", port + 1), None);
         dir.trust_certificate("ftp.example.org", port, "AA:BB").unwrap();
-        assert_eq!(dir.ftp_info(&id).unwrap().pin.as_deref(), Some("AA:BB"), "ein neues ersetzt das alte");
+        assert_eq!(dir.ftp_info(&id).unwrap().pin.as_deref(), Some("AA:BB"), "a new one replaces the old one");
         let known = dir.snapshot().known_hosts;
         assert_eq!(known.iter().filter(|k| k.algorithm == "tls").map(|k| (k.host.as_str(), k.fingerprint.as_str())).collect::<Vec<_>>(), [("ftp.example.org", "AA:BB")]);
 
@@ -3065,8 +3065,8 @@ mod tests {
         let snapshot = dir.snapshot();
         let view = snapshot.hosts.iter().find(|h| h.id == switch).unwrap();
         assert_eq!(view.protocol, "telnet");
-        assert!(!view.has_password, "für Telnet wird kein Passwort gespeichert");
-        assert!(view.own.startcmd.is_none(), "was zum Protokoll nicht gehört, wird nicht gespeichert");
+        assert!(!view.has_password, "no password is saved for Telnet");
+        assert!(view.own.startcmd.is_none(), "what does not belong to the protocol is not saved");
         assert_eq!(reason(dir.connect_info(&switch)), Invalid::HostNotSsh);
 
         // Without a value the protocol stays, e.g. when moving into another group.
@@ -3085,7 +3085,7 @@ mod tests {
         assert_eq!((info.port.as_str(), info.line, info.charset.as_str()), ("COM3", line, "utf-8"));
         dir.save_host(HostInput { id: Some(console.clone()), address: "/dev/ttyUSB0".into(), ..host("konsole", Some(&net)) }).unwrap();
         let Endpoint::Serial(info) = dir.endpoint(&console).unwrap() else { panic!("seriell erwartet") };
-        assert_eq!((info.port.as_str(), info.line.baud, info.charset.as_str()), ("/dev/ttyUSB0", 115_200, "iso-8859-1"), "die Leitung bleibt, der Zeichensatz kommt von der Gruppe");
+        assert_eq!((info.port.as_str(), info.line.baud, info.charset.as_str()), ("/dev/ttyUSB0", 115_200, "iso-8859-1"), "the line stays, the character set comes from the group");
         assert_eq!(serde_json::to_value(dir.snapshot().hosts.iter().find(|h| h.id == console).unwrap()).unwrap()["serial"], serde_json::json!({ "baud": 115_200, "dataBits": 8, "parity": "none", "stopBits": 1, "flow": "none" }));
 
         // If the line becomes a Telnet host, its settings disappear.
@@ -3135,7 +3135,7 @@ mod tests {
 
         let id = dir.save_workspace(input(side(server, local("wsl:Ubuntu")))).unwrap();
         let view = dir.snapshot().workspaces.into_iter().find(|w| w.id == id).unwrap();
-        assert!(view.multi, "ein lokales Terminal zählt als Bereich");
+        assert!(view.multi, "a local terminal counts as a pane");
         assert_eq!(serde_json::to_value(&view.layout).unwrap()["b"], serde_json::json!({ "pane": { "kind": "local", "shell": "wsl:Ubuntu" } }));
 
         // The host's pane disappears with it; the local terminal remains on its own.
@@ -3144,7 +3144,7 @@ mod tests {
         assert_eq!((left[0].layout.clone(), left[0].multi), (*local("wsl:Ubuntu"), false));
 
         assert_eq!(reason(dir.save_workspace(input(*local("")))), Invalid::WorkspaceEmpty);
-        assert_eq!(reason(dir.save_workspace(input(*local("bö\u{7}se")))), Invalid::WorkspaceEmpty);
+        assert_eq!(reason(dir.save_workspace(input(*local("ev\u{7}il")))), Invalid::WorkspaceEmpty);
         dir.save_workspace(input(*local("pwsh"))).unwrap();
     }
 
@@ -3165,8 +3165,8 @@ mod tests {
         let me = &snapshot.vaults[1].members[0];
         assert!(me.me && !me.invited && me.code.split(" · ").count() == 6, "{me:?}");
         dir.rename_vault(&shared, "Team").unwrap();
-        assert_eq!((dir.vault_name(&shared), dir.snapshot().homes.len()), ("Team".to_string(), 1), "umbenennen ersetzt den einen Datensatz mit dem Namen");
-        assert!(matches!(dir.rename_vault(&snapshot.vaults[0].id, "x"), Err(DirError::Vault(VaultError::NotOwner))), "der persönliche Tresor hat keinen Namen");
+        assert_eq!((dir.vault_name(&shared), dir.snapshot().homes.len()), ("Team".to_string(), 1), "renaming replaces the one record with the name");
+        assert!(matches!(dir.rename_vault(&snapshot.vaults[0].id, "x"), Err(DirError::Vault(VaultError::NotOwner))), "the personal vault has no name");
 
         // Creating in the chosen vault. Without a choice, the group decides where an entry goes.
         let team_group = dir.in_vault(Some(&shared), |d| d.save_group(group("Team", None))).unwrap();
@@ -3224,11 +3224,11 @@ mod tests {
         let workspace = dir.save_workspace(WorkspaceInput { id: None, name: "Runde".into(), multi: false, layout }).unwrap();
 
         assert!(matches!(dir.move_host(&web, &"00".repeat(16), true), Err(DirError::NotFound)));
-        assert_eq!(dir.move_host(&web, &personal, true).unwrap(), web, "liegt schon dort");
+        assert_eq!(dir.move_host(&web, &personal, true).unwrap(), web, "already there");
         let moved = dir.move_host(&web, &shared, true).unwrap();
         assert_ne!(moved, web);
         let snapshot = dir.snapshot();
-        assert!(!snapshot.hosts.iter().any(|h| h.id == web), "hier ist er weg");
+        assert!(!snapshot.hosts.iter().any(|h| h.id == web), "gone here");
         let host_view = snapshot.hosts.iter().find(|h| h.id == moved).unwrap();
         assert_eq!((snapshot.homes.get(&moved), host_view.group.as_deref(), host_view.has_password), (Some(&shared), None, true));
         // The jump host from elsewhere is dropped; identity and its key came along as copies.
@@ -3238,7 +3238,7 @@ mod tests {
         let carried_identity = snapshot.identities.iter().find(|i| i.id == carried).unwrap();
         let carried_key = carried_identity.key.clone().unwrap();
         assert_eq!((snapshot.homes.get(&carried), snapshot.homes.get(&carried_key), carried_key != own_key), (Some(&shared), Some(&shared), true));
-        assert!(snapshot.identities.iter().any(|i| i.id == deploy) && snapshot.keys.iter().any(|k| k.id == own_key), "die eigenen bleiben, wo sie waren");
+        assert!(snapshot.identities.iter().any(|i| i.id == deploy) && snapshot.keys.iter().any(|k| k.id == own_key), "its own ones stay where they were");
         assert_eq!(dir.connect_info(&moved).unwrap().user, "deploy");
         // Port rule, workspace and the host behind them are personal and follow the host.
         assert_eq!(snapshot.forwards.iter().find(|f| f.id == rule).unwrap().host, moved);
@@ -3252,7 +3252,7 @@ mod tests {
         assert_eq!((snapshot.homes.get(&back), host_view.own.identity.as_deref()), (None, Some(carried.as_str())));
 
         // Without carrying, the reference is dropped instead of copied.
-        let plain = dir.save_host(HostInput { own: Fields { key: Some(own_key.clone()), ..Fields::default() }, ..host("ohne", None) }).unwrap();
+        let plain = dir.save_host(HostInput { own: Fields { key: Some(own_key.clone()), ..Fields::default() }, ..host("without", None) }).unwrap();
         let moved = dir.move_host(&plain, &shared, false).unwrap();
         assert_eq!(dir.snapshot().hosts.iter().find(|h| h.id == moved).unwrap().own.key, None);
     }
@@ -3278,7 +3278,7 @@ mod tests {
         let id = dir.save_proxmox(ProxmoxInput { fingerprint: Some(FINGERPRINT.to_lowercase().replace(':', "")), ..pve(" Dedi ") }).unwrap();
         let snapshot = dir.snapshot();
         assert_eq!(snapshot.proxmox, [ProxmoxView { id: id.clone(), name: "Dedi".into(), address: "https://pve.example.de:8006".into(), token_id: "glowport@pve!glowport".into(), fingerprint: Some(FINGERPRINT.into()), identity: None }]);
-        assert!(!serde_json::to_string(&snapshot).unwrap().contains("0c6f2c1e"), "das Geheimnis geht nicht an die Oberfläche");
+        assert!(!serde_json::to_string(&snapshot).unwrap().contains("0c6f2c1e"), "the secret does not go to the interface");
         assert_eq!(dir.proxmox_access(&id).unwrap().secret.expose(), "0c6f2c1e-58a1");
         assert_eq!(dir.record_name(&id).as_deref(), Some("Dedi"));
 
@@ -3286,8 +3286,8 @@ mod tests {
         dir.save_proxmox(ProxmoxInput { id: Some(id.clone()), secret: None, ..pve("Dedi 2") }).unwrap();
         let access = dir.proxmox_access(&id).unwrap();
         assert_eq!((access.secret.expose(), access.fingerprint, dir.snapshot().proxmox[0].name.as_str()), ("0c6f2c1e-58a1", None, "Dedi 2"));
-        dir.save_proxmox(ProxmoxInput { id: Some(id.clone()), secret: Some(Secret::new(" neu ".into())), ..pve("Dedi") }).unwrap();
-        assert_eq!(dir.proxmox_access(&id).unwrap().secret.expose(), "neu");
+        dir.save_proxmox(ProxmoxInput { id: Some(id.clone()), secret: Some(Secret::new(" new".into())), ..pve("Dedi") }).unwrap();
+        assert_eq!(dir.proxmox_access(&id).unwrap().secret.expose(), "new");
 
         assert_eq!(reason(dir.save_proxmox(pve(" "))), Invalid::NameRequired);
         for address in ["http://pve.example.de:8006", "pve.example.de:8006", "https://", "https://pve.example.de/pfad", "https://a b", "https://ich@pve"] {
@@ -3303,7 +3303,7 @@ mod tests {
             assert_eq!(reason(dir.save_proxmox(ProxmoxInput { fingerprint: Some(fingerprint.into()), ..pve("x") })), Invalid::FingerprintInvalid, "{fingerprint}");
         }
         assert!(matches!(dir.save_proxmox(ProxmoxInput { id: Some("00".repeat(16)), ..pve("x") }), Err(DirError::NotFound)));
-        assert_eq!(dir.snapshot().proxmox.len(), 1, "nichts Abgelehntes ist angekommen");
+        assert_eq!(dir.snapshot().proxmox.len(), 1, "nothing rejected arrived");
     }
 
     #[test]
@@ -3318,7 +3318,7 @@ mod tests {
         let team_group = dir.in_vault(Some(&shared), |dir| dir.save_group(group("Team", None))).unwrap();
 
         let web = GuestHost { user: Some("deploy".into()), key: Some(deploy.clone()), os: Some("Ub".into()), ..guest(101, "web-01", Some("10.0.10.11")) };
-        let container = GuestHost { kind: model::GUEST_LXC.into(), user: Some("root".into()), key: Some("gibt-es-nicht".into()), ..guest(111, "pihole", Some("10.0.0.53")) };
+        let container = GuestHost { kind: model::GUEST_LXC.into(), user: Some("root".into()), key: Some("does-not-exist".into()), ..guest(111, "pihole", Some("10.0.0.53")) };
         // Even if entries were currently being created in a shared vault: these hosts go into the personal one.
         let made = dir.in_vault(Some(&shared), |dir| dir.add_proxmox_hosts(&connection, vec![web.clone(), container, guest(130, "spielwiese", None)], Some(&own_group))).unwrap();
         assert_eq!(made.len(), 3);
@@ -3328,17 +3328,17 @@ mod tests {
         let link = |vmid: u32, kind: &str| Some(LinkView { connection: connection.clone(), node: "pve".into(), vmid, kind: kind.into() });
         assert_eq!((by("web-01").address.as_str(), by("web-01").group.as_deref(), by("web-01").os.as_deref(), by("web-01").own.user.as_deref(), by("web-01").own.key.as_deref()), ("10.0.10.11", Some(own_group.as_str()), Some("Ub"), Some("deploy"), Some(deploy.as_str())));
         assert_eq!((&by("web-01").proxmox, &by("pihole").proxmox), (&link(101, "qemu"), &link(111, "lxc")));
-        assert_eq!(by("pihole").own.key, None, "ein Schlüssel, den es nicht gibt, wird nicht eingetragen");
-        assert_eq!(by("spielwiese").address, "spielwiese", "ohne bekannte Adresse steht vorerst der Name da");
+        assert_eq!(by("pihole").own.key, None, "a key that does not exist is not entered");
+        assert_eq!(by("spielwiese").address, "spielwiese", "without a known address the name stands there for now");
         assert_eq!(dir.proxmox_host(&connection, 111), Some(by("pihole").id.as_str()));
         assert_eq!(dir.proxmox_host(&connection, 999), None);
 
         // Whoever already has a host gets no second one. If one fails, none is created.
         assert_eq!(dir.add_proxmox_hosts(&connection, vec![web.clone(), guest(120, "monitoring", Some("10.0.10.90"))], None).unwrap().len(), 1);
-        assert_eq!(reason(dir.add_proxmox_hosts(&connection, vec![guest(140, "neu", Some("10.0.0.9")), guest(141, "kaputt", Some("a b"))], None)), Invalid::AddressInvalid);
+        assert_eq!(reason(dir.add_proxmox_hosts(&connection, vec![guest(140, "new", Some("10.0.0.9")), guest(141, "broken", Some("a b"))], None)), Invalid::AddressInvalid);
         assert_eq!(reason(dir.add_proxmox_hosts(&connection, vec![GuestHost { kind: "docker".into(), ..guest(142, "x", Some("10.0.0.8")) }], None)), Invalid::GuestInvalid);
         assert_eq!(reason(dir.add_proxmox_hosts(&connection, vec![guest(143, "x", Some("10.0.0.7"))], Some(&team_group))), Invalid::OtherVault);
-        assert_eq!(reason(dir.add_proxmox_hosts(&connection, vec![guest(143, "x", Some("10.0.0.7"))], Some("gibt-es-nicht"))), Invalid::GroupMissing);
+        assert_eq!(reason(dir.add_proxmox_hosts(&connection, vec![guest(143, "x", Some("10.0.0.7"))], Some("does-not-exist"))), Invalid::GroupMissing);
         assert!(matches!(dir.add_proxmox_hosts(&"00".repeat(16), vec![guest(143, "x", Some("10.0.0.7"))], None), Err(DirError::NotFound)));
         assert_eq!(dir.snapshot().hosts.len(), 4);
 
@@ -3378,7 +3378,7 @@ mod tests {
         dir.delete_proxmox(&connection).unwrap();
         let snapshot = dir.snapshot();
         assert_eq!((snapshot.proxmox.len(), snapshot.hosts.len(), snapshot.hosts.iter().filter(|h| h.proxmox.is_some()).count()), (0, before, 0));
-        assert!(dir.hosts.values().all(|h| h.proxmox.is_none()), "auch im Tresor steht keine mehr");
+        assert!(dir.hosts.values().all(|h| h.proxmox.is_none()), "it is not in the vault any more either");
         assert_eq!(dir.damaged, 0);
         assert!(matches!(dir.delete_proxmox(&connection), Err(DirError::NotFound)));
     }
@@ -3390,7 +3390,7 @@ mod tests {
         let own = dir.add_key(key("mein")).unwrap();
         let cloud = dir.add_key(key("cloud")).unwrap();
         let admin = dir.save_identity(IdentityInput { password: Some(Some(Secret::new("hunter2".into()))), ..identity("Admin", "alex", Some(&own)) }).unwrap();
-        assert_eq!(reason(dir.save_proxmox(ProxmoxInput { identity: Some("gibt-es-nicht".into()), ..pve("x") })), Invalid::IdentityMissing);
+        assert_eq!(reason(dir.save_proxmox(ProxmoxInput { identity: Some("does-not-exist".into()), ..pve("x") })), Invalid::IdentityMissing);
         let connection = dir.save_proxmox(ProxmoxInput { identity: Some(admin.clone()), ..pve("Dedi") }).unwrap();
         assert_eq!(dir.snapshot().proxmox[0].identity.as_deref(), Some(admin.as_str()));
 
@@ -3413,7 +3413,7 @@ mod tests {
         assert_eq!((login.user, login.key.as_ref().map(|k| k.expose().contains("cloud")), login.password), (None, Some(true), None));
         assert_eq!(dir.login(Some(&admin), Some(&cloud)).unwrap().key.map(|k| k.expose().contains("cloud")), Some(true));
         assert_eq!(dir.login(None, None).unwrap(), Login::default());
-        assert_eq!((reason(dir.login(Some("fehlt"), None)), reason(dir.login(None, Some("fehlt")))), (Invalid::IdentityMissing, Invalid::KeyMissing));
+        assert_eq!((reason(dir.login(Some("missing"), None)), reason(dir.login(None, Some("missing")))), (Invalid::IdentityMissing, Invalid::KeyMissing));
 
         // Editing without an identity removes it; a deleted identity also disappears from the connection.
         dir.save_proxmox(ProxmoxInput { id: Some(connection.clone()), secret: None, ..pve("Dedi") }).unwrap();
@@ -3451,19 +3451,19 @@ mod tests {
         assert_eq!(shown(&dir, &web), ("web-prod".into(), "10.0.10.12".into()));
         assert_eq!(shown(&dir, &sandbox), ("spielwiese".into(), "10.0.10.77".into()));
         assert_eq!(dir.hosts.values().find(|h| h.name == "fremd").map(|h| h.address.as_str()), Some("192.168.1.1"));
-        assert!(!dir.follow_proxmox(&connection, &renamed).unwrap(), "ein zweites Mal ändert nichts");
+        assert!(!dir.follow_proxmox(&connection, &renamed).unwrap(), "a second time changes nothing");
 
         // Changed by hand: the name stays, the address keeps following. And the other way round.
         dir.save_host(HostInput { id: Some(web.clone()), ..HostInput { address: "10.0.10.12".into(), ..host("Mein Webserver", None) } }).unwrap();
         dir.save_host(HostInput { id: Some(db.clone()), ..HostInput { address: "db.intern".into(), ..host("db-01", None) } }).unwrap();
-        let later = [seen(101, "web-neu", Some("10.0.10.13")), seen(102, "db-neu", Some("10.0.20.99")), seen(130, "spielwiese", None)];
+        let later = [seen(101, "web-new", Some("10.0.10.13")), seen(102, "db-new", Some("10.0.20.99")), seen(130, "spielwiese", None)];
         assert!(dir.follow_proxmox(&connection, &later).unwrap());
         assert_eq!(shown(&dir, &web), ("Mein Webserver".into(), "10.0.10.13".into()));
-        assert_eq!(shown(&dir, &db), ("db-neu".into(), "db.intern".into()));
-        assert_eq!(shown(&dir, &sandbox).1, "10.0.10.77", "ohne Adresse in Proxmox bleibt die letzte bekannte");
+        assert_eq!(shown(&dir, &db), ("db-new".into(), "db.intern".into()));
+        assert_eq!(shown(&dir, &sandbox).1, "10.0.10.77", "without an address in Proxmox the last known one stays");
 
         // Moved to another node: recognised by its number. Unusable data from Proxmox stays out.
-        let moved = [GuestSeen { node: "pve2".into(), ..seen(101, " ", Some("a b")) }, seen(102, "db-neu", Some("10.0.20.99"))];
+        let moved = [GuestSeen { node: "pve2".into(), ..seen(101, " ", Some("a b")) }, seen(102, "db-new", Some("10.0.20.99"))];
         assert!(dir.follow_proxmox(&connection, &moved).unwrap());
         assert_eq!(dir.snapshot().hosts.iter().find(|h| h.id == web).unwrap().proxmox.as_ref().map(|link| link.node.as_str()), Some("pve2"));
         assert_eq!(shown(&dir, &web), ("Mein Webserver".into(), "10.0.10.13".into()));

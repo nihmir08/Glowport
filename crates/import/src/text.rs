@@ -275,10 +275,10 @@ mod tests {
         let sections = ini_sections("; Kommentar\n[Bookmarks]\nSubRep=\na=#109#0%h;x#y\n[Leer]\n");
         assert_eq!(sections.len(), 2);
         assert_eq!(sections[0].1["a"], "#109#0%h;x#y");
-        let value = jsonc("{\n // Kommentar\n \"a\": \"x // bleibt\", /* weg */ \"b\": [1, 2,],\n}").unwrap();
-        assert_eq!(value["a"], "x // bleibt");
+        let value = jsonc("{\n // comment\n \"a\": \"x // stays\", /* gone */ \"b\": [1, 2,],\n}").unwrap();
+        assert_eq!(value["a"], "x // stays");
         assert_eq!(value["b"][1], 2);
-        assert!(jsonc("kein json").is_none());
+        assert!(jsonc("not json").is_none());
     }
 
     #[test]

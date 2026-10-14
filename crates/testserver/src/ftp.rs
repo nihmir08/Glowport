@@ -44,11 +44,11 @@ pub struct Running {
 pub fn sample(root: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(root.join("htdocs/img"))?;
     std::fs::create_dir_all(root.join("logs"))?;
-    std::fs::write(root.join("htdocs/index.html"), "<!doctype html>\n<title>Testserver</title>\n<h1>Es funktioniert</h1>\n")?;
-    std::fs::write(root.join("htdocs/mit leerzeichen und ä.txt"), "äöü")?;
+    std::fs::write(root.join("htdocs/index.html"), "<!doctype html>\n<title>Test server</title>\n<h1>It works</h1>\n")?;
+    std::fs::write(root.join("htdocs/with spaces and ä.txt"), "äöü")?;
     std::fs::write(root.join("htdocs/img/logo.bin"), (0..=255u8).cycle().take(300_000).collect::<Vec<_>>())?;
     std::fs::write(root.join("logs/access.log"), "GET / 200\n")?;
-    std::fs::write(root.join("liesmich.txt"), "Hallo vom FTP-Testserver\n")
+    std::fs::write(root.join("readme.txt"), "Hello from the FTP test server\n")
 }
 
 /// Starts the server on `root`. With `tls` it gets a self-signed certificate; it puts its files into
@@ -60,8 +60,8 @@ pub async fn start(root: PathBuf, tls: Option<&Path>, ports: std::ops::RangeIncl
     let address = std::net::TcpListener::bind("127.0.0.1:0")?.local_addr()?;
     let logins: Logins = Arc::default();
     let storage = root.clone();
-    let open = move || unftp_sbe_fs::Filesystem::new(storage.clone()).expect("der Ordner des FTP-Servers ist lesbar");
-    let mut builder = libunftp::ServerBuilder::with_authenticator(Box::new(open), Arc::new(Door(logins.clone()))).greeting("Testserver von Glowport").passive_ports(ports);
+    let open = move || unftp_sbe_fs::Filesystem::new(storage.clone()).expect("the FTP server's folder is readable");
+    let mut builder = libunftp::ServerBuilder::with_authenticator(Box::new(open), Arc::new(Door(logins.clone()))).greeting("Glowport test server").passive_ports(ports);
     let mut fingerprint = None;
     if let Some(scratch) = tls {
         let certified = rcgen::generate_simple_self_signed(vec!["127.0.0.1".to_string()]).map_err(|e| failed(&e))?;

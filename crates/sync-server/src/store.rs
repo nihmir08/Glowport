@@ -84,7 +84,7 @@ impl Default for Limits {
 /// Why the server refuses a request. `code` goes to the program.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum Fail {
-    #[error("Anfrage unvollständig oder unlesbar ({0})")]
+    #[error("Request incomplete or unreadable ({0})")]
     Bad(&'static str),
     #[error("Nicht angemeldet")]
     Unauthorized,
@@ -92,13 +92,13 @@ pub enum Fail {
     Forbidden(&'static str),
     #[error("Nicht gefunden")]
     NotFound,
-    #[error("Widerspruch zum Stand des Servers ({0})")]
+    #[error("Contradicts the server's state ({0})")]
     Conflict(&'static str),
     #[error("Zu viele Versuche")]
     TooMany,
     #[error("Grenze erreicht ({0})")]
     Limit(&'static str),
-    #[error("Interner Fehler: {0}")]
+    #[error("Internal error: {0}")]
     Internal(String),
 }
 

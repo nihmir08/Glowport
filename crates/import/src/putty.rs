@@ -296,8 +296,8 @@ mod tests {
         assert_eq!(&blob[..15], b"\0\0\0\x0bssh-ed25519");
         let point = &blob[19..];
         assert_eq!(point.len(), 32);
-        assert_eq!(point[0], 0x20, "y steht mit dem niedrigsten Byte zuerst");
-        assert_eq!(point[31], 0x01 | 0x80, "x ist ungerade, also ist das oberste Bit gesetzt");
+        assert_eq!(point[0], 0x20, "y comes with the lowest byte first");
+        assert_eq!(point[31], 0x01 | 0x80, "x is odd, so the top bit is set");
         assert!(ed.fingerprint.starts_with("SHA256:"));
 
         let rsa = draft.known_hosts.iter().find(|k| k.algorithm == "ssh-rsa").unwrap();
