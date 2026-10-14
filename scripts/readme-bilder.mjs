@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { de } from '../src/lib/i18n/de.ts';
 import { en } from '../src/lib/i18n/en.ts';
 
@@ -249,6 +250,12 @@ try {
   // 15 · Hell: die geteilten Terminals.
   await run(`top(); byText('.seg button',${s('Hell')}).click(); await wait(300); byText('.tabs .tab','Deploy round').click(); await wait(800);`);
   await shot('light');
+
+  // 16 · Titelbild aus scripts/readme-banner.html; es zeigt das Bild der geteilten Terminals aus docs/images.
+  await page.send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 560, deviceScaleFactor: 0, mobile: false });
+  await page.send('Page.navigate', { url: pathToFileURL(resolve('scripts/readme-banner.html')).href });
+  await sleep(1500);
+  await shot('banner');
   page.close();
 } finally {
   edge.kill();

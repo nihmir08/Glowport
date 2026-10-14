@@ -1,5 +1,6 @@
 import type { ITheme } from '@xterm/xterm';
 import { hostById, schemeOf } from './data.svelte';
+import { t } from './i18n.svelte';
 import { AUTO, SCHEMES, withAlpha, type Scheme } from './schemes';
 import { settings } from './state.svelte';
 import type { Target } from './types';
@@ -12,7 +13,10 @@ import type { Target } from './types';
  */
 export const look = $state({ dark: true, background: null as string | null });
 
-export const allSchemes = (): Scheme[] => [...SCHEMES, ...settings.customSchemes];
+/** Die mitgelieferten Schemata heißen „… Dunkel“ und „… Hell“; der Zusatz folgt der Sprache der Oberfläche. */
+const builtIn = (): Scheme[] => SCHEMES.map((s) => ({ ...s, name: s.name.replace(/ (Dunkel|Hell)$/, (_, kind) => ` ${t(kind === 'Dunkel' ? 'scheme.dark' : 'scheme.light')}`) }));
+
+export const allSchemes = (): Scheme[] => [...builtIn(), ...settings.customSchemes];
 
 /** Das Schema zu einer Kennung. Unbekanntes und „automatisch“ folgen dem Farbmodus. */
 export function schemeById(id: string | undefined): Scheme {

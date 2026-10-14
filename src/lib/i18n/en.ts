@@ -296,6 +296,8 @@ export const en: Record<keyof typeof de, string> = {
   'set.about': 'About',
   'set.version': 'Version',
   'set.data': 'Data folder',
+  'scheme.dark': 'Dark',
+  'scheme.light': 'Light',
   'set.source': 'Source code and licenses',
   'set.source.sub': 'Glowport is free software under the MIT license. The licenses of the components it uses are listed there as well.',
   'set.source.open': 'View on GitHub',

@@ -294,6 +294,8 @@ export const de = {
   'set.about': 'Über',
   'set.version': 'Version',
   'set.data': 'Datenordner',
+  'scheme.dark': 'Dunkel',
+  'scheme.light': 'Hell',
   'set.source': 'Quellcode und Lizenzen',
   'set.source.sub': 'Glowport ist freie Software unter der MIT-Lizenz. Dort stehen auch die Lizenzen der Bausteine, die es verwendet.',
   'set.source.open': 'Auf GitHub ansehen',
