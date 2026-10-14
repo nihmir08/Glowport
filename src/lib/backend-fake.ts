@@ -163,7 +163,51 @@ function inspect(text: string, passphrase?: string): KeyInfo {
   return { kind, bits: kind === 'rsa' ? 4096 : 256, fingerprint: open ? `SHA256:${random(43)}` : null, encrypted, format, comment: open ? 'ich@laptop' : '' };
 }
 
-function seed(): Pick<Stored, 'groups' | 'hosts' | 'keys' | 'identities' | 'workspaces' | 'forwards' | 'snippets'> {
+/** Namen der Beispieldaten für eine englische Oberfläche, etwa für die Bilder der README. */
+const ENGLISH: Record<string, string> = {
+  Produktiv: 'Production',
+  Datenbanken: 'Databases',
+  Netzwerk: 'Network',
+  'switch-keller': 'switch-basement',
+  'switch-buero': 'switch-office',
+  'router-konsole': 'router-console',
+  'esp32-werkbank': 'esp32-workbench',
+  'webspace-kunde': 'webspace-client',
+  'ftp.kunde-example.de': 'ftp.client.example.com',
+  'scanner-archiv': 'scanner-archive',
+  'arbeit-2026': 'work-2026',
+  'alt-rsa': 'legacy-rsa',
+  'SOCKS über bastion': 'SOCKS via bastion',
+  Alltag: 'Daily',
+  Plattenplatz: 'Disk usage',
+  'Container anzeigen': 'List containers',
+  'Dienst neu starten': 'Restart service',
+  'Updates einspielen': 'Install updates',
+  'Release ausrollen': 'Roll out release',
+  'Logs verfolgen': 'Follow logs',
+  'Gäste auflisten': 'List guests',
+  'Größte Ordner finden': 'Find largest folders',
+  'Deploy-Runde': 'Deploy round',
+  'Proxmox-Überblick': 'Proxmox overview',
+};
+
+/** Die Beispieldaten in der Sprache der Oberfläche: Deutsch, wie sie geschrieben sind, oder übersetzt. */
+function seed(): ReturnType<typeof seedData> {
+  const data = seedData();
+  if (JSON.parse(localStorage.getItem('glowport.settings') ?? '{}')?.lang !== 'en') return data;
+  const en = <T extends { name: string }>(item: T): T => ({ ...item, name: ENGLISH[item.name] ?? item.name });
+  return {
+    ...data,
+    groups: data.groups.map(en),
+    hosts: data.hosts.map((host) => ({ ...en(host), address: ENGLISH[host.address] ?? host.address })),
+    keys: data.keys?.map((key) => ({ ...en(key), publicKey: key.publicKey.replace(key.name, ENGLISH[key.name] ?? key.name) })),
+    forwards: data.forwards?.map(en),
+    workspaces: data.workspaces?.map(en),
+    snippets: data.snippets?.map((s) => ({ ...en(s), package: ENGLISH[s.package] ?? s.package, command: s.command.replaceAll('{{dienst', '{{service').replaceAll('{{zeilen', '{{lines') })),
+  };
+}
+
+function seedData(): Pick<Stored, 'groups' | 'hosts' | 'keys' | 'identities' | 'workspaces' | 'forwards' | 'snippets'> {
   const g = (name: string, parent: string | null, color: string | null, defs: Fields = {}): Group => ({ id: newId(), name, parent, color, defs });
   const h = (name: string, address: string, os: string | null, group: Group | null, own: Fields = {}): Host => ({
     id: newId(),
@@ -1020,7 +1064,10 @@ function shellStart(id: number) {
   const moved = start?.startsWith('cd ') ? shellCd({ kind: 'session', id }, s.cwd, start.slice(3).trim()) : null;
   if (moved && 'cwd' in moved) s.cwd = moved.cwd;
   emitSession({ id, type: 'cwd', path: s.cwd });
-  s.out(encoder.encode(`Willkommen in der Vorschau. Befehle: ls, cd, pwd, uptime, whoami, exit, drop\r\n${promptOf(s)}`));
+  // Englisch (für die Bilder der README) wie ein echter Server, sonst mit den Befehlen, die die Vorschau kennt.
+  const english = JSON.parse(localStorage.getItem('glowport.settings') ?? '{}')?.lang === 'en';
+  const hello = english ? 'Last login: Tue Oct 13 09:12:44 2026 from 10.0.0.2' : 'Willkommen in der Vorschau. Befehle: ls, cd, pwd, uptime, whoami, exit, drop';
+  s.out(encoder.encode(`${hello}\r\n${promptOf(s)}`));
 }
 
 /** Stellt in der Vorschau einen Aussetzer unter Mosh nach: sechs Sekunden still, dann ist der Server wieder da. */

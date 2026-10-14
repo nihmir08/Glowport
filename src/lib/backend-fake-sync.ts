@@ -76,7 +76,7 @@ const newId = () => (++seq).toString(16).padStart(32, '0');
 // Sechs Wörter je Konto. Im Programm entstehen sie aus einem Prüfwert der Schlüssel; hier sind sie ausgedacht.
 const CODES: Record<string, string> = {
   ich: 'falke · mond · ziegel · hafen · birke · nebel',
-  tumult: 'kupfer · welle · adler · saite · moos · fackel',
+  sam: 'kupfer · welle · adler · saite · moos · fackel',
   kai: 'anker · linde · quarz · regen · sattel · dohle',
   mira: 'feder · kiesel · brise · laterne · farn · amboss',
 };
@@ -138,8 +138,8 @@ function demo(server: string, username: string, admin: boolean, device: string):
     username,
     admin,
     syncedAt: now,
-    shared: [{ id: team, kind: 'shared', name: 'Team Infra', role: 'owner', members: [member(username, 'owner', true), member('tumult', 'write'), member('kai', 'read', false, true)] }],
-    invitations: [{ vault: newId(), name: 'Tumult Homelab', owner: 'tumult', role: 'read', code: codeOf('tumult'), known: 'same' }],
+    shared: [{ id: team, kind: 'shared', name: 'Team Infra', role: 'owner', members: [member(username, 'owner', true), member('sam', 'write'), member('kai', 'read', false, true)] }],
+    invitations: [{ vault: newId(), name: 'Sam Homelab', owner: 'sam', role: 'read', code: codeOf('sam'), known: 'same' }],
     devices: [
       { id: newId(), name: device, createdAt: now, seenAt: now, current: true },
       { id: newId(), name: 'Laptop', createdAt: now - 12 * DAY, seenAt: now - 3 * 60 * MINUTE, current: false },
@@ -152,7 +152,7 @@ function demo(server: string, username: string, admin: boolean, device: string):
     accounts: admin
       ? [
           { id: 'konto-ich', username, admin: true, disabled: false, createdAt: now - 30 * DAY, seenAt: now, devices: 2, bytes: 184_320 },
-          { id: 'konto-tumult', username: 'tumult', admin: false, disabled: false, createdAt: now - 21 * DAY, seenAt: now - 40 * MINUTE, devices: 3, bytes: 96_256 },
+          { id: 'konto-sam', username: 'sam', admin: false, disabled: false, createdAt: now - 21 * DAY, seenAt: now - 40 * MINUTE, devices: 3, bytes: 96_256 },
           { id: 'konto-kai', username: 'kai', admin: false, disabled: false, createdAt: now - 2 * DAY, seenAt: now - 2 * DAY, devices: 1, bytes: 4_096 },
         ]
       : [],
@@ -284,7 +284,7 @@ export const fakeSync = {
     later((): SyncCandidate => {
       const name = username.trim().toLowerCase();
       if (!/^[a-z0-9._-]{3,32}$/.test(name) || /niemand|unbekannt/.test(name)) fail('not_found');
-      return { account: `konto-${name}`, username: name, code: codeOf(name), known: name === 'tumult' ? 'same' : name === 'mira' ? 'changed' : 'new' };
+      return { account: `konto-${name}`, username: name, code: codeOf(name), known: name === 'sam' ? 'same' : name === 'mira' ? 'changed' : 'new' };
     }, 500),
   invite: (id: string, account: string, as: VaultRole) =>
     later(() => {

@@ -3,7 +3,7 @@
 
 import type { DraftForward, DraftGroup, DraftHost, DraftKey, DraftKnownHost, DraftSnippet, ImportDraft, ImportFound, ImportNote, ImportSource, Snapshot } from './types';
 
-const HOME = 'C:\\Users\\ich';
+const HOME = 'C:\\Users\\alex';
 
 export const sampleFound = (): ImportFound[] => [
   { source: 'sshconfig', where: `${HOME}\\.ssh\\config`, count: 9 },

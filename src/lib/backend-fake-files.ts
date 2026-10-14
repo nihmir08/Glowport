@@ -216,7 +216,7 @@ function appTree(): Node[] {
 }
 
 function remoteTree(user: string): Node {
-  const home = user === 'root' ? null : owned(dir(user, [dir('.ssh', [file('authorized_keys', 412, { mode: 0o600 })], { mode: 0o700 }), file('.bashrc', 3771), file('.profile', 807), file('backup.sh', BACKUP, { mode: 0o755 }), file('notizen.md', '# Wartung\n\n- Zertifikat läuft im Dezember ab\n- Platte von db-02 beobachten\n')]), user);
+  const home = user === 'root' ? null : owned(dir(user, [dir('.ssh', [file('authorized_keys', 412, { mode: 0o600 })], { mode: 0o700 }), file('.bashrc', 3771), file('.profile', 807), file('backup.sh', BACKUP, { mode: 0o755 }), file('notes.md', '# Maintenance\n\n- Certificate expires in December\n- Keep an eye on the disk of db-02\n')]), user);
   return dir('', [
     dir('etc', [
       dir('nginx', [dir('conf.d', []), dir('sites-enabled', [file('app.conf', SITE)]), file('mime.types', 5 * KB), file('nginx.conf', NGINX)]),

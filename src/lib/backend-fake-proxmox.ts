@@ -43,7 +43,7 @@ const guests = structuredClone(GUESTS);
 function seed() {
   if (seeded || !world) return;
   seeded = true;
-  connections = [{ id: 'pve1', name: 'Dedi', address: 'https://pve.example.de:8006', tokenId: 'glowport@pve!glowport', fingerprint: FINGERPRINT, identity: world.identityNamed('Deploy'), secret: 'x' }];
+  connections = [{ id: 'pve1', name: 'Datacenter', address: 'https://pve.example.com:8006', tokenId: 'glowport@pve!glowport', fingerprint: FINGERPRINT, identity: world.identityNamed('Deploy'), secret: 'x' }];
   for (const [name, vmid, kind] of [['web-01', 101, 'qemu'], ['db-01', 102, 'qemu'], ['pihole', 111, 'lxc']] as const) {
     const host = world.hosts().find((h) => h.name === name);
     if (host) links.set(host.id, { connection: 'pve1', node: 'pve', vmid, kind });
