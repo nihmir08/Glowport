@@ -2,6 +2,14 @@
 
 Each version is listed here under `## <version>`. The section becomes the release text on GitHub and in Glowport's update dialog.
 
+## 1.0.2
+
+- The installer and the uninstaller now show the Glowport icon.
+- The names of the built-in color schemes follow the interface language (“Dark”/“Light” instead of “Dunkel”/“Hell”).
+- Messages that come straight from the core, the sync server's output and help text are in English.
+- New session recordings start with an English header; recordings made with earlier versions can still be read and renamed.
+- Backups and temporary files in the data folder have English names. Deleting the data on this PC also removes the files of earlier versions.
+
 ## 1.0.1
 
 - After an update, Glowport names the new version on the next start.
