@@ -209,7 +209,7 @@ impl Connection {
                             .iter()
                             .map(|identity| match identity {
                                 AgentIdentity::PublicKey { key, .. } => format!("{}\r\n", key.fingerprint(Default::default())),
-                                AgentIdentity::Certificate { .. } => "Zertifikat\r\n".to_string(),
+                                AgentIdentity::Certificate { .. } => "certificate\r\n".to_string(),
                             })
                             .collect::<String>(),
                         None => "Agent does not answer\r\n".to_string(),

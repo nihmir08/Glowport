@@ -14,14 +14,14 @@ const URL = 'http://localhost:1420/';
 const PORT = 9225;
 const SIZE = { width: 1360, height: 860 };
 const EDGE = ['C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe'].find(existsSync);
-const profile = join(tmpdir(), 'glowport-readme-bilder');
+const profile = join(tmpdir(), 'glowport-readme-images');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const PASSWORD = 'vorschau-bilder';
+const PASSWORD = 'preview-images';
 
 /** The English text for a German one: that way buttons can be named the same way as in the other scripts. */
 const tr = (text) => {
   const key = Object.keys(de).find((k) => de[k] === text);
-  if (!key) throw new Error(`Kein Text „${text}“ in de.ts`);
+  if (!key) throw new Error(`No text “${text}” in de.ts`);
   return en[key];
 };
 const s = (text) => JSON.stringify(tr(text));
@@ -35,7 +35,7 @@ const wait=(ms=300)=>new Promise(r=>setTimeout(r,ms));
 const q=s=>document.querySelector(s), qa=s=>[...document.querySelectorAll(s)];
 const byText=(sel,txt)=>qa(sel).find(e=>e.textContent.trim().includes(txt));
 const type=(el,v)=>{el.value=v;el.dispatchEvent(new Event('input',{bubbles:true}))};
-const until=async(fn,ms=8000)=>{const end=Date.now()+ms;while(Date.now()<end){const v=fn();if(v)return v;await wait(100)}throw new Error('Wartezeit abgelaufen: '+fn)};
+const until=async(fn,ms=8000)=>{const end=Date.now()+ms;while(Date.now()<end){const v=fn();if(v)return v;await wait(100)}throw new Error('Timed out: '+fn)};
 const mid=el=>{const b=el.getBoundingClientRect();return {x:b.left+b.width/2,y:b.top+b.height/2,w:b.width,h:b.height,l:b.left,t:b.top}};
 const pane=name=>qa('.pane:not(.off)').find(p=>p.getAttribute('aria-label')===name);
 const nav=async i=>{q('.tabs .tab.home')?.click(); await wait(150); qa('.nv')[i].click(); await wait(400)};

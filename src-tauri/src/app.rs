@@ -71,7 +71,7 @@ impl CmdError {
 
     /// Rejected input with the reason as text, for checks outside the core.
     pub(crate) fn invalid(reason: &'static str) -> Self {
-        Self::new(reason, format!("Eingabe abgelehnt: {reason}"))
+        Self::new(reason, format!("Input rejected: {reason}"))
     }
 }
 
@@ -753,7 +753,7 @@ pub(crate) mod tests {
         let group_id = session.directory().unwrap().save_group(group).unwrap();
         let host: HostInput = serde_json::from_value(json!({
             "name": "web-01", "address": "10.0.10.11", "group": group_id, "color": null, "os": "Ub",
-            "own": { "startcmd": "cd /srv", "reconnect": "auto", "jump": "" }, "password": "geheim"
+            "own": { "startcmd": "cd /srv", "reconnect": "auto", "jump": "" }, "password": "secret"
         }))
         .unwrap();
         let host_id = session.directory().unwrap().save_host(host).unwrap();
@@ -768,7 +768,7 @@ pub(crate) mod tests {
             })
         );
         assert_eq!(changed["data"]["groups"][0], json!({ "id": group_id, "name": "Production", "parent": null, "color": "#FF5D6C", "defs": { "user": "deploy", "port": 2200 }, "hasProxyPassword": false }));
-        assert!(!changed.to_string().contains("geheim"), "the password must not leave the core");
+        assert!(!changed.to_string().contains("secret"), "the password must not leave the core");
 
         // A workspace as the interface builds it from a tab, and the message to the other windows.
         let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));

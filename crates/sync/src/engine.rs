@@ -183,7 +183,7 @@ fn wrapping_of(overview: &Overview) -> Option<Wrapping> {
 /// Runs work on the vault that computes (key derivation) without holding up the network threads.
 async fn heavy<D: Door, T: Send + 'static>(door: &Arc<D>, work: impl FnOnce(&mut Vault) -> Result<T> + Send + 'static) -> Result<T> {
     let door = door.clone();
-    tokio::task::spawn_blocking(move || door.enter(work)).await.map_err(|_| SyncError::Protocol("abgebrochen"))?
+    tokio::task::spawn_blocking(move || door.enter(work)).await.map_err(|_| SyncError::Protocol("cancelled"))?
 }
 
 /// Asks a server whether it is a Glowport one and fits this version. Returns the address in
@@ -223,7 +223,7 @@ async fn sign_in(api: &Api, username: &str, password: &str, min_kdf: KdfParams) 
         return Err(SyncError::Protocol("key derivation too weak"));
     }
     let secret = password.to_string();
-    let auth = tokio::task::spawn_blocking(move || vault::auth_key(&secret, &salt, kdf)).await.map_err(|_| SyncError::Protocol("abgebrochen"))??;
+    let auth = tokio::task::spawn_blocking(move || vault::auth_key(&secret, &salt, kdf)).await.map_err(|_| SyncError::Protocol("cancelled"))??;
     let reply = api.login(&Login { username: username.into(), auth_key: auth.as_ref().into(), device_name: Bytes::default() }).await?;
     if reply.needs.is_some() {
         return Err(SyncError::TooOld);
@@ -319,7 +319,7 @@ pub async fn login_new(path: &Path, server: &str, username: &str, password: &str
             Ok::<_, SyncError>(vault)
         })
         .await
-        .map_err(|_| SyncError::Protocol("abgebrochen"))
+        .map_err(|_| SyncError::Protocol("cancelled"))
         .and_then(|result| result),
         Err(error) => Err(error),
     };
@@ -357,7 +357,7 @@ impl<D: Door> Engine<D> {
 
     fn with(door: Arc<D>, link: Link) -> Result<Self> {
         let api = Api::new(&link.server)?.with_token(&link.token);
-        let (account, device) = unhex(&link.account).zip(unhex(&link.device)).ok_or(SyncError::Protocol("gespeicherte Anmeldung"))?;
+        let (account, device) = unhex(&link.account).zip(unhex(&link.device)).ok_or(SyncError::Protocol("saved sign-in"))?;
         Ok(Self { door, api, link, account, device })
     }
 

@@ -83,10 +83,10 @@ mod tests {
             ],
             "snippets": [ { "name": "Platz", "text": "df -h", "run": true } ]
         }"#;
-        let draft = parse(export, "C:\\Users\\ich").unwrap();
+        let draft = parse(export, "C:\\Users\\me").unwrap();
         assert_eq!(draft.hosts.len(), 2);
         assert_eq!(draft.groups[0].name, "Production");
-        assert_eq!(draft.keys[draft.hosts[0].own.key.unwrap()].source, KeySource::File("C:\\Users\\ich\\.ssh\\id_ed25519".into()));
+        assert_eq!(draft.keys[draft.hosts[0].own.key.unwrap()].source, KeySource::File("C:\\Users\\me\\.ssh\\id_ed25519".into()));
         assert_eq!((draft.hosts[0].own.agent, draft.hosts[0].own.port), (None, None));
         assert_eq!((draft.hosts[1].own.jump, draft.hosts[1].own.port, draft.hosts[1].own.agent_forward), (Jump::Host(0), Some(2222), Some(true)));
         assert_eq!(draft.snippets[0].command, "df -h");

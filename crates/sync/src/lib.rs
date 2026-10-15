@@ -118,13 +118,13 @@ impl std::fmt::Debug for Link {
 impl Link {
     pub fn load(vault: &Vault) -> Result<Option<Self>, SyncError> {
         match vault.link()? {
-            Some(bytes) => serde_json::from_slice(&bytes).map(Some).map_err(|_| SyncError::Protocol("gespeicherte Anmeldung")),
+            Some(bytes) => serde_json::from_slice(&bytes).map(Some).map_err(|_| SyncError::Protocol("saved sign-in")),
             None => Ok(None),
         }
     }
 
     pub fn save(&self, vault: &mut Vault) -> Result<(), SyncError> {
-        let bytes = serde_json::to_vec(self).map_err(|_| SyncError::Protocol("Anmeldung"))?;
+        let bytes = serde_json::to_vec(self).map_err(|_| SyncError::Protocol("sign-in"))?;
         Ok(vault.set_link(Some(&bytes))?)
     }
 }

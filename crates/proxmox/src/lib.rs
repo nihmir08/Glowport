@@ -33,7 +33,7 @@ pub enum PveError {
     /// The token lacks a permission.
     #[error("The token lacks the permission for that")]
     Forbidden,
-    #[error("Proxmox meldet: {0}")]
+    #[error("Proxmox reports: {0}")]
     Failed(String),
     #[error("Unexpected answer from Proxmox ({0})")]
     Protocol(&'static str),
@@ -105,7 +105,7 @@ pub async fn look(address: &str) -> Result<Look> {
     match (looked, outcome) {
         (Some((fingerprint, trusted)), _) => Ok(Look { fingerprint, trusted }),
         (None, Err(error)) => Err(PveError::Offline(error.without_url().to_string())),
-        (None, Ok(_)) => Err(PveError::Protocol("Zertifikat")),
+        (None, Ok(_)) => Err(PveError::Protocol("certificate")),
     }
 }
 
@@ -200,7 +200,7 @@ impl Missing {
 /// The node's name goes into a request's address: only what belongs there.
 fn node_fits(node: &str) -> Result<()> {
     if node.is_empty() || !node.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
-        return Err(PveError::Protocol("Knoten"));
+        return Err(PveError::Protocol("node"));
     }
     Ok(())
 }
@@ -257,7 +257,7 @@ impl Client {
         let body = response.bytes().await.map_err(|e| transport(e, &self.seen))?;
         let json: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
         match status.as_u16() {
-            200 => json.get("data").cloned().ok_or(PveError::Protocol("Antwort")),
+            200 => json.get("data").cloned().ok_or(PveError::Protocol("answer")),
             401 => Err(PveError::Token),
             403 => Err(PveError::Forbidden),
             code => {
@@ -280,7 +280,7 @@ impl Client {
         let data = self.get("nodes").await?;
         let mut nodes: Vec<Node> = data
             .as_array()
-            .ok_or(PveError::Protocol("Knoten"))?
+            .ok_or(PveError::Protocol("node"))?
             .iter()
             .filter_map(|n| Some(Node { node: text(n, "node")?.to_string(), online: text(n, "status") == Some("online"), cpu: number(n, "cpu"), cores: number(n, "maxcpu").map(|c| c as u32), memory: usage(n), uptime: number(n, "uptime").map(|u| u as u64) }))
             .collect();
@@ -293,7 +293,7 @@ impl Client {
         let data = self.get("cluster/resources?type=vm").await?;
         let mut guests: Vec<Guest> = data
             .as_array()
-            .ok_or(PveError::Protocol("Maschinen"))?
+            .ok_or(PveError::Protocol("machines"))?
             .iter()
             .filter_map(|g| {
                 let kind = match text(g, "type")? {
@@ -382,7 +382,7 @@ impl Client {
             if text(&state, "status") == Some("stopped") {
                 return match text(&state, "exitstatus") {
                     Some("OK") => Ok(()),
-                    other => Err(PveError::Failed(other.unwrap_or("unbekannt").to_string())),
+                    other => Err(PveError::Failed(other.unwrap_or("unknown").to_string())),
                 };
             }
             tokio::time::sleep(Duration::from_millis(500)).await;

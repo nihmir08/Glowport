@@ -182,8 +182,8 @@ mod tests {
     #[test]
     fn open_rejects_any_change() {
         let key = random_key();
-        let sealed = seal(&key, b"purpose", b"geheim");
-        assert_eq!(open(&key, &sealed.nonce, b"purpose", &sealed.ciphertext).unwrap().as_slice(), b"geheim");
+        let sealed = seal(&key, b"purpose", b"secret");
+        assert_eq!(open(&key, &sealed.nonce, b"purpose", &sealed.ciphertext).unwrap().as_slice(), b"secret");
 
         assert_eq!(open(&random_key(), &sealed.nonce, b"purpose", &sealed.ciphertext), Err(CryptoError::Decrypt), "different key");
         assert_eq!(open(&key, &sealed.nonce, b"other purpose", &sealed.ciphertext), Err(CryptoError::Decrypt), "different associated data");

@@ -12,7 +12,7 @@ use serde_json::Value;
 
 const FILE: &str = "settings.json";
 const TEMP: &str = "settings.json.new";
-const BROKEN: &str = "settings.json.defekt";
+const BROKEN: &str = "settings.json.broken";
 
 /// Reads the settings. `None` if there are none yet or the file was unreadable.
 /// A broken file is put aside instead of overwritten, so nothing gets lost silently.

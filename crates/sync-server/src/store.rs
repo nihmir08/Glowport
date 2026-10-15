@@ -86,15 +86,15 @@ impl Default for Limits {
 pub enum Fail {
     #[error("Request incomplete or unreadable ({0})")]
     Bad(&'static str),
-    #[error("Nicht angemeldet")]
+    #[error("Not signed in")]
     Unauthorized,
-    #[error("Nicht erlaubt ({0})")]
+    #[error("Not allowed ({0})")]
     Forbidden(&'static str),
-    #[error("Nicht gefunden")]
+    #[error("Not found")]
     NotFound,
     #[error("Contradicts the server's state ({0})")]
     Conflict(&'static str),
-    #[error("Zu viele Versuche")]
+    #[error("Too many attempts")]
     TooMany,
     #[error("Grenze erreicht ({0})")]
     Limit(&'static str),
@@ -457,7 +457,7 @@ impl Store {
         if disabled {
             return Err(Fail::Forbidden("account_disabled"));
         }
-        let id: Id = id.as_slice().try_into().map_err(|_| Fail::Internal("Kontokennung".into()))?;
+        let id: Id = id.as_slice().try_into().map_err(|_| Fail::Internal("account ID".into()))?;
         let (device, token) = self.new_device(&conn, &id, &request.device_name)?;
         conn.execute("UPDATE accounts SET seen_at = ?2 WHERE id = ?1", params![id.as_slice(), self.now()])?;
         Ok(LoginReply { needs: None, session: Some(Session { account_id: id.into(), username: username.into(), device_id: device.into(), token: token.into(), admin, account }) })

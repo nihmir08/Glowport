@@ -409,7 +409,7 @@ pub struct Proxmox {
     #[serde(default = "one")]
     pub v: u32,
     pub name: String,
-    /// `https://pve.example.de:8006`
+    /// `https://pve.example.com:8006`
     pub address: String,
     /// Token ID: `user@realm!name`.
     pub token_id: String,
@@ -953,7 +953,7 @@ mod tests {
 
     #[test]
     fn unknown_fields_and_types_survive() {
-        let json = r#"{"t":"host","v":3,"name":"web","address":"10.0.0.1","own":{"user":"x"},"password":"geheim","zukunft":{"a":1}}"#;
+        let json = r#"{"t":"host","v":3,"name":"web","address":"10.0.0.1","own":{"user":"x"},"password":"secret","zukunft":{"a":1}}"#;
         let Payload::Host(host) = serde_json::from_str::<Payload>(json).unwrap() else { panic!("not a host") };
         assert_eq!(host.extra["zukunft"]["a"], 1);
         assert_eq!(host.protocol, "ssh");
@@ -1053,7 +1053,7 @@ mod tests {
 
     #[test]
     fn proxmox_connections_and_links_keep_what_they_do_not_know() {
-        let json = r#"{"t":"proxmox","name":"Dedi","address":"https://pve.example.de:8006","tokenId":"glowport@pve!glowport","secret":"0c6f2c1e","fingerprint":"5F:1A","new":1}"#;
+        let json = r#"{"t":"proxmox","name":"Dedi","address":"https://pve.example.com:8006","tokenId":"glowport@pve!glowport","secret":"0c6f2c1e","fingerprint":"5F:1A","new":1}"#;
         let Payload::Proxmox(connection) = serde_json::from_str::<Payload>(json).unwrap() else { panic!("not a connection") };
         assert_eq!((connection.token_id.as_str(), connection.fingerprint.as_deref(), connection.extra["new"].as_u64()), ("glowport@pve!glowport", Some("5F:1A"), Some(1)));
         assert!(!format!("{connection:?}").contains("0c6f2c1e"));

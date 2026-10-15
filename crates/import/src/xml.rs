@@ -302,10 +302,10 @@ mod tests {
 <FileZilla3 version="3.67.0" platform="windows">
   <Servers>
     <Folder expanded="1">Kunden
-      <Server><Host>sftp.kunde.example</Host><Port>2222</Port><Protocol>1</Protocol><Type>0</Type><User>web1</User><Pass encoding="base64">Z2VoZWlt</Pass><Logontype>1</Logontype><Name>Kunde SFTP</Name></Server>
+      <Server><Host>sftp.kunde.example</Host><Port>2222</Port><Protocol>1</Protocol><Type>0</Type><User>web1</User><Pass encoding="base64">c2VjcmV0</Pass><Logontype>1</Logontype><Name>Kunde SFTP</Name></Server>
       <Server><Host>ftp.kunde.example</Host><Port>21</Port><Protocol>0</Protocol><Name>Kunde FTP</Name></Server>
-      <Server><Host>10.0.0.60</Host><Port>2121</Port><Protocol>6</Protocol><User>scan</User><Pass encoding="base64">Z2VoZWlt</Pass><Logontype>1</Logontype><Name>Scanner</Name></Server>
-      <Server><Host>alt.example</Host><Port>990</Port><Protocol>3</Protocol><User>anonymous</User><Pass encoding="base64">Z2VoZWlt</Pass><Logontype>0</Logontype><Name>Alt</Name></Server>
+      <Server><Host>10.0.0.60</Host><Port>2121</Port><Protocol>6</Protocol><User>scan</User><Pass encoding="base64">c2VjcmV0</Pass><Logontype>1</Logontype><Name>Scanner</Name></Server>
+      <Server><Host>alt.example</Host><Port>990</Port><Protocol>3</Protocol><User>anonymous</User><Pass encoding="base64">c2VjcmV0</Pass><Logontype>0</Logontype><Name>Alt</Name></Server>
       <Server><Host>neu.example</Host><Port>21</Port><Protocol>4</Protocol><User>web2</User><Logontype>2</Logontype><Name>Neu</Name></Server>
     </Folder>
     <Server><Host>nas.local</Host><Port>22</Port><Protocol>1</Protocol><User>admin</User><Pass encoding="crypt" pubkey="x" salt="y">zzz</Pass><Keyfile>C:\keys\nas.ppk</Keyfile><Name>NAS</Name></Server>
@@ -315,7 +315,7 @@ mod tests {
         assert_eq!(draft.hosts.len(), 6);
         let customer = &draft.hosts[0];
         assert_eq!((customer.name.as_str(), customer.own.port, customer.own.user.as_deref()), ("Kunde SFTP", Some(2222), Some("web1")));
-        assert_eq!(customer.password.as_ref().map(|p| p.expose()), Some("geheim"));
+        assert_eq!(customer.password.as_ref().map(|p| p.expose()), Some("secret"));
         assert_eq!(draft.groups[customer.group.unwrap()].name, "Kunden");
         let nas = &draft.hosts[5];
         assert!(nas.password.is_none() && nas.password_lost);
@@ -331,7 +331,7 @@ mod tests {
                 ("Neu", Protocol::Ftp, Some((FtpSecurity::Explicit, false)), None, Some("web2"), vec![]),
             ]
         );
-        assert_eq!(draft.hosts[2].password.as_ref().map(|p| p.expose()), Some("geheim"));
+        assert_eq!(draft.hosts[2].password.as_ref().map(|p| p.expose()), Some("secret"));
         assert!(draft.hosts[3].password.is_none(), "an anonymous host holds no password");
         assert!(draft.skipped.is_empty());
     }

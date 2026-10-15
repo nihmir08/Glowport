@@ -156,7 +156,7 @@ impl Api {
         let status = response.status().as_u16();
         let bytes = response.bytes().await.map_err(offline)?;
         if status == 200 {
-            serde_json::from_slice(&bytes).map_err(|_| SyncError::Protocol("Antwort"))
+            serde_json::from_slice(&bytes).map_err(|_| SyncError::Protocol("answer"))
         } else {
             let code = serde_json::from_slice::<ApiError>(&bytes).map(|e| e.code).unwrap_or_else(|_| "unknown".into());
             Err(SyncError::Refused { status, code })

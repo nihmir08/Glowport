@@ -300,7 +300,7 @@ Host alt
 Host kunde
     HostName 172.16.4.2
     ProxyCommand nc -X connect -x proxy.example:3128 %h %p
-    IdentityFile "C:\Users\ich\Documents\kunde key.pem"
+    IdentityFile "C:\Users\me\Documents\kunde key.pem"
 
 Host frei
     ProxyJump none
@@ -323,7 +323,7 @@ Host *
 
     #[test]
     fn resolves_hosts_like_ssh_does() {
-        let draft = parse(SAMPLE, "C:\\Users\\ich", &|_| Vec::new());
+        let draft = parse(SAMPLE, "C:\\Users\\me", &|_| Vec::new());
         let names: Vec<&str> = draft.hosts.iter().map(|h| h.name.as_str()).collect();
         assert_eq!(names, ["bastion", "web-01", "web-02", "db", "alt", "kunde", "frei", "gate.example.org"]);
 
@@ -333,7 +333,7 @@ Host *
         assert_eq!(bastion.own.port, None);
         assert_eq!(bastion.own.keepalive, Some(60));
         assert_eq!(bastion.own.timeout, Some(20));
-        assert_eq!(draft.keys[bastion.own.key.unwrap()].source, KeySource::File("C:\\Users\\ich\\.ssh\\id_ed25519".into()));
+        assert_eq!(draft.keys[bastion.own.key.unwrap()].source, KeySource::File("C:\\Users\\me\\.ssh\\id_ed25519".into()));
 
         // `%h` is replaced; the first matching value wins, so “admin” from `Host *` only where nothing comes before it.
         let web = host(&draft, "web-01");

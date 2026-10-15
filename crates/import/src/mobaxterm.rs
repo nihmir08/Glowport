@@ -127,7 +127,7 @@ mod tests {
 
     #[test]
     fn reads_sessions_folders_and_gateways() {
-        let draft = parse(INI, "C:\\Users\\ich");
+        let draft = parse(INI, "C:\\Users\\me");
         let groups: Vec<_> = draft.groups.iter().map(|g| (g.name.as_str(), g.parent)).collect();
         assert_eq!(groups, [("Kunden", None), ("Meier GmbH", Some(0))]);
 
@@ -141,12 +141,12 @@ mod tests {
         let web = &draft.hosts[4];
         assert_eq!((web.address.as_str(), web.own.user.as_deref(), web.own.port, web.group), ("web.meier.example", Some("admin"), Some(2222), Some(1)));
         assert_eq!(web.own.startcmd.as_deref(), Some("sudo -i"));
-        assert_eq!(draft.keys[web.own.key.unwrap()].source, KeySource::File("C:\\Users\\ich\\.ssh\\id_ed25519".into()));
+        assert_eq!(draft.keys[web.own.key.unwrap()].source, KeySource::File("C:\\Users\\me\\.ssh\\id_ed25519".into()));
         // Chain: this PC → gate → 10.8.0.1 → destination.
         assert_eq!(web.own.jump, Jump::Host(3));
         let (gate, inner) = (&draft.hosts[2], &draft.hosts[3]);
         assert_eq!((gate.own.user.as_deref(), gate.own.port, gate.own.jump), (Some("jump"), None, Jump::Unset));
-        assert_eq!(draft.keys[gate.own.key.unwrap()].source, KeySource::File("C:\\Users\\ich\\Documents\\gate.ppk".into()));
+        assert_eq!(draft.keys[gate.own.key.unwrap()].source, KeySource::File("C:\\Users\\me\\Documents\\gate.ppk".into()));
         assert_eq!((inner.own.user.as_deref(), inner.own.port, inner.own.jump, inner.own.key), (None, Some(2200), Jump::Host(2), None));
 
         let skipped: Vec<_> = draft.skipped.iter().map(|s| (s.name.as_str(), s.reason)).collect();
@@ -157,7 +157,7 @@ mod tests {
     fn reads_ftp_sessions() {
         // Built after the form of an FTP session (kind 6: address, port, user as for SFTP), not from a real file.
         let ini = "[Bookmarks]\r\nSubRep=Kunden\r\nImgNum=41\r\nwebspace=#130#6%ftp.example.com%2121%web1%-1%-1%0%0%%21%%%%%0%0%0#MobaFont%10%0%0%-1%15%236,236,236%30,30,30%180,180,192%0%-1%0%%xterm%-1%0%_Std_Colors_0_%80%24%0%0%-1%<none>%%0%0%-1%0%#0# #-1\r\noeffentlich=#130#6%mirror.example.com%21%%-1%-1%0%0%%21%%%%%0%0%0#MobaFont#0# #-1\r\n";
-        let draft = parse(ini, "C:\\Users\\ich");
+        let draft = parse(ini, "C:\\Users\\me");
         let found: Vec<_> = draft.hosts.iter().map(|h| (h.name.as_str(), h.protocol, h.address.as_str(), h.own.port, h.own.user.as_deref(), h.ftp.as_ref().map(|f| (f.security, f.anonymous)), h.group)).collect();
         assert_eq!(
             found,

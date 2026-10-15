@@ -492,7 +492,7 @@ async fn old_devices_need_the_legacy_setting() {
 }
 
 /// Tiny proxy for tests: accepts a connection, reads the destination by the rules of `kind` and passes through.
-/// With `-auth` at the end it requires the sign-in `tester` / `geheim`.
+/// With `-auth` at the end it requires the sign-in `tester` / `secret`.
 async fn start_proxy(kind: &'static str) -> (std::net::SocketAddr, std::sync::Arc<std::sync::Mutex<Vec<String>>>) {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
@@ -511,7 +511,7 @@ async fn start_proxy(kind: &'static str) -> (std::net::SocketAddr, std::sync::Ar
                     let head = String::from_utf8_lossy(&head).to_string();
                     let line = head.lines().next()?.to_string();
                     let target = line.strip_prefix("CONNECT ")?.split(' ').next()?.to_string();
-                    if kind == "http-auth" && !head.contains("Proxy-Authorization: Basic dGVzdGVyOmdlaGVpbQ==\r\n") {
+                    if kind == "http-auth" && !head.contains("Proxy-Authorization: Basic dGVzdGVyOnNlY3JldA==\r\n") {
                         client.write_all(b"HTTP/1.1 407 Proxy Authentication Required\r\n\r\n").await.ok()?;
                         return None;
                     }
@@ -537,7 +537,7 @@ async fn start_proxy(kind: &'static str) -> (std::net::SocketAddr, std::sync::Ar
                         client.read_exact(&mut user).await.ok()?;
                         let mut password = vec![0u8; usize::from(client.read_u8().await.ok()?)];
                         client.read_exact(&mut password).await.ok()?;
-                        let fine = version == 1 && user == b"tester" && password == b"geheim";
+                        let fine = version == 1 && user == b"tester" && password == b"secret";
                         client.write_all(&[1, u8::from(!fine)]).await.ok()?;
                         if !fine {
                             return None;
@@ -593,14 +593,14 @@ async fn connections_go_through_http_and_socks_proxies() {
     for kind in ["http-auth", "socks5-auth"] {
         let (address, _) = start_proxy(kind).await;
         let proxy = |login: Option<Login>| if kind == "http-auth" { Proxy::Http { host: "127.0.0.1".into(), port: address.port(), login } } else { Proxy::Socks5 { host: "127.0.0.1".into(), port: address.port(), login } };
-        let mut driver = Driver::new(Connect { proxy: Some(proxy(login("geheim"))), ..connect(running.address, Some("right")) });
+        let mut driver = Driver::new(Connect { proxy: Some(proxy(login("secret"))), ..connect(running.address, Some("right")) });
         driver.prompt().await;
         for wrong in [login("wrong"), None] {
             let mut driver = Driver::new(Connect { proxy: Some(proxy(wrong)), ..connect(running.address, Some("right")) });
             assert!(matches!(driver.end().await, End::ConnectFailed(_)), "{kind}");
         }
     }
-    assert!(!format!("{:?}", login("geheim")).contains("geheim"), "the password is not in logs");
+    assert!(!format!("{:?}", login("secret")).contains("secret"), "the password is not in logs");
 }
 
 /// Issues a user certificate the way a certificate authority would with `ssh-keygen -s`.

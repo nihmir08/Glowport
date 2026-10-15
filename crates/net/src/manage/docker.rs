@@ -319,7 +319,7 @@ mod tests {
             "@now\n1791752000\n@ps\n\
              {WEB}|web|nginx:1.27|0.0.0.0:8080->80/tcp, :::8080->80/tcp, 0.0.0.0:8443->443/tcp, 9000/tcp\n\
              {DB}|db|postgres:17|5432/tcp\n\
-             {OLD}|/alt,/web/alt|registry.example.de:5000/team/job@sha256:abc|\n\
+             {OLD}|/alt,/web/alt|registry.example.com:5000/team/job@sha256:abc|\n\
              {NEW}|Neu|alpine|\n\
              kaputte zeile\n\
              zukurz|x|y|z\n\
@@ -351,7 +351,7 @@ mod tests {
 
         let old = &list[2];
         assert_eq!((old.state, old.since, old.exit_code, old.cpu, old.memory), (State::Exited, Some(0), Some(137), None, None), "exited: since the end, no load");
-        assert_eq!(old.image, "registry.example.de:5000/team/job@sha256:abc");
+        assert_eq!(old.image, "registry.example.com:5000/team/job@sha256:abc");
 
         let new = &list[3];
         assert_eq!((new.state, new.since, new.exit_code), (State::Created, None, None), "never started");

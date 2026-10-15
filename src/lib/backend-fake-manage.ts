@@ -18,12 +18,12 @@ function containersOf(session: number): DockerContainer[] {
   if (!list) {
     list = [
       { id: id('4c01db0b339c'), name: 'traefik', image: 'traefik:v3.2', state: 'running', ports: ['80->80/tcp', '443->443/tcp'], since: 1_209_600, cpu: 0.4, memory: { used: 58 * MIB, limit: 8 * GIB } },
-      { id: id('aa11bb22cc33'), name: 'shop-web', image: 'registry.example.de/shop/web:2026.10', state: 'running', health: 'healthy', ports: ['8080->3000/tcp'], since: 93_600, cpu: 12.6, memory: { used: 412 * MIB, limit: 2 * GIB } },
+      { id: id('aa11bb22cc33'), name: 'shop-web', image: 'registry.example.com/shop/web:2026.10', state: 'running', health: 'healthy', ports: ['8080->3000/tcp'], since: 93_600, cpu: 12.6, memory: { used: 412 * MIB, limit: 2 * GIB } },
       { id: id('0123456789ab'), name: 'shop-db', image: 'postgres:17', state: 'running', health: 'healthy', ports: [], since: 1_209_540, cpu: 3.1, memory: { used: 1.3 * GIB, limit: 4 * GIB } },
-      { id: id('77aa88bb99cc'), name: 'shop-worker', image: 'registry.example.de/shop/worker:2026.10', state: 'running', health: 'unhealthy', ports: [], since: 5400, cpu: 148.2, memory: { used: 1.9 * GIB, limit: 2 * GIB } },
+      { id: id('77aa88bb99cc'), name: 'shop-worker', image: 'registry.example.com/shop/worker:2026.10', state: 'running', health: 'unhealthy', ports: [], since: 5400, cpu: 148.2, memory: { used: 1.9 * GIB, limit: 2 * GIB } },
       { id: id('ffeeddccbbaa'), name: 'redis', image: 'redis:7-alpine', state: 'restarting', ports: [], since: 12, cpu: 0, memory: { used: 6 * MIB, limit: 512 * MIB } },
       { id: id('13579bdf2468'), name: 'backup', image: 'restic/restic:0.17', state: 'exited', ports: [], since: 21_600, exitCode: 0 },
-      { id: id('2468ace13579'), name: 'migrate', image: 'registry.example.de/shop/web:2026.09', state: 'exited', ports: [], since: 259_200, exitCode: 1 },
+      { id: id('2468ace13579'), name: 'migrate', image: 'registry.example.com/shop/web:2026.09', state: 'exited', ports: [], since: 259_200, exitCode: 1 },
     ];
     containers.set(session, list);
   }

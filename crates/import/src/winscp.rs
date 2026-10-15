@@ -191,7 +191,7 @@ mod tests {
         let password = hide("kennwort", "web123ssh.kunde-a.example", 3);
         let tunnel = hide("tunnel-pw", "jumpgate.example.org", 0);
         let ini = format!(
-            "[Configuration\\Security]\nUseMasterPassword=0\n\n[Sessions\\Default%20Settings]\nHostName=\n\n[Sessions\\Webspace/Kunde%20A]\nHostName=ssh.kunde-a.example\nUserName=web123\nPassword={password}\nPublicKeyFile=C:%5CUsers%5Cich%5C.ssh%5Carbeit.ppk\n\n[Sessions\\Webspace/intern]\nHostName=10.0.0.5\nPortNumber=2222\nUserName=root\nTunnel=1\nTunnelHostName=gate.example.org\nTunnelUserName=jump\nTunnelPassword={tunnel}\nProxyMethod=2\nProxyHost=proxy.example\n\n[Sessions\\alter-ftp]\nHostName=ftp.example.org\nFSProtocol=5\n"
+            "[Configuration\\Security]\nUseMasterPassword=0\n\n[Sessions\\Default%20Settings]\nHostName=\n\n[Sessions\\Webspace/Kunde%20A]\nHostName=ssh.kunde-a.example\nUserName=web123\nPassword={password}\nPublicKeyFile=C:%5CUsers%5Cme%5C.ssh%5Carbeit.ppk\n\n[Sessions\\Webspace/intern]\nHostName=10.0.0.5\nPortNumber=2222\nUserName=root\nTunnel=1\nTunnelHostName=gate.example.org\nTunnelUserName=jump\nTunnelPassword={tunnel}\nProxyMethod=2\nProxyHost=proxy.example\n\n[Sessions\\alter-ftp]\nHostName=ftp.example.org\nFSProtocol=5\n"
         );
         let draft = from_ini(&ini);
         let names: Vec<&str> = draft.hosts.iter().map(|h| h.name.as_str()).collect();
@@ -200,7 +200,7 @@ mod tests {
         let a = &draft.hosts[0];
         assert_eq!((a.address.as_str(), a.own.user.as_deref(), a.group), ("ssh.kunde-a.example", Some("web123"), Some(0)));
         assert_eq!(a.password.as_ref().map(|p| p.expose()), Some("kennwort"));
-        assert_eq!(draft.keys[a.own.key.unwrap()].source, KeySource::File("C:\\Users\\ich\\.ssh\\arbeit.ppk".into()));
+        assert_eq!(draft.keys[a.own.key.unwrap()].source, KeySource::File("C:\\Users\\me\\.ssh\\arbeit.ppk".into()));
         let inner = &draft.hosts[2];
         assert_eq!((inner.own.port, inner.own.jump, inner.own.proxy.as_deref()), (Some(2222), Jump::Host(1), Some("socks5://proxy.example:1080")));
         assert_eq!(draft.hosts[1].password.as_ref().map(|p| p.expose()), Some("tunnel-pw"));

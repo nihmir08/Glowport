@@ -232,7 +232,7 @@ mod tests {
 "HostName"="root@mail.example.org"
 "Protocol"="ssh"
 "PortNumber"=dword:00000016
-"PublicKeyFile"="C:\\Users\\ich\\.ssh\\arbeit.ppk"
+"PublicKeyFile"="C:\\Users\\me\\.ssh\\arbeit.ppk"
 "PortForwardings"="L8080=127.0.0.1:80,D1080,4R127.0.0.1:9000=intern:9000,kaputt"
 "AgentFwd"=dword:00000001
 "PingIntervalSecs"=dword:0000001e
@@ -247,7 +247,7 @@ mod tests {
 "ProxyHost"="proxy.firma.example"
 "ProxyPort"=dword:00000c38
 "ProxyUsername"="me"
-"ProxyPassword"="geheim"
+"ProxyPassword"="secret"
 
 [HKEY_CURRENT_USER\Software\SimonTatham\PuTTY\Sessions\router]
 "HostName"="192.168.1.1"
@@ -264,14 +264,14 @@ mod tests {
         assert_eq!(draft.hosts.len(), 4);
         let mail = &draft.hosts[0];
         assert_eq!((mail.name.as_str(), mail.address.as_str(), mail.own.user.as_deref(), mail.own.port), ("mail server", "mail.example.org", Some("root"), None));
-        assert_eq!(draft.keys[mail.own.key.unwrap()].source, KeySource::File("C:\\Users\\ich\\.ssh\\arbeit.ppk".into()));
+        assert_eq!(draft.keys[mail.own.key.unwrap()].source, KeySource::File("C:\\Users\\me\\.ssh\\arbeit.ppk".into()));
         assert_eq!((mail.own.agent_forward, mail.own.keepalive, mail.own.term.as_deref()), (Some(true), Some(30), Some("xterm-256color")));
         assert_eq!(mail.own.jump, Jump::Unset);
 
         let git = &draft.hosts[1];
         assert_eq!((git.own.user.as_deref(), git.own.port), (Some("git"), Some(2222)));
         assert_eq!(git.own.proxy.as_deref(), Some("http://me@proxy.firma.example:3128"));
-        assert_eq!(git.proxy_password.as_ref().map(|p| p.expose()), Some("geheim"));
+        assert_eq!(git.proxy_password.as_ref().map(|p| p.expose()), Some("secret"));
 
         let rules: Vec<_> = draft.forwards.iter().map(|f| (f.kind, f.bind_address.as_str(), f.bind_port, f.dest_host.as_str(), f.dest_port)).collect();
         assert_eq!(rules, [(ForwardKind::Local, "127.0.0.1", 8080, "127.0.0.1", 80), (ForwardKind::Dynamic, "127.0.0.1", 1080, "", 0), (ForwardKind::Remote, "127.0.0.1", 9000, "intern", 9000)]);

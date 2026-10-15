@@ -191,7 +191,7 @@ impl Admin {
         for p in &self.processes {
             // CPU time grows with the clock, so two measurements give a load.
             let ticks = (uptime * p.load) as u64;
-            out.push_str(&format!("{} (prozess) S {} 1 1 0 -1 0 0 0 0 0 {ticks} 0 0 0 20 0 1 0 0 0 0 0\n", p.pid, p.parent));
+            out.push_str(&format!("{} (process) S {} 1 1 0 -1 0 0 0 0 0 {ticks} 0 0 0 20 0 1 0 0 0 0 0\n", p.pid, p.parent));
         }
         out
     }

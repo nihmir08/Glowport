@@ -1167,7 +1167,7 @@ export interface ProcessSample {
 export interface ProxmoxConnection {
   id: string;
   name: string;
-  /** `https://pve.example.de:8006` */
+  /** `https://pve.example.com:8006` */
   address: string;
   /** `user@realm!name` */
   tokenId: string;

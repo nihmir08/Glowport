@@ -279,7 +279,7 @@
 <Dialog open={!!editing} title={editing?.id ? t('pve.edit.title') : t('pve.add')}>
   <form class="setup" onsubmit={(e) => (e.preventDefault(), void save())}>
     <TextField label={t('pve.field.name')} bind:value={name} placeholder={t('pve.field.name.example')} autofocus />
-    <TextField label={t('pve.field.address')} bind:value={address} placeholder="https://pve.example.de:8006" mono />
+    <TextField label={t('pve.field.address')} bind:value={address} placeholder="https://pve.example.com:8006" mono />
     <TextField label={t('pve.field.token')} bind:value={tokenId} placeholder="glowport@pve!glowport" hint={t('pve.field.token.hint')} mono />
     <TextField label={t('pve.field.secret')} bind:value={secret} placeholder={editing?.id ? t('pve.field.secret.keep') : 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'} hint={t('pve.field.secret.hint')} password />
     <label class="fld">

@@ -422,7 +422,7 @@ fn local_remove(paths: &[String]) -> CmdResult<()> {
     // SAFETY: `from` is double-null-terminated and lives until after the call; the other fields are empty.
     let code = unsafe { SHFileOperationW(&mut operation) };
     if code != 0 || operation.fAnyOperationsAborted != 0 {
-        return Err(CmdError::new("file_failure", format!("Windows meldet {code:#x}")));
+        return Err(CmdError::new("file_failure", format!("Windows reports {code:#x}")));
     }
     Ok(())
 }
@@ -629,7 +629,7 @@ pub fn pick_uploads(app: AppHandle) -> Option<Vec<String>> {
 #[tauri::command(async)]
 pub fn pick_program(app: AppHandle) -> Option<String> {
     let dialog = app.dialog().file();
-    let dialog = if cfg!(windows) { dialog.add_filter("Programme", &["exe", "cmd", "bat"]) } else { dialog };
+    let dialog = if cfg!(windows) { dialog.add_filter("Programs", &["exe", "cmd", "bat"]) } else { dialog };
     dialog.blocking_pick_file().and_then(|file| file.into_path().ok()).map(|path| text(&path))
 }
 

@@ -2669,10 +2669,10 @@ mod tests {
         assert_eq!(reason(dir.save_identity(identity("Deploy", "-oProxyCommand=x", None))), Invalid::UserInvalid);
         assert_eq!(reason(dir.save_identity(identity("Deploy", "deploy", Some("00000000000000000000000000000000")))), Invalid::KeyMissing);
 
-        let id = dir.save_identity(IdentityInput { password: Some(Some(Secret::new("geheim".into()))), ..identity("Deploy", " deploy ", Some(&key_id)) }).unwrap();
+        let id = dir.save_identity(IdentityInput { password: Some(Some(Secret::new("secret".into()))), ..identity("Deploy", " deploy ", Some(&key_id)) }).unwrap();
         let view = &dir.snapshot().identities[0];
         assert_eq!((view.name.as_str(), view.user.as_str(), view.key.as_deref(), view.has_password), ("Deploy", "deploy", Some(key_id.as_str()), true));
-        assert!(!serde_json::to_string(&dir.snapshot()).unwrap().contains("geheim"));
+        assert!(!serde_json::to_string(&dir.snapshot()).unwrap().contains("secret"));
 
         // Without the field the password stays, `null` removes it; an empty key means “none”.
         dir.save_identity(IdentityInput { id: Some(id.clone()), ..identity("Deploy", "deploy", Some("")) }).unwrap();
@@ -2984,13 +2984,13 @@ mod tests {
 
         // Without a value, FTPS on port 21 applies; user and password are on the host, everything for the terminal is dropped.
         let own = Fields { user: Some("web123".into()), term: Some("xterm".into()), charset: Some("utf-8".into()), startcmd: Some("ls".into()), ..Fields::default() };
-        let id = dir.save_host(web(own, None, Some("geheim"))).unwrap();
+        let id = dir.save_host(web(own, None, Some("secret"))).unwrap();
         assert!(matches!(dir.endpoint(&id).unwrap(), Endpoint::Ftp));
         assert!(dir.is_ftp(&id) && !dir.is_ssh(&id));
         assert_eq!(reason(dir.connect_info(&id)), Invalid::HostNotSsh);
         let info = dir.ftp_info(&id).unwrap();
         assert_eq!((info.address.as_str(), info.port, info.user.as_str(), info.security, info.pin.as_deref()), ("ftp.example.org", 21, "web123", FtpSecurity::Explicit, None));
-        assert_eq!(info.password.as_ref().map(Secret::expose), Some("geheim"));
+        assert_eq!(info.password.as_ref().map(Secret::expose), Some("secret"));
         assert!(info.saves_password && !info.plain_ok);
         let view = serde_json::to_value(dir.snapshot().hosts.iter().find(|h| h.id == id).unwrap()).unwrap();
         assert_eq!(view["ftp"], serde_json::json!({ "security": "explicit", "anonymous": false }));
@@ -3002,7 +3002,7 @@ mod tests {
         dir.save_host(HostInput { id: Some(id.clone()), ..web(Fields { user: Some("web123".into()), ..Fields::default() }, Some(settings), None) }).unwrap();
         let info = dir.ftp_info(&id).unwrap();
         assert_eq!((info.port, info.dir.as_deref()), (990, Some("/htdocs")));
-        assert_eq!(info.password.as_ref().map(Secret::expose), Some("geheim"), "without a value the password stays");
+        assert_eq!(info.password.as_ref().map(Secret::expose), Some("secret"), "without a value the password stays");
         dir.save_host(HostInput { id: Some(id.clone()), ..web(Fields { user: Some("web123".into()), port: Some(2121), ..Fields::default() }, None, None) }).unwrap();
         assert_eq!((dir.ftp_info(&id).unwrap().port, dir.ftp_info(&id).unwrap().security), (2121, FtpSecurity::Implicit), "without values the settings stay");
 
@@ -3059,7 +3059,7 @@ mod tests {
 
         // Telnet: the host does not inherit port and user, but timeout and charset it does.
         let own = Fields { startcmd: Some("enable".into()), ..Fields::default() };
-        let switch = dir.save_host(HostInput { protocol: Some("telnet".into()), password: Some(Some(Secret::new("geheim".into()))), own, ..host("switch", Some(&net)) }).unwrap();
+        let switch = dir.save_host(HostInput { protocol: Some("telnet".into()), password: Some(Some(Secret::new("secret".into()))), own, ..host("switch", Some(&net)) }).unwrap();
         let Endpoint::Telnet(info) = dir.endpoint(&switch).unwrap() else { panic!("Telnet erwartet") };
         assert_eq!((info.port, info.user.as_deref(), info.timeout, info.charset.as_str(), info.term.as_str()), (23, None, 40, "iso-8859-1", "xterm-256color"));
         let snapshot = dir.snapshot();
@@ -3215,7 +3215,7 @@ mod tests {
         let bastion = dir.save_host(host("bastion", None)).unwrap();
         let own_group = dir.save_group(group("Privat", None)).unwrap();
         let own = Fields { identity: Some(deploy.clone()), jump: Some(bastion.clone()), ..Fields::default() };
-        let web = dir.save_host(HostInput { own, password: Some(Some(Secret::new("geheim".into()))), ..host("web", Some(&own_group)) }).unwrap();
+        let web = dir.save_host(HostInput { own, password: Some(Some(Secret::new("secret".into()))), ..host("web", Some(&own_group)) }).unwrap();
         let behind = dir.save_host(HostInput { own: Fields { jump: Some(web.clone()), ..Fields::default() }, ..host("db", None) }).unwrap();
         let rule = dir.save_forward(ForwardInput { id: None, name: "pg".into(), kind: ForwardKind::Local, host: web.clone(), bind_address: String::new(), bind_port: 5432, dest_host: "127.0.0.1".into(), dest_port: 5432 }).unwrap();
         use crate::model::{PaneTarget, Split};
@@ -3260,7 +3260,7 @@ mod tests {
     const FINGERPRINT: &str = "5F:1A:9C:42:D7:0B:E3:68:AA:14:7C:90:3D:E2:56:B1:08:F4:6D:2A:C9:71:35:EE:80:4B:1D:97:A6:53:CF:02";
 
     fn pve(name: &str) -> ProxmoxInput {
-        ProxmoxInput { id: None, name: name.into(), address: "https://pve.example.de:8006/".into(), token_id: " glowport@pve!glowport ".into(), secret: Some(Secret::new("0c6f2c1e-58a1".into())), fingerprint: None, identity: None }
+        ProxmoxInput { id: None, name: name.into(), address: "https://pve.example.com:8006/".into(), token_id: " glowport@pve!glowport ".into(), secret: Some(Secret::new("0c6f2c1e-58a1".into())), fingerprint: None, identity: None }
     }
 
     fn guest(vmid: u32, name: &str, address: Option<&str>) -> GuestHost {
@@ -3277,7 +3277,7 @@ mod tests {
         let mut dir = temp.directory();
         let id = dir.save_proxmox(ProxmoxInput { fingerprint: Some(FINGERPRINT.to_lowercase().replace(':', "")), ..pve(" Dedi ") }).unwrap();
         let snapshot = dir.snapshot();
-        assert_eq!(snapshot.proxmox, [ProxmoxView { id: id.clone(), name: "Dedi".into(), address: "https://pve.example.de:8006".into(), token_id: "glowport@pve!glowport".into(), fingerprint: Some(FINGERPRINT.into()), identity: None }]);
+        assert_eq!(snapshot.proxmox, [ProxmoxView { id: id.clone(), name: "Dedi".into(), address: "https://pve.example.com:8006".into(), token_id: "glowport@pve!glowport".into(), fingerprint: Some(FINGERPRINT.into()), identity: None }]);
         assert!(!serde_json::to_string(&snapshot).unwrap().contains("0c6f2c1e"), "the secret does not go to the interface");
         assert_eq!(dir.proxmox_access(&id).unwrap().secret.expose(), "0c6f2c1e-58a1");
         assert_eq!(dir.record_name(&id).as_deref(), Some("Dedi"));
@@ -3290,7 +3290,7 @@ mod tests {
         assert_eq!(dir.proxmox_access(&id).unwrap().secret.expose(), "new");
 
         assert_eq!(reason(dir.save_proxmox(pve(" "))), Invalid::NameRequired);
-        for address in ["http://pve.example.de:8006", "pve.example.de:8006", "https://", "https://pve.example.com/path", "https://a b", "https://me@pve"] {
+        for address in ["http://pve.example.com:8006", "pve.example.com:8006", "https://", "https://pve.example.com/path", "https://a b", "https://me@pve"] {
             assert_eq!(reason(dir.save_proxmox(ProxmoxInput { address: address.into(), ..pve("x") })), Invalid::AddressInvalid, "{address}");
         }
         for token in ["glowport", "glowport@pve", "@pve!x", "a@!x", "a@pve!", "a b@pve!x", "ä@pve!x"] {

@@ -99,7 +99,7 @@ fn address(app: &App, headers: &HeaderMap, extensions: &Extensions) -> String {
     let trusted = app.proxies.as_ref().is_some_and(|list| list.is_empty() || peer.is_some_and(|peer| list.contains(&peer)));
     // The last entry is the one the web server appended itself; before it is what the sender claims.
     let forwarded = trusted.then(|| headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()).and_then(|v| v.rsplit(',').next()).map(|v| v.trim().to_string())).flatten();
-    forwarded.filter(|v| !v.is_empty()).or_else(|| peer.map(|ip| ip.to_string())).unwrap_or_else(|| "unbekannt".into())
+    forwarded.filter(|v| !v.is_empty()).or_else(|| peer.map(|ip| ip.to_string())).unwrap_or_else(|| "unknown".into())
 }
 
 /// A day as `2026-10-10` (UTC), from milliseconds since 1970.
@@ -470,7 +470,7 @@ mod tests {
         assert_eq!(seen(&only, "10.0.0.66", Some("198.51.100.1")), "10.0.0.66");
         // The same web server address, seen through an IPv6 socket.
         assert_eq!(seen(&only, "::ffff:10.0.0.10", Some("198.51.100.1")), "198.51.100.1");
-        assert_eq!(address(&only, &HeaderMap::new(), &Extensions::new()), "unbekannt");
+        assert_eq!(address(&only, &HeaderMap::new(), &Extensions::new()), "unknown");
     }
 
     #[test]

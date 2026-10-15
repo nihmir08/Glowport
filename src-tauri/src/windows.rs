@@ -336,7 +336,7 @@ fn is_background(name: &str) -> bool {
 #[tauri::command(async)]
 pub fn pick_background(app: AppHandle) -> CmdResult<Option<String>> {
     let extensions: Vec<&str> = IMAGE_TYPES.iter().map(|(extension, _)| *extension).collect();
-    let Some(path) = app.dialog().file().add_filter("Bild", &extensions).blocking_pick_file().and_then(|chosen| chosen.into_path().ok()) else { return Ok(None) };
+    let Some(path) = app.dialog().file().add_filter("Image", &extensions).blocking_pick_file().and_then(|chosen| chosen.into_path().ok()) else { return Ok(None) };
     let extension = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).filter(|e| extensions.contains(&e.as_str())).ok_or_else(|| CmdError::new("image_unsupported", "Not a supported image format"))?;
     if fs::metadata(&path).map_err(io_error)?.len() > MAX_IMAGE {
         return Err(CmdError::new("file_too_large", "The image is too large"));
@@ -359,7 +359,7 @@ pub fn pick_background(app: AppHandle) -> CmdResult<Option<String>> {
 #[tauri::command(async)]
 pub fn background_read(app: AppHandle, name: String) -> CmdResult<Response> {
     if !is_background(&name) {
-        return Err(CmdError::new("not_found", "Kein Hintergrundbild"));
+        return Err(CmdError::new("not_found", "No background image"));
     }
     fs::read(data_dir(&app)?.join(&name)).map(Response::new).map_err(|e| CmdError::new("not_found", e.to_string()))
 }

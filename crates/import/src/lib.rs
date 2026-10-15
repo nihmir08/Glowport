@@ -484,7 +484,7 @@ mod tests {
 
     #[test]
     fn reads_a_chosen_file_of_each_kind() {
-        let home = "C:\\Users\\ich";
+        let home = "C:\\Users\\me";
         assert_eq!(read(Source::SshConfig, b"Host web\n  HostName 10.0.0.1\n", home).unwrap().hosts.len(), 1);
         assert_eq!(read(Source::Csv, b"name,address\nweb,10.0.0.1\n", home).unwrap().hosts.len(), 1);
         assert_eq!(read(Source::Csv, b"Groups,Label,Tags,Hostname/IP,Protocol,Port,Username,Password,SSH_KEY\nA,web,,10.0.0.1,ssh,22,root,,\n", home).unwrap().groups.len(), 1);

@@ -2287,7 +2287,7 @@ try {
     const asksAgain = !!q('.pve-finger');
     button('Abbrechen', q('.dlg')).click(); await wait(200);
     const bad = await fails(invoke('proxmox_probe', { input: { name: 'x', address: '${pve.address}', tokenId: '${PVE_TOKEN}', secret: 'wrong', fingerprint: '${pve.fingerprint}' } }));
-    const shape = await fails(invoke('proxmox_save', { input: { name: 'x', address: 'http://pve.example.de', tokenId: '${PVE_TOKEN}', secret: 'x' } }));
+    const shape = await fails(invoke('proxmox_save', { input: { name: 'x', address: 'http://pve.example.com', tokenId: '${PVE_TOKEN}', secret: 'x' } }));
     const token = await fails(invoke('proxmox_save', { input: { name: 'x', address: '${pve.address}', tokenId: 'no-shape', secret: 'x' } }));
     return { wrong, proven, missing, asksAgain, bad: bad?.code, shape: shape?.code, token: [token?.code, token?.reason].join(':') };
   `);

@@ -8,16 +8,16 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-const out = resolve(process.argv[2] ?? 'entwuerfe/meilenstein-12');
+const out = resolve(process.argv[2] ?? 'mockups');
 const URL = 'http://localhost:1420/';
 const PORT = 9224;
 const SIZE = { width: 1360, height: 860 };
 const EDGE = ['C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe'].find(existsSync);
 const profile = join(tmpdir(), 'glowport-bilder');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const PASSWORD = 'vorschau-bilder';
+const PASSWORD = 'preview-images';
 
-if (!EDGE) throw new Error('Microsoft Edge nicht gefunden');
+if (!EDGE) throw new Error('Microsoft Edge not found');
 rmSync(profile, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
@@ -26,7 +26,7 @@ const wait=(ms=300)=>new Promise(r=>setTimeout(r,ms));
 const q=s=>document.querySelector(s), qa=s=>[...document.querySelectorAll(s)];
 const byText=(sel,txt)=>qa(sel).find(e=>e.textContent.trim().includes(txt));
 const type=(el,v)=>{el.value=v;el.dispatchEvent(new Event('input',{bubbles:true}))};
-const until=async(fn,ms=8000)=>{const end=Date.now()+ms;while(Date.now()<end){const v=fn();if(v)return v;await wait(100)}throw new Error('Wartezeit abgelaufen: '+fn)};
+const until=async(fn,ms=8000)=>{const end=Date.now()+ms;while(Date.now()<end){const v=fn();if(v)return v;await wait(100)}throw new Error('Timed out: '+fn)};
 const mid=el=>{const b=el.getBoundingClientRect();return {x:b.left+b.width/2,y:b.top+b.height/2,w:b.width,h:b.height,l:b.left,t:b.top}};
 const pane=name=>qa('.pane:not(.off)').find(p=>p.getAttribute('aria-label')===name);
 `;
@@ -51,7 +51,7 @@ async function connect() {
     } catch {}
     await sleep(250);
   }
-  throw new Error('Edge nicht erreichbar. Läuft die Vorschau auf Port 1420?');
+  throw new Error('Edge not reachable. Is the preview running on port 1420?');
 }
 
 // The scaling comes from the browser itself and not from an emulation afterwards: only then does xterm.js (WebGL) draw sharply.
@@ -66,7 +66,7 @@ try {
   const settled = async (selector) => {
     const end = Date.now() + 30_000;
     for (let calm = 0; calm < 3; ) {
-      if (Date.now() > end) throw new Error(`Seite zeigt ${selector} nicht`);
+      if (Date.now() > end) throw new Error(`Page does not show ${selector}`);
       await sleep(500);
       const r = await page.send('Runtime.evaluate', { expression: `document.readyState === 'complete' && !!document.querySelector(${JSON.stringify(selector)})`, returnByValue: true }).catch(() => null);
       calm = r?.result?.value === true ? calm + 1 : 0;
@@ -159,11 +159,11 @@ try {
     await go('Hosts');
     type(q('input[placeholder="Hosts durchsuchen"]'),'Homelab'); await until(()=>card('nas') && card('pihole')); await wait(300);
   `);
-  await shot('01-hosts-mosh-zeichen');
+  await shot('01-hosts-mosh-badge');
 
   // 2 · Details: Mosh with local echo.
   await tools(`card('nas').click(); await until(()=>titled('Bearbeiten')); await wait(300);`);
-  await shot('02-host-einzelheiten-mosh');
+  await shot('02-host-details-mosh');
 
   // 3 · Host editor: the switch and the advanced fields.
   await tools(`
@@ -176,31 +176,31 @@ try {
   // 4 · Connected over Mosh: the badge is in the terminal's header.
   await openHost('nas');
   await command('nas', 'uptime');
-  await shot('04-tab-ueber-mosh');
+  await shot('04-tab-over-mosh');
 
   // 5 · Dropout: the bar counts, the terminal stays open.
   await command('nas', 'drop');
   await sleep(3300);
-  await shot('05-mosh-keine-verbindung');
+  await shot('05-mosh-no-connection');
   await sleep(4500);
 
   // 6 · mosh-server is missing on “pihole”: connected over SSH, hint with the install command.
   await openHost('pihole');
   await tools(`await until(()=>q('.moshbar')); await wait(300);`);
-  await shot('06-rueckfall-auf-ssh-mosh-fehlt');
+  await shot('06-fallback-to-ssh-mosh-missing');
 
   // 7 · Quick connect: “mosh user@host”.
   await key('k', 'KeyK', 75, 10);
   await run(`await until(()=>q('.pal input'))`);
   await page.send('Input.insertText', { text: 'mosh deploy@203.0.113.50' });
   await sleep(400);
-  await shot('07-schnellverbindung-mosh');
+  await shot('07-quick-connect-mosh');
   await key('Escape', 'Escape', 27);
   await sleep(200);
 
   // 8 · The same in light.
   await tools(`await go('Optionen'); byText('.seg button','Hell').click(); await wait(300); q('.tabs .tab:not(.home)')?.click(); await wait(600);`);
-  await shot('08-rueckfall-hell');
+  await shot('08-fallback-light');
   page.close();
 } finally {
   edge.kill();

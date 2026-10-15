@@ -131,12 +131,12 @@ mod tests {
                 ]
             }
         }"#;
-        let draft = parse(settings, "C:\\Users\\ich").unwrap();
+        let draft = parse(settings, "C:\\Users\\me").unwrap();
         let names: Vec<&str> = draft.hosts.iter().map(|h| h.name.as_str()).collect();
         assert_eq!(names, ["Webserver", "gate.example.org", "DB"]);
         let web = &draft.hosts[0];
         assert_eq!((web.address.as_str(), web.own.user.as_deref(), web.own.port, web.own.agent_forward), ("web.example.org", Some("deploy"), Some(2222), Some(true)));
-        assert_eq!(draft.keys[web.own.key.unwrap()].source, KeySource::File("C:\\Users\\ich\\.ssh\\id_ed25519".into()));
+        assert_eq!(draft.keys[web.own.key.unwrap()].source, KeySource::File("C:\\Users\\me\\.ssh\\id_ed25519".into()));
         let db = &draft.hosts[2];
         assert_eq!((db.own.user.as_deref(), db.own.jump, db.own.startcmd.as_deref()), (Some("postgres"), Jump::Host(1), Some("tmux attach")));
         assert_eq!((draft.hosts[1].own.user.as_deref(), draft.hosts[1].own.port), (Some("jump"), Some(2200)));

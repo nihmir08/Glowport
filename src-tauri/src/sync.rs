@@ -142,7 +142,7 @@ impl From<SyncError> for CmdError {
 }
 
 fn id(text: &str) -> CmdResult<Id> {
-    unhex(text).ok_or_else(|| CmdError::new("not_found", "Unbekannte Kennung"))
+    unhex(text).ok_or_else(|| CmdError::new("not_found", "Unknown ID"))
 }
 
 /// State of syncing as the interface shows it (`SyncState` in `types.ts`).
@@ -363,7 +363,7 @@ pub async fn sync_connect(app: AppHandle, state: State<'_, AppState>, request: L
         }
         // It belongs to no account or another one: the account's vault is created next to it and takes its place.
         Some(choice) => {
-            let staged = state.session().path().with_extension("db.konto");
+            let staged = state.session().path().with_extension("db.account");
             let _ = std::fs::remove_file(&staged);
             drop(login_new(&staged, &request.server, &username, &password, &device, MIN_KDF).await?);
             let stamp = chrono::Local::now().format("%Y-%m-%d-%H%M%S").to_string();

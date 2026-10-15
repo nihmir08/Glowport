@@ -258,13 +258,13 @@ mod tests {
 
     #[test]
     fn reads_registry_exports() {
-        let text = "Windows Registry Editor Version 5.00\r\n\r\n[HKEY_CURRENT_USER\\Software\\SimonTatham\\PuTTY\\Sessions\\mein%20server]\r\n\"HostName\"=\"web.example.org\"\r\n\"PortNumber\"=dword:00000016\r\n\"PublicKeyFile\"=\"C:\\\\Users\\\\ich\\\\a \\\"b\\\".ppk\"\r\n\"Bin\"=hex:00,01\r\n\r\n[HKEY_CURRENT_USER\\Software\\Anderes]\r\n\"HostName\"=\"nicht.gemeint\"\r\n";
+        let text = "Windows Registry Editor Version 5.00\r\n\r\n[HKEY_CURRENT_USER\\Software\\SimonTatham\\PuTTY\\Sessions\\mein%20server]\r\n\"HostName\"=\"web.example.org\"\r\n\"PortNumber\"=dword:00000016\r\n\"PublicKeyFile\"=\"C:\\\\Users\\\\me\\\\a \\\"b\\\".ppk\"\r\n\"Bin\"=hex:00,01\r\n\r\n[HKEY_CURRENT_USER\\Software\\Anderes]\r\n\"HostName\"=\"nicht.gemeint\"\r\n";
         let sections = reg_sections(text, "Software\\SimonTatham\\PuTTY\\Sessions");
         assert_eq!(sections.len(), 1);
         assert_eq!(sections[0].0, "mein%20server");
         assert_eq!(sections[0].1["HostName"], "web.example.org");
         assert_eq!(sections[0].1["PortNumber"], "22");
-        assert_eq!(sections[0].1["PublicKeyFile"], "C:\\Users\\ich\\a \"b\".ppk");
+        assert_eq!(sections[0].1["PublicKeyFile"], "C:\\Users\\me\\a \"b\".ppk");
         assert!(!sections[0].1.contains_key("Bin"));
         assert_eq!(percent_decode(&sections[0].0), "mein server");
         assert_eq!(percent_decode("B%C3%BCro%2Fweb 100%"), "Büro/web 100%");
@@ -283,13 +283,13 @@ mod tests {
 
     #[test]
     fn splits_words_and_targets() {
-        assert_eq!(words("ssh -i \"C:\\Users\\ich\\a b.pem\" root@host  -p 22"), ["ssh", "-i", "C:\\Users\\ich\\a b.pem", "root@host", "-p", "22"]);
+        assert_eq!(words("ssh -i \"C:\\Users\\me\\a b.pem\" root@host  -p 22"), ["ssh", "-i", "C:\\Users\\me\\a b.pem", "root@host", "-p", "22"]);
         assert_eq!(words("a '' b"), ["a", "", "b"]);
         assert_eq!(user_host_port("root@web:2222"), (Some("root".into()), "web".into(), Some(2222)));
         assert_eq!(user_host_port("web"), (None, "web".into(), None));
         assert_eq!(user_host_port("[2001:db8::1]:22"), (None, "2001:db8::1".into(), Some(22)));
         assert_eq!(user_host_port("2001:db8::1"), (None, "2001:db8::1".into(), None));
-        assert_eq!(expand_home("~/.ssh/id_ed25519", "C:\\Users\\ich"), "C:\\Users\\ich\\.ssh\\id_ed25519");
-        assert_eq!(expand_home("D:\\keys\\a.pem", "C:\\Users\\ich"), "D:\\keys\\a.pem");
+        assert_eq!(expand_home("~/.ssh/id_ed25519", "C:\\Users\\me"), "C:\\Users\\me\\.ssh\\id_ed25519");
+        assert_eq!(expand_home("D:\\keys\\a.pem", "C:\\Users\\me"), "D:\\keys\\a.pem");
     }
 }

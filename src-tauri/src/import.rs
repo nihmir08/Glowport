@@ -1120,7 +1120,7 @@ fn export_text(directory: &Directory, request: &ExportRequest, app_version: &str
         "sshconfig" => ssh_config_text(&export),
         "csv" => csv_text(&export),
         "glowport" => serde_json::to_string_pretty(&export).map_err(|e| CmdError::new("internal", e.to_string()))?,
-        other => return Err(CmdError::new("internal", format!("unbekanntes Format {other}"))),
+        other => return Err(CmdError::new("internal", format!("unknown format {other}"))),
     })
 }
 
@@ -1248,7 +1248,7 @@ mod tests {
     /// Checks what is on this PC and only names numbers: no names, no addresses, no secrets.
     /// `cargo test -p glowport scans_this_pc -- --ignored --nocapture`
     #[test]
-    #[ignore = "liest die echten Quellen dieses PCs"]
+    #[ignore = "reads this PC's real sources"]
     fn scans_this_pc() {
         for found in import_scan() {
             let source = Source::from_id(found.source).unwrap();
@@ -1292,7 +1292,7 @@ mod tests {
         let state = temp.state();
         let mut session = state.session();
         session.create("right-and-long").unwrap();
-        let entry = held_entry(Source::SshConfig, reader::sshconfig::parse(CONFIG, "C:\\Users\\ich", &|_| Vec::new()));
+        let entry = held_entry(Source::SshConfig, reader::sshconfig::parse(CONFIG, "C:\\Users\\me", &|_| Vec::new()));
         let mut choice = options(&entry);
         choice.into = Some(Into::New { name: "OpenSSH".into() });
         let report = apply(session.directory().unwrap(), &entry, &choice).unwrap();
@@ -1311,7 +1311,7 @@ mod tests {
         assert!(snapshot.forwards.iter().any(|f| f.kind == ForwardKind::Local && f.host == host("web").id && f.dest_port == 80));
 
         // Second run: everything is already there and is skipped, the rules too; nothing comes twice.
-        let again = held_entry(Source::SshConfig, reader::sshconfig::parse(CONFIG, "C:\\Users\\ich", &|_| Vec::new()));
+        let again = held_entry(Source::SshConfig, reader::sshconfig::parse(CONFIG, "C:\\Users\\me", &|_| Vec::new()));
         let shown = view(1, &again, session.directory().unwrap());
         assert!(shown.hosts.iter().all(|h| h.existing.is_some()));
         let report = apply(session.directory().unwrap(), &again, &choice).unwrap();

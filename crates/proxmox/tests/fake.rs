@@ -93,7 +93,7 @@ async fn machines_are_listed_located_and_switched() {
     assert_eq!(after.iter().filter(|g| [101, 130].contains(&g.vmid)).map(|g| g.status).collect::<Vec<_>>(), ["stopped", "running"]);
     assert_eq!(world.lock().unwrap().polls.values().copied().collect::<Vec<_>>(), [2, 2], "every task was waited for");
     assert_eq!(client.power("pve", Kind::Qemu, 9000, Power::Start).await, Err(PveError::Failed("unable to start VM 9000 - VM is a template".into())));
-    assert_eq!(client.power("pve/../x", Kind::Qemu, 101, Power::Start).await, Err(PveError::Protocol("Knoten")));
+    assert_eq!(client.power("pve/../x", Kind::Qemu, 101, Power::Start).await, Err(PveError::Protocol("node")));
     // A machine's guest agent is not running: the address stays open, that is not an error.
     let started = after.iter().find(|g| g.vmid == 130).unwrap();
     assert_eq!(client.facts(started).await.unwrap().address, None);
@@ -112,7 +112,7 @@ async fn right_after_switching_the_machine_itself_knows_its_state() {
     assert_eq!(client.status("pve", Kind::Qemu, 130).await, Ok("running"));
     client.power("pve", Kind::Lxc, 111, Power::Stop).await.unwrap();
     assert_eq!((listed(client.guests().await.unwrap(), 111), client.status("pve", Kind::Lxc, 111).await), ("running", Ok("stopped")));
-    assert_eq!(client.status("pve/../x", Kind::Qemu, 130).await, Err(PveError::Protocol("Knoten")));
+    assert_eq!(client.status("pve/../x", Kind::Qemu, 130).await, Err(PveError::Protocol("node")));
     assert!(running.world.lock().unwrap().stale >= 2);
 }
 
