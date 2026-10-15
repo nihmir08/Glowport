@@ -52,9 +52,10 @@ async fn main() -> std::io::Result<()> {
             root
         }
     };
-    let ftp = glowport_testserver::ftp::start(root.clone(), None, 50_600..=50_799).await?;
+    let plain_ports = free_ports(40_000, 200);
+    let ftp = glowport_testserver::ftp::start(root.clone(), None, plain_ports.clone()).await?;
     println!("ftp {}", ftp.address);
-    let ftps = glowport_testserver::ftp::start(root, Some(&scratch), 50_800..=50_999).await?;
+    let ftps = glowport_testserver::ftp::start(root, Some(&scratch), free_ports(plain_ports.end() + 1, 200)).await?;
     println!("ftps {} {}", ftps.address, ftps.fingerprint.as_ref().map(glowport_testserver::ftp::fingerprint_text).unwrap_or_default());
     println!("mosh {}", bridge.as_ref().map_or("-".to_string(), |bridge| bridge.address().to_string()));
     if let Some(bridge) = bridge {
@@ -71,4 +72,17 @@ async fn main() -> std::io::Result<()> {
     }
     std::future::pending::<()>().await;
     Ok(())
+}
+
+/// The first block of `count` ports from `start` on that can all be bound. Windows reserves changing port ranges
+/// for Hyper-V and WSL; a fixed range for the FTP data channels would sometimes fall into one of them.
+fn free_ports(start: u16, count: u16) -> std::ops::RangeInclusive<u16> {
+    let mut first = start;
+    loop {
+        let last = first + count - 1;
+        match (first..=last).find(|port| std::net::TcpListener::bind(("127.0.0.1", *port)).is_err()) {
+            None => return first..=last,
+            Some(taken) => first = taken + 1,
+        }
+    }
 }

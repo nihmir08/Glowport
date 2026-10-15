@@ -30,12 +30,12 @@ const GUESTS: Guest[] = [
   { node: 'pve', vmid: 101, kind: 'qemu', name: 'web-01', status: 'running', template: false, cpu: 0.18, cores: 4, memory: { used: 2.9 * GIB, total: 8 * GIB }, uptime: 1_209_600, tags: ['prod', 'web'], address: '10.0.10.11', source: 'cloudinit', user: 'deploy', keyName: 'deploy@laptop', os: 'Ub' },
   { node: 'pve', vmid: 102, kind: 'qemu', name: 'db-01', status: 'running', template: false, cpu: 0.42, cores: 8, memory: { used: 11.2 * GIB, total: 16 * GIB }, uptime: 1_209_540, tags: ['prod', 'db'], address: '10.0.20.21', source: 'cloudinit', user: 'deploy', keyName: 'deploy@laptop', os: 'De' },
   { node: 'pve', vmid: 110, kind: 'lxc', name: 'mail', status: 'running', template: false, cpu: 0.03, cores: 2, memory: { used: 0.7 * GIB, total: 2 * GIB }, uptime: 432_000, tags: ['prod'], address: '10.0.10.25', source: 'config', user: 'root', os: 'De' },
-  { node: 'pve', vmid: 111, kind: 'lxc', name: 'pihole', status: 'running', template: false, cpu: 0.01, cores: 1, memory: { used: 0.2 * GIB, total: 0.5 * GIB }, uptime: 2_592_000, tags: ['netz'], address: '10.0.0.53', source: 'config', user: 'root', os: 'De' },
+  { node: 'pve', vmid: 111, kind: 'lxc', name: 'pihole', status: 'running', template: false, cpu: 0.01, cores: 1, memory: { used: 0.2 * GIB, total: 0.5 * GIB }, uptime: 2_592_000, tags: ['network'], address: '10.0.0.53', source: 'config', user: 'root', os: 'De' },
   { node: 'pve', vmid: 112, kind: 'lxc', name: 'gitea', status: 'running', template: false, cpu: 0.06, cores: 2, memory: { used: 0.9 * GIB, total: 2 * GIB }, uptime: 86_400, tags: [], address: '10.0.10.74', source: 'guest', user: 'root', os: 'Al' },
   { node: 'pve', vmid: 120, kind: 'qemu', name: 'monitoring', status: 'running', template: false, cpu: 0.09, cores: 2, memory: { used: 1.6 * GIB, total: 4 * GIB }, uptime: 600_000, tags: ['intern'], address: '10.0.10.90', source: 'agent', user: undefined, os: 'De' },
   { node: 'pve', vmid: 130, kind: 'qemu', name: 'spielwiese', status: 'stopped', template: false, cores: 2, memory: { used: 0, total: 4 * GIB }, tags: ['test'], os: 'Ub' },
   { node: 'pve', vmid: 131, kind: 'qemu', name: 'win-test', status: 'stopped', template: false, cores: 4, memory: { used: 0, total: 8 * GIB }, tags: ['test'], os: 'Win' },
-  { node: 'pve', vmid: 9000, kind: 'qemu', name: 'debian-13-vorlage', status: 'stopped', template: true, cores: 2, memory: { used: 0, total: 2 * GIB }, tags: [], os: 'De' },
+  { node: 'pve', vmid: 9000, kind: 'qemu', name: 'debian-13-template', status: 'stopped', template: true, cores: 2, memory: { used: 0, total: 2 * GIB }, tags: [], os: 'De' },
 ];
 const guests = structuredClone(GUESTS);
 

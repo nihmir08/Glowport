@@ -16,13 +16,13 @@ const SERVER_PORT = 18787;
 // GLOWPORT_E2E_SERVER=http://127.0.0.1:8787 GLOWPORT_E2E_SETUP=<setup code> node scripts/e2e-sync.mjs
 const EXTERNAL = process.env.GLOWPORT_E2E_SERVER;
 const SERVER = EXTERNAL ?? `http://127.0.0.1:${SERVER_PORT}`;
-const PW_ANNA = 'e2e-abgleich-anna';
+const PW_ANNA = 'e2e-sync-anna';
 const PW_ANNA_NEU = 'e2e-sync-anna-new';
-const PW_BERT = 'e2e-abgleich-bert';
+const PW_BERT = 'e2e-sync-bert';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = [];
 const ok = (name, cond, extra = '') => {
-  results.push(`${cond ? 'ok    ' : 'FEHLER'} ${name}${extra ? ` (${extra})` : ''}`);
+  results.push(`${cond ? 'ok    ' : 'FAILED'} ${name}${extra ? ` (${extra})` : ''}`);
   console.log(results.at(-1));
 };
 
@@ -297,6 +297,6 @@ try {
   await sleep(800);
 }
 
-const failed = results.filter((line) => line.startsWith('FEHLER')).length;
+const failed = results.filter((line) => line.startsWith('FAILED')).length;
 console.log(`\n${results.length - failed} of ${results.length} passed`);
 process.exit(failed ? 1 : 0);

@@ -20,7 +20,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = [];
 // Print every result at once: if a step hangs, it is visible how far the test got.
 const ok = (name, cond, extra = '') => {
-  results.push(`${cond ? 'ok    ' : 'FEHLER'} ${name}${extra ? ` (${extra})` : ''}`);
+  results.push(`${cond ? 'ok    ' : 'FAILED'} ${name}${extra ? ` (${extra})` : ''}`);
   console.log(results.at(-1));
 };
 // Cases that do not work on this machine (e.g. without mosh in WSL). They count neither as passed nor as failed.
@@ -77,7 +77,7 @@ put(serverFiles, 'srv/abgleich/nur-rechts.txt', 'rechts\n');
 // and itself shows a certificate from it for its key.
 const caKey = join(workDir, 'ca');
 execFileSync('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-C', 'glowport-e2e-ca', '-f', caKey]);
-const shots = join(tmpdir(), 'glowport-e2e-bilder');
+const shots = join(tmpdir(), 'glowport-e2e-shots');
 mkdirSync(shots, { recursive: true });
 
 /**
@@ -118,7 +118,7 @@ async function shot(page, name) {
   const { data } = await page.send('Page.captureScreenshot', { format: 'png' });
   const file = join(shots, `${name}.png`);
   writeFileSync(file, Buffer.from(data, 'base64'));
-  console.log(`Bild: ${file}`);
+  console.log(`Screenshot: ${file}`);
 }
 
 async function pressEnter(page) {
@@ -229,7 +229,7 @@ const fails=async(p)=>{try{await p;return null}catch(e){return e}};
 async function run(page, body) {
   // A step that never answers should fail the test instead of stopping it.
   const timeout = new Promise((_, no) => setTimeout(() => no(new Error('Step does not answer (40 s)')), 40_000));
-  const r = await Promise.race([page.send('Runtime.evaluate', { expression: `(async()=>{${HELPERS}${body}})()`, awaitPromise: true, returnByValue: true }), timeout]);
+  const r = await Promise.race([page.send('Runtime.evaluate', { expression: `(async()=>{try{${HELPERS}${body}}catch(e){throw e instanceof Error ? e : new Error(JSON.stringify(e))}})()`, awaitPromise: true, returnByValue: true }), timeout]);
   if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text);
   return r.result.value;
 }
@@ -528,7 +528,7 @@ try {
     return { offers: offers.map(o => o.textContent.trim()), stayed, made: made?.id, chosen };
   `);
   ok('a key can be created in the identity editor and is selected afterwards', inPlace.offers.length === 2 && inPlace.stayed === '' && !!inPlace.made && inPlace.chosen === inPlace.made, inPlace.offers.join(' | '));
-  await shot(page, 'schluessel');
+  await shot(page, 'keys');
 
   // Certificate: a certificate authority of our own certifies the key. The test server only trusts it; it does not
   // know the key itself yet.
@@ -1437,7 +1437,7 @@ try {
   await run(page, `q('.pane:not(.off) .xterm-helper-textarea').focus();`);
   await pressEnter(page);
   await sleep(400);
-  await shot(page, 'seitenleiste-prozesse');
+  await shot(page, 'sidebar-processes');
   await run(page, `qa('.side .stab').find(b=>b.title==='Snippets').click(); await until(()=>q('.side .snip')); q('.pane:not(.off) .xterm-helper-textarea').focus();`);
 
   ok('server info shows load and key facts, or says for a server without /proc that it needs Linux', side.meters.length ? side.meters.includes('Prozessor') && side.meters.includes('Arbeitsspeicher') && /\d+ % · \d+ Kern/.test(side.cpu ?? '') && /Laufzeit/.test(side.info) : /Linux/.test(side.info ?? ''), `${side.cpu} | ${(side.info ?? '').slice(0, 110)}`);
@@ -2168,7 +2168,7 @@ try {
   `);
   const pveId = pveSaved.connection?.[0]?.id;
   ok('m10 Proxmox: with a confirmed fingerprint the token applies; the connection is in the vault, its secret does not reach the interface', /Proxmox VE 9\.0\.11 antwortet/.test(pveSaved.proven ?? '') && pveSaved.connection.length === 1 && pveSaved.connection[0].name === 'E2E-PVE' && pveSaved.connection[0].address === pve.address && pveSaved.connection[0].fingerprint === pve.fingerprint && !('secret' in pveSaved.connection[0]) && !pveSaved.secretShown && (await pveTest('seen')).tokens > 0, JSON.stringify(pveSaved.connection));
-  ok('m10 Proxmox: the page shows nodes and machines with kind, state and the address with its origin', pveSaved.head.includes('Proxmox VE 9.0.11') && pveSaved.nodes.some((n) => n.startsWith('old') && n.includes('nicht erreichbar')) && pveSaved.nodes.some((n) => /^pve Prozessor 21 % von 32 Kernen/.test(n)) && JSON.stringify(pveSaved.rows) === JSON.stringify([['shop-01', 'VM 101', 'deploy@10.0.10.11 aus Cloud-Init'], ['pihole', 'Container 111', 'root@10.0.0.53 aus den Einstellungen'], ['gitea', 'Container 112', 'root@10.0.10.74 vom Container gemeldet'], ['monitoring', 'VM 120', '10.0.10.90 vom Gastagenten'], ['spielwiese', 'VM 130', 'keine Adresse bekannt'], ['debian-13-vorlage', 'VM 9000 · Vorlage', '']]) && pveSaved.states.join() === 'läuft,aus' && pveSaved.offer === '5 Hosts anlegen', JSON.stringify([pveSaved.head, pveSaved.nodes, pveSaved.rows, pveSaved.states, pveSaved.offer]));
+  ok('m10 Proxmox: the page shows nodes and machines with kind, state and the address with its origin', pveSaved.head.includes('Proxmox VE 9.0.11') && pveSaved.nodes.some((n) => n.startsWith('old') && n.includes('nicht erreichbar')) && pveSaved.nodes.some((n) => /^pve Prozessor 21 % von 32 Kernen/.test(n)) && JSON.stringify(pveSaved.rows) === JSON.stringify([['shop-01', 'VM 101', 'deploy@10.0.10.11 aus Cloud-Init'], ['pihole', 'Container 111', 'root@10.0.0.53 aus den Einstellungen'], ['gitea', 'Container 112', 'root@10.0.10.74 vom Container gemeldet'], ['monitoring', 'VM 120', '10.0.10.90 vom Gastagenten'], ['spielwiese', 'VM 130', 'keine Adresse bekannt'], ['debian-13-template', 'VM 9000 · Vorlage', '']]) && pveSaved.states.join() === 'läuft,aus' && pveSaved.offer === '5 Hosts anlegen', JSON.stringify([pveSaved.head, pveSaved.nodes, pveSaved.rows, pveSaved.states, pveSaved.offer]));
 
   // Refreshing does not ask every machine for its settings every time; “Reload” does.
   const configsBefore = (await pveTest('seen')).configs;
@@ -2189,7 +2189,7 @@ try {
     const shop = made.find(h=>h.proxmox.vmid===101), dns = made.find(h=>h.proxmox.vmid===111);
     return { picks, run, made: made.map(h=>h.name).sort().join(), shop, dns, offer: qa('.pve-h button').map(b=>b.textContent.trim()).filter(Boolean).join(), linked: !!machine('shop-01').querySelector('.pve-tags .chip.on') };
   `);
-  ok('m10 Proxmox: the preview preselects what has an address and is not a template', pveImport.picks === 'shop-01:true,pihole:true,gitea:true,monitoring:true,spielwiese:false,debian-13-vorlage:false' && pveImport.run === '4 Hosts anlegen', `${pveImport.picks} · ${pveImport.run}`);
+  ok('m10 Proxmox: the preview preselects what has an address and is not a template', pveImport.picks === 'shop-01:true,pihole:true,gitea:true,monitoring:true,spielwiese:false,debian-13-template:false' && pveImport.run === '4 Hosts anlegen', `${pveImport.picks} · ${pveImport.run}`);
   ok('m10 Proxmox: the machines become linked hosts with address, user and operating system', pveImport.made === 'gitea,monitoring,pihole,shop-01' && pveImport.shop.address === '10.0.10.11' && pveImport.shop.own.user === 'deploy' && pveImport.shop.os === 'Li' && pveImport.shop.proxmox.connection === pveId && pveImport.shop.proxmox.kind === 'qemu' && pveImport.dns.own.user === 'root' && pveImport.dns.os === 'De' && pveImport.dns.proxmox.kind === 'lxc' && pveImport.offer === '1 Host anlegen' && pveImport.linked, JSON.stringify([pveImport.made, pveImport.shop, pveImport.offer]));
 
   // Keeping up to date: in Proxmox name and address of VM 101 change. What was changed by hand on the host stays.
@@ -2320,7 +2320,7 @@ try {
   `);
   ok('m10 Proxmox: the connection takes an identity for its machines; that needs no new check, the fingerprint stays', pveLogin.offered[0] === 'Keine Identität' && pveLogin.offered.includes('E2E-Admin (admin)') && pveLogin.buttons === 'Abbrechen|Prüfen|Speichern' && pveLogin.identity && pveLogin.fingerprint === pve.fingerprint, JSON.stringify([pveLogin.offered, pveLogin.buttons, pveLogin.identity]));
   ok('m10 Proxmox: without a key from Cloud-Init the connection\'s identity applies; a created host shows its own sign-in', pveLogin.before === '10.0.10.90 vom Gastagenten' && pveLogin.after === 'admin@10.0.10.90 vom Gastagenten' && pveLogin.linkedRow === 'root@10.0.0.53 aus den Einstellungen', JSON.stringify([pveLogin.before, pveLogin.after, pveLogin.linkedRow]));
-  ok('m10 Proxmox: the preview names the sign-in, and the new host carries the identity', pveLogin.preview === 'monitoring:E2E-Admin:true,spielwiese:E2E-Admin:false,debian-13-vorlage:E2E-Admin:false' && JSON.stringify(pveLogin.own) === JSON.stringify(pveLogin.wanted), JSON.stringify([pveLogin.preview, pveLogin.own]));
+  ok('m10 Proxmox: the preview names the sign-in, and the new host carries the identity', pveLogin.preview === 'monitoring:E2E-Admin:true,spielwiese:E2E-Admin:false,debian-13-template:E2E-Admin:false' && JSON.stringify(pveLogin.own) === JSON.stringify(pveLogin.wanted), JSON.stringify([pveLogin.preview, pveLogin.own]));
   ok('m10 Proxmox: a deleted identity disappears from the connection and from the host', pveLogin.cleared.join() === ',', JSON.stringify(pveLogin.cleared));
 
   // Remove a second connection: its hosts stay and only lose the link. Then clean up; the
@@ -2528,7 +2528,7 @@ try {
   await sleep(1500);
   page.close();
 } catch (e) {
-  results.push(`ABBRUCH ${e.message}`);
+  results.push(`ABORTED ${e.message}`);
   console.log(results.at(-1));
 } finally {
   app.kill();

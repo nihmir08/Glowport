@@ -63,7 +63,7 @@ async fn machines_are_listed_located_and_switched() {
         (112, Kind::Lxc, "gitea", "running", false),
         (120, Kind::Qemu, "monitoring", "running", false),
         (130, Kind::Qemu, "spielwiese", "stopped", false),
-        (9000, Kind::Qemu, "debian-13-vorlage", "stopped", true),
+        (9000, Kind::Qemu, "debian-13-template", "stopped", true),
     ]);
     let by = |vmid: u32| guests.iter().find(|g| g.vmid == vmid).unwrap();
     assert_eq!((by(101).tags.as_slice(), by(101).cpu, by(101).cores, by(101).uptime), (&["prod".to_string(), "web".to_string()][..], Some(0.18), Some(4), Some(1_209_600)));

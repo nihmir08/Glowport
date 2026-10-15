@@ -114,11 +114,11 @@ async fn handle(State(world): State<Shared>, method: Method, uri: Uri, headers: 
             let listed: HashMap<u32, &'static str> = [101, 111, 112, 120, 130].into_iter().map(|vmid| (vmid, world.listed(vmid))).collect();
             let state = |vmid: u32| listed[&vmid];
             ok(json!([
-            { "type": "lxc", "vmid": 111, "node": "pve", "name": "pihole", "status": state(111), "template": 0, "cpu": 0.01, "maxcpu": 1, "mem": 214748364, "maxmem": 536870912, "uptime": 2592000, "tags": "netz" },
+            { "type": "lxc", "vmid": 111, "node": "pve", "name": "pihole", "status": state(111), "template": 0, "cpu": 0.01, "maxcpu": 1, "mem": 214748364, "maxmem": 536870912, "uptime": 2592000, "tags": "network" },
             { "type": "qemu", "vmid": "101", "node": "pve", "name": shop, "status": state(101), "template": 0, "cpu": 0.18, "maxcpu": 4, "mem": 3113851289u64, "maxmem": 8589934592u64, "uptime": 1209600, "tags": "prod;web" },
             { "type": "qemu", "vmid": 120, "node": "pve", "name": "monitoring", "status": state(120), "cpu": 0.09, "maxcpu": 2, "mem": 1, "maxmem": 4294967296u64, "uptime": 600000 },
             { "type": "qemu", "vmid": 130, "node": "pve", "name": "spielwiese", "status": state(130), "cpu": 0, "maxcpu": 2, "mem": 0, "maxmem": 4294967296u64, "uptime": 0, "tags": " " },
-            { "type": "qemu", "vmid": 9000, "node": "pve", "name": "debian-13-vorlage", "status": "stopped", "template": 1, "maxcpu": 2, "maxmem": 2147483648u64 },
+            { "type": "qemu", "vmid": 9000, "node": "pve", "name": "debian-13-template", "status": "stopped", "template": 1, "maxcpu": 2, "maxmem": 2147483648u64 },
             { "type": "lxc", "vmid": 112, "node": "pve", "name": "gitea", "status": state(112), "maxcpu": 2, "mem": 5, "maxmem": 2147483648u64, "uptime": 86400 },
             { "type": "storage", "node": "pve", "storage": "local" },
             ]))
@@ -137,7 +137,7 @@ async fn handle(State(world): State<Shared>, method: Method, uri: Uri, headers: 
             { "name": "ens18", "ip-addresses": [{ "ip-address": "fe80::be24:11ff:fe00:1", "ip-address-type": "ipv6", "prefix": 64 }, { "ip-address": "10.0.10.90", "ip-address-type": "ipv4", "prefix": 24 }] },
         ] })),
         ("GET", ["nodes", "pve", "qemu", "130", "config"]) => ok(json!({ "ostype": "l26", "name": "spielwiese" })),
-        ("GET", ["nodes", "pve", "qemu", "9000", "config"]) => ok(json!({ "ostype": "l26", "name": "debian-13-vorlage", "template": 1 })),
+        ("GET", ["nodes", "pve", "qemu", "9000", "config"]) => ok(json!({ "ostype": "l26", "name": "debian-13-template", "template": 1 })),
         // The guest agent is not running: this is how Proxmox answers then.
         ("GET", ["nodes", "pve", "qemu", _, "agent", _]) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "data": null, "message": "QEMU guest agent is not running\n" }))),
         ("GET", ["nodes", "pve", "lxc", "111", "config"]) => ok(json!({ "net0": "name=eth0,bridge=vmbr0,hwaddr=BC:24:11:00:00:01,ip=10.0.0.53/24,gw=10.0.0.1,type=veth", "ostype": "debian", "hostname": "pihole" })),

@@ -226,7 +226,7 @@ impl Connection {
                 }
             }
             "" => {}
-            other => session.data(channel, format!("unbekannt: {other}\r\n").into_bytes())?,
+            other => session.data(channel, format!("unknown: {other}\r\n").into_bytes())?,
         }
         session.data(channel, PROMPT.as_bytes().to_vec())
     }
